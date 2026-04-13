@@ -1,18 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Lightbulb, Plus, Sparkles, Tag, TrendingUp, Users, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
-
-interface Insight {
-  id: string;
-  category: "pain-point" | "opportunity" | "user-segment" | "pattern";
-  title: string;
-  description: string;
-  createdAt: Date;
-}
+import { getInsights, getDocument, type Insight } from "@/lib/firebase/db";
+import { extractInsightsAction } from "@/lib/ai/actions";
 
 const categoryConfig = {
   "pain-point": { label: "Pain Point", icon: AlertCircle, color: "text-red-400", bg: "bg-red-400/10 border-red-400/20" },
@@ -21,52 +15,51 @@ const categoryConfig = {
   "pattern": { label: "Pattern", icon: Tag, color: "text-yellow-400", bg: "bg-yellow-400/10 border-yellow-400/20" },
 };
 
-const SAMPLE_INSIGHTS: Insight[] = [
-  {
-    id: "1",
-    category: "pain-point",
-    title: "Fragmented product workflows",
-    description: "PMs are context-switching between 6+ tools (Notion, Jira, Miro, Docs, Slack) losing 2–3 hours of focused thinking daily.",
-    createdAt: new Date(),
-  },
-  {
-    id: "2",
-    category: "opportunity",
-    title: "AI PRD generation can replace 4 hours of writing",
-    description: "Users spending 3–5 hours on a single PRD could reduce that to under 15 minutes with AI-assisted generation from raw notes.",
-    createdAt: new Date(),
-  },
-  {
-    id: "3",
-    category: "user-segment",
-    title: "Aspiring PMs & indie builders",
-    description: "Non-PMs (engineers, designers, founders) who don't have formal product training but need to make product decisions daily.",
-    createdAt: new Date(),
-  },
-  {
-    id: "4",
-    category: "pattern",
-    title: "Decisions made without structured frameworks",
-    description: "Most early-stage teams prioritize based on intuition rather than data, leading to feature regret and wasted sprints.",
-    createdAt: new Date(),
-  },
-];
-
 export function InsightsView() {
   const { user } = useAuth();
-  const { setActiveView } = useAppStore();
-  const [insights] = React.useState<Insight[]>(SAMPLE_INSIGHTS);
+  const { setActiveView, currentDocId } = useAppStore();
+  const [insights, setInsights] = React.useState<Insight[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
   const [isExtracting, setIsExtracting] = React.useState(false);
   const [filter, setFilter] = React.useState<string>("all");
+
+  const fetchInsights = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+      const data = await getInsights(user.uid);
+      setInsights(data);
+    } catch (error) {
+      console.error("Failed to fetch insights:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInsights();
+  }, [user]);
 
   const categories = ["all", "pain-point", "opportunity", "user-segment", "pattern"];
   const filtered = filter === "all" ? insights : insights.filter(i => i.category === filter);
 
   const handleExtract = async () => {
+    if (!user || !currentDocId || isExtracting) return;
     setIsExtracting(true);
-    // Simulate extraction — in the future, reads the active document from Firestore
-    await new Promise(r => setTimeout(r, 1800));
-    setIsExtracting(false);
+    try {
+      const doc = await getDocument(user.uid, currentDocId);
+      if (!doc || !doc.content) {
+        alert("Document is empty. Please add some notes first.");
+        return;
+      }
+      await extractInsightsAction(user.uid, doc.content);
+      await fetchInsights();
+    } catch (error) {
+      console.error("Extraction failed:", error);
+      alert("AI extraction failed. Please check your Groq API key.");
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   return (
@@ -94,7 +87,7 @@ export function InsightsView() {
             size="sm"
             className="h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={handleExtract}
-            disabled={isExtracting}
+            disabled={isExtracting || !currentDocId}
           >
             {isExtracting ? (
               <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
@@ -125,7 +118,11 @@ export function InsightsView() {
 
       {/* Insights Grid */}
       <div className="flex-1 overflow-auto p-8">
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/40" />
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Lightbulb className="h-10 w-10 text-muted-foreground/30 mb-4" />
             <p className="text-sm text-muted-foreground">No insights yet.</p>
@@ -136,7 +133,7 @@ export function InsightsView() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
             {filtered.map(insight => {
-              const cfg = categoryConfig[insight.category];
+              const cfg = categoryConfig[insight.category] || categoryConfig["opportunity"];
               const Icon = cfg.icon;
               return (
                 <div
@@ -160,3 +157,4 @@ export function InsightsView() {
     </div>
   );
 }
+

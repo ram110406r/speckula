@@ -2,6 +2,12 @@ import { create } from 'zustand';
 
 export type AppView = 'editor' | 'insights' | 'prds' | 'tasks';
 
+interface BuildcaseDocument {
+  id: string;
+  title: string;
+  updatedAt: any;
+}
+
 interface AppState {
   aiPanelOpen: boolean;
   toggleAiPanel: () => void;
@@ -9,6 +15,8 @@ interface AppState {
   setActiveContext: (context: string) => void;
   currentDocId: string | null;
   setCurrentDocId: (id: string | null) => void;
+  documents: BuildcaseDocument[];
+  setDocuments: (docs: BuildcaseDocument[]) => void;
   isSaving: boolean;
   setIsSaving: (status: boolean) => void;
   activeView: AppView;
@@ -20,10 +28,13 @@ export const useAppStore = create<AppState>((set) => ({
   toggleAiPanel: () => set((state) => ({ aiPanelOpen: !state.aiPanelOpen })),
   activeContext: '',
   setActiveContext: (context) => set({ activeContext: context }),
-  currentDocId: 'default-doc',
+  currentDocId: null,
   setCurrentDocId: (id) => set({ currentDocId: id }),
+  documents: [],
+  setDocuments: (docs) => set({ documents: docs }),
   isSaving: false,
   setIsSaving: (status) => set({ isSaving: status }),
   activeView: 'editor',
   setActiveView: (view) => set({ activeView: view }),
 }));
+
