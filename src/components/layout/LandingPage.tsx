@@ -13,10 +13,10 @@ export function LandingPage() {
       {/* Navigation */}
       <nav className="w-full max-w-6xl h-20 flex items-center justify-between px-4 z-10 border-b border-border/40">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-md bg-primary flex items-center justify-center shadow-sm">
-            <Sparkles className="h-5 w-5 text-white" />
+          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shadow-sm">
+            <Sparkles className="h-4.5 w-4.5 text-white" />
           </div>
-          <span className="font-bold text-xl tracking-tight text-foreground">Buildcase</span>
+          <span className="font-semibold text-lg tracking-tight text-foreground">Buildcase</span>
         </div>
         <div className="flex items-center gap-6">
           <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden md:block">
@@ -24,7 +24,7 @@ export function LandingPage() {
           </button>
           <Button 
             variant="outline" 
-            className="text-sm font-semibold border-border bg-white hover:border-primary/50 hover:text-primary transition-all px-6"
+            className="label-system text-[12px] border-border bg-white hover:border-primary/50 hover:text-primary transition-all px-6"
             onClick={loginWithGoogle}
             disabled={loading}
           >
@@ -35,35 +35,35 @@ export function LandingPage() {
 
       {/* Hero Section */}
       <header className="relative z-10 text-center max-w-4xl space-y-10 pt-24 pb-32">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/5 border border-primary/10 text-[11px] font-bold uppercase tracking-wider text-primary animate-fade-in shadow-sm">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/5 border border-primary/10 label-system text-[12px] text-primary animate-fade-in shadow-sm">
           <Sparkles className="h-3.5 w-3.5" />
           <span>The Decision Engine for Product Teams</span>
         </div>
         
-        <h1 className="text-6xl md:text-8xl font-bold tracking-tight leading-[1.05] text-foreground">
+        <h1 className="text-3xl md:text-5xl font-semibold tracking-tight leading-[1.1] text-foreground">
           Build better products. <br /> 
           <span className="text-primary/90 italic serif">With precision.</span>
         </h1>
         
-        <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed font-medium">
+        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed font-medium">
           The first AI-native workspace that transforms raw notes into insights, PRDs, and structured roadmaps in seconds.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-5 pt-6">
           <Button 
             size="lg" 
-            className="h-16 px-10 text-lg font-bold bg-primary text-white hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all rounded-lg group"
+            className="h-11 px-8 label-system text-[12px] bg-primary text-white hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all rounded-lg group"
             onClick={loginWithGoogle}
             disabled={loading}
           >
             Get Started for Free
-            <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+            <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </Button>
           
           <Button 
             size="lg" 
             variant="secondary"
-            className="h-16 px-10 text-lg font-semibold bg-white border border-border shadow-sm hover:bg-secondary/20 transition-all"
+            className="h-11 px-8 label-system text-[12px] bg-white border border-border shadow-sm hover:bg-secondary/20 transition-all"
           >
             View Demo
           </Button>
@@ -94,7 +94,7 @@ export function LandingPage() {
       {/* Philosophy Section */}
       <section className="w-full bg-white border-y border-border py-24 flex flex-col items-center">
         <div className="max-w-4xl text-center space-y-8 px-6">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">The Decision Instrument Philosophy</h2>
+          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">The Decision Instrument Philosophy</h2>
           <p className="text-lg text-muted-foreground leading-relaxed">
             Standard product tools are too noisy. Buildcase is built to be a calm, focused environment where the logic of your product wins. No distractions, no neon glows—just pure product intelligence.
           </p>
@@ -109,16 +109,16 @@ export function LandingPage() {
 
       {/* Footer */}
       <footer className="mt-auto py-16 w-full max-w-6xl flex flex-col items-center gap-8 border-t border-border/40">
-        <div className="flex items-center gap-3 text-xs text-muted-foreground font-semibold">
+        <div className="flex items-center gap-3 label-system text-[12px] opacity-60 normal-case">
           <ShieldCheck className="h-4 w-4 text-primary/60" />
           <span>Secure with Google Cloud Identity & Private Workspaces</span>
         </div>
-        <div className="flex items-center gap-8 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50">
+        <div className="flex items-center gap-8 label-system text-[12px]">
           <a href="#" className="hover:text-primary transition-colors">Privacy</a>
           <a href="#" className="hover:text-primary transition-colors">Terms</a>
           <a href="#" className="hover:text-primary transition-colors">Twitter</a>
         </div>
-        <p className="text-[11px] text-muted-foreground/40 font-bold uppercase tracking-widest">
+        <p className="label-system text-[12px] lowercase opacity-40">
           © 2026 Buildcase. Minimal. Calm. Precise.
         </p>
       </footer>
@@ -133,10 +133,10 @@ function FeatureCard({ icon, title, description }: { icon: React.ReactNode; titl
         {icon}
       </div>
       <div>
-        <h3 className="text-xl font-bold mb-3 text-foreground tracking-tight">{title}</h3>
+        <h3 className="text-xl font-semibold mb-3 text-foreground tracking-tight">{title}</h3>
         <p className="text-sm text-muted-foreground/90 leading-relaxed font-medium">{description}</p>
       </div>
-      <div className="mt-auto pt-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-primary/40 group-hover:text-primary transition-colors">
+      <div className="mt-auto pt-4 flex items-center gap-2 label-system text-[12px] group-hover:text-primary transition-colors">
         Learn More <ArrowRight className="h-3 w-3" />
       </div>
     </div>
@@ -147,7 +147,7 @@ function LogoPlaceholder({ name }: { name: string }) {
   return (
     <div className="flex items-center gap-2 grayscale hover:grayscale-0 transition-all cursor-default group">
       <div className="w-5 h-5 bg-foreground/10 rounded-sm group-hover:bg-primary/20 transition-colors" />
-      <span className="font-bold text-xs tracking-tight text-foreground/40 group-hover:text-foreground/80 transition-colors">{name}</span>
+      <span className="label-system text-[12px] lowercase opacity-40 group-hover:opacity-80 transition-all">{name}</span>
     </div>
   );
 }

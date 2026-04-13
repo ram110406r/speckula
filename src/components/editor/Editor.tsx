@@ -46,13 +46,13 @@ export function Editor() {
           <Input
             value={localTitle}
             onChange={(e) => handleTitleChange(e.target.value)}
-            className="h-8 w-72 bg-transparent border-none focus-visible:ring-0 font-bold text-base px-0 -ml-0.5 placeholder:text-muted-foreground/30"
+            className="h-8 w-72 bg-transparent border-none focus-visible:ring-0 font-semibold text-base px-0 -ml-0.5 placeholder:text-muted-foreground/30"
             placeholder="Document Title..."
           />
           {isSaving && (
             <div className="flex items-center gap-2 px-2 py-0.5 rounded-md bg-muted/20 animate-pulse">
               <div className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-              <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground/80">
+              <span className="label-system text-[12px] lowercase">
                 Saving to Cloud
               </span>
             </div>
@@ -62,7 +62,7 @@ export function Editor() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-transparent px-2"
+            className="h-8 gap-2 label-system text-[12px] hover:text-primary hover:bg-transparent px-2"
             onClick={toggleAiPanel}
           >
             {aiPanelOpen ? (

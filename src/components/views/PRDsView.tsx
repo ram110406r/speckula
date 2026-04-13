@@ -71,8 +71,8 @@ export function PRDsView() {
         <div className="flex items-center justify-between px-6 h-14 border-b border-border/60 shrink-0 bg-white/20">
           <div className="flex items-center gap-2.5">
             <LayoutDashboard className="h-4 w-4 text-primary" />
-            <span className="font-bold text-[10px] uppercase tracking-widest text-foreground">Specifications</span>
-            <span className="text-[10px] bg-muted/20 px-1.5 py-0.5 rounded-sm text-muted-foreground font-bold">{prds.length}</span>
+            <span className="label-system text-[12px]">Specifications</span>
+            <span className="label-system text-[12px] bg-muted/20 px-1.5 py-0.5 rounded-sm">{prds.length}</span>
           </div>
           <Button
             size="icon"
@@ -89,7 +89,7 @@ export function PRDsView() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center p-12 gap-3">
               <Loader2 className="h-5 w-5 animate-spin text-primary/20" />
-              <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">Syncing PRDs</span>
+              <span className="label-system text-[12px] animate-pulse">Syncing PRDs</span>
             </div>
           ) : prds.length === 0 ? (
             <div className="text-center py-12 px-6 border border-dashed border-border/40 rounded-xl m-2">
@@ -111,19 +111,19 @@ export function PRDsView() {
                 )}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className={`text-xs font-bold truncate leading-tight transition-colors ${selectedPRD?.id === prd.id ? "text-primary" : "text-foreground"}`}>
+                    <p className={`text-xs font-semibold truncate leading-tight transition-colors ${selectedPRD?.id === prd.id ? "text-primary" : "text-foreground"}`}>
                       {prd.title}
                     </p>
                     <div className="flex items-center gap-2 mt-2">
                       <Clock className="h-2.5 w-2.5 text-muted-foreground/40" />
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50">
+                      <span className="label-system text-[12px]">
                         {formatDate(prd.updatedAt)}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 mt-3">
-                  <span className={`text-[8px] px-2 py-0.5 rounded-sm border font-bold uppercase tracking-widest ${statusConfig[prd.status]?.className || statusConfig.draft.className}`}>
+                  <span className={`label-system text-[12px] px-2 py-0.5 rounded-sm border ${statusConfig[prd.status]?.className || statusConfig.draft.className}`}>
                     {statusConfig[prd.status]?.label || "Draft"}
                   </span>
                 </div>
@@ -134,7 +134,7 @@ export function PRDsView() {
         
         <div className="p-4 border-t border-border/60 bg-white/10">
           <Button
-            className="w-full h-10 text-[10px] font-bold uppercase tracking-widest bg-primary text-white hover:bg-primary-hover shadow-sm"
+            className="w-full h-10 label-system text-[12px] bg-primary text-white hover:bg-primary-hover shadow-sm"
             onClick={handleGenerate}
             disabled={isGenerating || !currentDocId}
           >
@@ -156,22 +156,23 @@ export function PRDsView() {
               <div className="flex items-center gap-4">
                 <FileText className="h-4 w-4 text-primary/60" />
                 <div>
-                  <h1 className="font-bold text-sm tracking-tight text-foreground">{selectedPRD.title}</h1>
+                  <h1 className="text-sm tracking-tight text-foreground font-semibold uppercase tracking-[0.05em]">Specification</h1>
                   <div className="flex items-center gap-2">
                     <div className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+                    <p className="label-system text-[12px]">
                       Last Synthesized {formatDate(selectedPRD.updatedAt)}
                     </p>
                   </div>
                 </div>
               </div>
-              <Button size="sm" variant="outline" className="h-8 text-[10px] font-bold uppercase tracking-widest border-border hover:border-primary/40 hover:text-primary px-4 bg-white transition-all">
+              <Button size="sm" variant="outline" className="h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-4 bg-white transition-all">
                 <Download className="h-3 w-3 mr-1.5" /> Export Specs
               </Button>
             </div>
             <div className="flex-1 overflow-auto p-12 custom-scrollbar">
               <div className="max-w-3xl mx-auto">
-                <div className="whitespace-pre-wrap text-[15px] font-medium text-foreground leading-[1.7] selection:bg-primary/10 tracking-tight">
+                <h1 className="mb-6">{selectedPRD.title}</h1>
+                <div className="whitespace-pre-wrap text-[16px] font-normal text-foreground leading-[1.6] selection:bg-primary/10 tracking-tight">
                   {selectedPRD.content}
                 </div>
               </div>
@@ -182,12 +183,12 @@ export function PRDsView() {
             <div className="w-16 h-16 rounded-2xl bg-muted/10 border border-border/40 flex items-center justify-center mb-6">
               <FileText className="h-8 w-8 text-muted-foreground/20" />
             </div>
-            <h2 className="text-xl font-bold tracking-tight mb-2">Workspace Empty</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed font-medium mb-8">
-              Select an existing specification from the sidebar or generate a new one using your current research notes.
+            <p className="label-system text-[12px] mb-2 text-foreground">Workspace Empty</p>
+            <p className="text-xs text-muted-foreground/60 leading-relaxed font-medium mb-8">
+              Select an existing specification from the sidebar or generate a new one using your research notes.
             </p>
             <Button
-              className="h-12 px-8 text-[11px] font-bold uppercase tracking-widest bg-primary text-white hover:bg-primary-hover shadow-lg shadow-primary/10 transition-all rounded-lg"
+              className="h-10 px-8 label-system text-[12px] bg-primary text-white hover:bg-primary-hover shadow-lg shadow-primary/10 transition-all rounded-lg"
               onClick={handleGenerate}
               disabled={isGenerating || !currentDocId}
             >

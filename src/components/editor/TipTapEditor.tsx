@@ -35,7 +35,7 @@ export function TipTapEditor() {
     content: ``,
     editorProps: {
       attributes: {
-        class: 'tiptap focus:outline-none w-full min-h-[500px] leading-[1.6] caret-primary',
+        class: 'tiptap focus:outline-none w-full min-h-[500px] leading-[1.6] caret-primary font-sans',
       },
     },
   });

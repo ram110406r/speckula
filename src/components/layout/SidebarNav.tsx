@@ -91,7 +91,7 @@ export function SidebarNav() {
           <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shadow-sm">
             <Sparkles className="h-4.5 w-4.5 text-white" />
           </div>
-          <span className="font-bold text-lg tracking-tight text-foreground">Buildcase</span>
+          <span className="font-semibold text-lg tracking-tight text-foreground">Buildcase</span>
         </div>
       </div>
 
@@ -104,7 +104,7 @@ export function SidebarNav() {
               key={item.view}
               className={`w-full flex items-center h-11 px-6 text-sm transition-all relative ${
                 isActive
-                  ? "text-primary font-bold"
+                   ? "text-primary font-semibold"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/10 font-medium"
               }`}
               onClick={() => setActiveView(item.view)}
@@ -119,10 +119,9 @@ export function SidebarNav() {
         })}
       </nav>
 
-      {/* Documents List */}
       <div className="flex-1 flex flex-col min-h-0 mt-8">
         <div className="px-6 py-3 flex items-center justify-between group">
-          <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60">
+          <span className="label-system text-[12px]">
             Workspaces
           </span>
           <button 
@@ -192,10 +191,10 @@ export function SidebarNav() {
                 </div>
               )}
               <div className="flex flex-col min-w-0">
-                <span className="text-[11px] font-bold text-foreground truncate leading-none mb-1">
+                <span className="label-system text-[12px] leading-none mb-1 normal-case font-semibold text-foreground">
                   {user.displayName || "User"}
                 </span>
-                <span className="text-[10px] text-muted-foreground truncate leading-none">
+                <span className="label-system text-[12px] leading-none lowercase">
                   {user.email}
                 </span>
               </div>
@@ -203,7 +202,7 @@ export function SidebarNav() {
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
-                className="h-8 flex-1 justify-start text-[11px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-transparent px-0"
+                className="h-8 flex-1 justify-start label-system text-[12px] hover:text-primary hover:bg-transparent px-0"
                 onClick={logout}
               >
                 <LogOut className="mr-2 h-3.5 w-3.5" />

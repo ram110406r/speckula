@@ -99,21 +99,21 @@ export function TasksView() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
             <CheckSquare className="h-4 w-4 text-primary" />
-            <span className="font-bold text-[10px] text-foreground uppercase tracking-[0.2em] leading-none">Task Matrix</span>
+            <span className="label-system text-[12px]">Task Matrix</span>
           </div>
           <div className="h-4 w-px bg-border/40" />
           <div className="flex items-center gap-3">
             <div className="w-24 h-1.5 bg-border/40 rounded-full overflow-hidden">
               <div className="h-full bg-primary rounded-full transition-all duration-700 ease-out" style={{ width: `${progress}%` }} />
             </div>
-            <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{progress}% Completion</span>
+            <span className="label-system text-[12px]">{progress}% Completion</span>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <Button
             size="sm"
             variant="ghost"
-            className="h-8 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-transparent"
+            className="h-8 label-system text-[12px] hover:text-primary hover:bg-transparent"
             onClick={handleGenerate}
             disabled={isGenerating || !currentDocId}
           >
@@ -121,7 +121,7 @@ export function TasksView() {
             {isGenerating ? "Mapping..." : "Plan with AI"}
           </Button>
           <div className="h-4 w-px bg-border/40" />
-          <Button size="sm" variant="ghost" className="h-8 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-transparent">
+          <Button size="sm" variant="ghost" className="h-8 label-system text-[12px] hover:text-primary hover:bg-transparent">
             <Plus className="mr-1 h-3.5 w-3.5" /> Force Entry
           </Button>
         </div>
@@ -132,10 +132,10 @@ export function TasksView() {
           <button
             key={s}
             onClick={() => setFilterStatus(s)}
-            className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all border ${
+            className={`px-4 py-1.5 rounded-md label-system text-[12px] transition-all border ${
               filterStatus === s
                 ? "bg-primary text-white border-primary shadow-sm"
-                : "bg-white text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground"
+                : "bg-white border-border/60 hover:border-primary/40 hover:text-foreground"
             }`}
           >
             {s === "all" ? "Full Registry" : statusConfig[s].label}
@@ -147,26 +147,26 @@ export function TasksView() {
         {isLoading && (
           <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary/20" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Syncing Master Backlog</span>
+            <span className="label-system text-[12px] animate-pulse">Syncing Master Backlog</span>
           </div>
         )}
 
         {!isLoading && tasks.length === 0 && (
           <div className="flex flex-col items-center justify-center p-20 text-center border-2 border-dashed border-border/40 rounded-2xl max-w-2xl mx-auto">
             <CheckSquare className="h-10 w-10 text-muted-foreground/20 mb-6" />
-            <p className="text-sm font-bold text-muted-foreground tracking-tight">Baseline Zero</p>
-            <p className="text-xs text-muted-foreground/60 mt-2 max-w-xs mx-auto leading-relaxed"> No tasks trackers yet. Generate an execution matrix from your product notes with AI to begin tracking.</p>
+            <p className="label-system text-[12px] mb-2">Baseline Zero</p>
+            <p className="text-xs text-muted-foreground/60 max-w-xs mx-auto leading-relaxed"> No tasks trackers yet. Generate an execution matrix from your product notes with AI to begin tracking.</p>
           </div>
         )}
 
         {!isLoading && tasks.length > 0 && Object.entries(grouped).map(([status, groupTasks]) => (
           <div key={status} className="animate-in fade-in duration-500">
             <div className="flex items-center gap-3 mb-6">
-              <span className={`text-[10px] font-bold uppercase tracking-[0.2em] ${statusConfig[status as TaskStatus].color}`}>
+              <span className={`label-system text-[12px] ${statusConfig[status as TaskStatus].color}`}>
                 {statusConfig[status as TaskStatus].label}
               </span>
               <div className="h-px flex-1 bg-border/40" />
-              <span className="text-[10px] bg-muted/20 px-1.5 py-0.5 rounded-sm text-muted-foreground font-bold">{groupTasks.length}</span>
+              <span className="label-system text-[12px] bg-muted/20 px-1.5 py-0.5 rounded-sm">{groupTasks.length}</span>
             </div>
             <div className="space-y-3">
               {groupTasks.map((task) => (
@@ -189,19 +189,19 @@ export function TasksView() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold leading-snug tracking-tight ${task.status === "done" ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                    <p className={`text-sm font-semibold leading-snug tracking-tight ${task.status === "done" ? "line-through text-muted-foreground" : "text-foreground"}`}>
                       {task.title}
                     </p>
                     <div className="flex items-center gap-3 mt-3">
                       {task.milestone && (
                         <div className="flex items-center gap-1.5">
                           <div className="h-1 w-1 rounded-full bg-border" />
-                          <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">{task.milestone}</span>
+                          <span className="label-system text-[12px] lowercase opacity-80">{task.milestone}</span>
                         </div>
                       )}
                       <div className="flex items-center gap-2 px-2 py-0.5 rounded-sm bg-muted/20">
                         <span className={`h-1.5 w-1.5 rounded-full ${priorityConfig[task.priority]?.dot || priorityConfig?.medium?.dot || 'bg-muted'}`} />
-                        <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/80">{priorityConfig[task.priority]?.label || "Medium"}</span>
+                        <span className="label-system text-[12px]">{priorityConfig[task.priority]?.label || "Medium"}</span>
                       </div>
                     </div>
                   </div>

@@ -68,9 +68,9 @@ export function InsightsView() {
       <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0 bg-white/50">
         <div className="flex items-center gap-3">
           <Lightbulb className="h-4 w-4 text-primary" />
-          <h1 className="font-bold text-sm tracking-tight text-foreground uppercase tracking-[0.05em]">Intelligence Feed</h1>
+          <h1 className="text-sm uppercase tracking-[0.05em] font-semibold">Intelligence Feed</h1>
           <div className="h-4 w-px bg-border/40 mx-1" />
-          <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+          <span className="label-system text-[12px]">
             {insights.length} nodes
           </span>
         </div>
@@ -78,7 +78,7 @@ export function InsightsView() {
           <Button
             size="sm"
             variant="ghost"
-            className="h-8 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-transparent"
+            className="h-8 label-system text-[12px] hover:text-primary hover:bg-transparent"
             onClick={() => setActiveView("editor")}
           >
             <Plus className="mr-1.5 h-3 w-3" />
@@ -86,7 +86,7 @@ export function InsightsView() {
           </Button>
           <Button
             size="sm"
-            className="h-8 text-[10px] font-bold uppercase tracking-widest bg-primary text-white hover:bg-primary/90 shadow-sm"
+            className="h-8 label-system text-[12px] bg-primary text-white hover:bg-primary/90 shadow-sm"
             onClick={handleExtract}
             disabled={isExtracting || !currentDocId}
           >
@@ -106,10 +106,10 @@ export function InsightsView() {
           <button
             key={cat}
             onClick={() => setFilter(cat)}
-            className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all border ${
+            className={`px-4 py-1.5 rounded-md label-system text-[12px] transition-all border ${
               filter === cat
                 ? "bg-primary text-white border-primary"
-                : "bg-white text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground"
+                : "bg-white border-border/60 hover:border-primary/40 hover:text-foreground"
             }`}
           >
             {cat === "all" ? "All Nodes" : categoryConfig[cat as keyof typeof categoryConfig]?.label}
@@ -122,13 +122,13 @@ export function InsightsView() {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 gap-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary/20" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Fetching Intelligence</span>
+            <span className="label-system text-[12px] animate-pulse">Fetching Intelligence</span>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-border/40 rounded-2xl max-w-2xl mx-auto">
             <Lightbulb className="h-8 w-8 text-muted-foreground/20 mb-4" />
-            <p className="text-sm font-bold text-muted-foreground tracking-tight">System Idle</p>
-            <p className="text-xs text-muted-foreground/60 mt-1 max-w-sm">
+            <p className="label-system text-[12px] mb-2">System Idle</p>
+            <p className="text-xs text-muted-foreground/60 max-w-sm">
               Use the **Extract with AI** tool in the editor to populate this feed with structured product notes.
             </p>
           </div>
@@ -144,13 +144,13 @@ export function InsightsView() {
                 >
                   <div className="flex items-center gap-2">
                     <Icon className={`h-3.5 w-3.5 shrink-0 ${cfg.color}`} />
-                    <span className={`text-[9px] uppercase tracking-[0.15em] font-bold ${cfg.color}`}>
+                    <span className="label-system text-[12px]">
                       {cfg.label}
                     </span>
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-sm font-bold text-foreground leading-snug tracking-tight">{insight.title}</h3>
-                    <p className="text-xs text-muted-foreground leading-relaxed font-medium">{insight.description}</p>
+                    <h3 className="text-sm font-semibold text-foreground leading-snug tracking-tight">{insight.title}</h3>
+                    <p className="text-xs text-muted-foreground leading-relaxed transition-all group-hover:text-foreground">{insight.description}</p>
                   </div>
                 </div>
               );

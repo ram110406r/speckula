@@ -20,7 +20,7 @@ export function Shell() {
       <div className="h-screen w-full flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary/40" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 animate-pulse">Initializing Workspace</span>
+          <span className="label-system text-[12px] animate-pulse">Initializing Workspace</span>
         </div>
       </div>
     );

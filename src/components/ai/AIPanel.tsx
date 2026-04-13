@@ -102,7 +102,7 @@ export function AIPanel() {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border h-14 px-4 shrink-0 bg-sidebar">
-        <div className="flex items-center gap-2 font-semibold text-sm">
+        <div className="flex items-center gap-2 label-system text-sm font-semibold tracking-[0.05em]">
           <Sparkles className="h-4 w-4 text-primary" />
           AI Assistant
         </div>
@@ -130,7 +130,7 @@ export function AIPanel() {
             <div className="flex flex-col gap-2">
               <Button
                 variant="outline"
-                className="justify-start text-xs border-primary/20 hover:border-primary/50 hover:bg-primary/5 text-foreground h-9"
+                className="justify-start label-system text-[12px] border-primary/20 hover:border-primary/50 hover:bg-primary/5 text-foreground h-9"
                 onClick={() => triggerPrompt("Generate a comprehensive PRD for this product concept. Include: overview, problem statement, user stories, functional requirements, success metrics, and technical considerations.")}
               >
                 <Wand2 className="mr-2 h-3 w-3 text-primary shrink-0" />
@@ -138,7 +138,7 @@ export function AIPanel() {
               </Button>
               <Button
                 variant="outline"
-                className="justify-start text-xs hover:bg-muted/50 text-foreground h-9"
+                className="justify-start label-system text-[12px] border-border/60 hover:border-primary/40 hover:bg-muted/50 text-foreground h-9"
                 onClick={() => triggerPrompt("Extract the key product insights from what I've described. Identify: pain points, target users, market opportunity, and differentiation.")}
               >
                 <Lightbulb className="mr-2 h-3 w-3 text-yellow-500 shrink-0" />
@@ -146,10 +146,10 @@ export function AIPanel() {
               </Button>
               <Button
                 variant="outline"
-                className="justify-start text-xs hover:bg-muted/50 text-foreground h-9"
+                className="justify-start label-system text-[12px] border-border/60 hover:border-primary/40 hover:bg-muted/50 text-foreground h-9"
                 onClick={() => triggerPrompt("Based on the product concept described, suggest a prioritized list of execution tasks and milestones for the first 90 days. Format as a structured action plan.")}
               >
-                <ListChecks className="mr-2 h-3 w-3 text-green-500 shrink-0" />
+                <CheckSquare className="mr-2 h-3 w-3 text-green-500 shrink-0" />
                 Suggest Execution Tasks
               </Button>
             </div>
@@ -164,17 +164,17 @@ export function AIPanel() {
                   : "bg-sidebar border border-border mr-6"
               }`}
             >
-              <span className="font-semibold text-[10px] uppercase tracking-wider mb-1.5 block text-muted-foreground">
+              <span className="label-system text-[12px] mb-1.5 block">
                 {m.role === "user" ? "You" : "Buildcase AI"}
               </span>
-              <div className="whitespace-pre-wrap leading-relaxed">{m.content || (isLoading ? "▋" : "")}</div>
+              <div className="whitespace-pre-wrap leading-relaxed text-[13px] font-normal">{m.content || (isLoading ? "▋" : "")}</div>
             </div>
           ))
         )}
         {isLoading && messages.at(-1)?.role === "user" && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground p-2">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Thinking...
+          <div className="flex items-center gap-2 label-system text-[12px] p-2">
+            <Loader2 className="h-3 w-3 animate-spin text-primary/40" />
+            <span>Thinking...</span>
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -186,7 +186,7 @@ export function AIPanel() {
           <Button
             variant="ghost"
             size="sm"
-            className="mb-2 h-6 text-[10px] text-muted-foreground hover:text-foreground w-full"
+            className="mb-2 h-6 label-system text-[12px] hover:text-primary hover:bg-transparent w-full"
             onClick={() => setMessages([])}
           >
             Clear conversation
