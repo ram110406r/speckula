@@ -46,58 +46,60 @@
 :root {
   --background: #F7F4EC;
   --foreground: #23262B;
-  --card: #F7F4EC;
+  --card: #FFFFFF;
   --card-foreground: #23262B;
-  --popover: #F7F4EC;
+  --popover: #FFFFFF;
   --popover-foreground: #23262B;
   --primary: #C04A2B;
-  --primary-foreground: #F7F4EC;
+  --primary-foreground: #FFFFFF;
   --secondary: #EBE6D9;
   --secondary-foreground: #23262B;
   --muted: #EBE6D9;
   --muted-foreground: #6B685F;
   --accent: #EBE6D9;
-  --accent-foreground: #23262B;
-  --destructive: #CC3333;
+  --accent-foreground: #C04A2B;
+  --destructive: #A63F24;
   --border: #D6D2C8;
   --input: #D6D2C8;
   --ring: #C04A2B;
-  --radius: 0.625rem;
+  --radius: 0.5rem;
   --sidebar: #F7F4EC;
   --sidebar-foreground: #23262B;
   --sidebar-primary: #C04A2B;
-  --sidebar-primary-foreground: #F7F4EC;
+  --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: #EBE6D9;
-  --sidebar-accent-foreground: #23262B;
+  --sidebar-accent-foreground: #C04A2B;
   --sidebar-border: #D6D2C8;
   --sidebar-ring: #C04A2B;
 }
 
 .dark {
-  --background: #111111;
-  --foreground: #F7F4EC;
-  --card: #18181A;
-  --card-foreground: #F7F4EC;
-  --popover: #18181A;
-  --popover-foreground: #F7F4EC;
+  /* Design intent: Calm and minimal. Keeping light theme as primary choice for decision instrument feel. 
+     If dark mode is used, we maintain low eye-strain using deep neutrals. */
+  --background: #1A1C1E;
+  --foreground: #E3E2E6;
+  --card: #23262B;
+  --card-foreground: #E3E2E6;
+  --popover: #23262B;
+  --popover-foreground: #E3E2E6;
   --primary: #C04A2B;
-  --primary-foreground: #F7F4EC;
+  --primary-foreground: #FFFFFF;
   --secondary: #2C2D30;
-  --secondary-foreground: #F7F4EC;
+  --secondary-foreground: #E3E2E6;
   --muted: #2C2D30;
-  --muted-foreground: #A19D94;
+  --muted-foreground: #8B8B8E;
   --accent: #2C2D30;
-  --accent-foreground: #F7F4EC;
-  --destructive: #FF4444;
+  --accent-foreground: #C04A2B;
+  --destructive: #A63F24;
   --border: #3A3B3E;
   --input: #3A3B3E;
   --ring: #C04A2B;
-  --sidebar: #111111;
-  --sidebar-foreground: #F7F4EC;
+  --sidebar: #1A1C1E;
+  --sidebar-foreground: #E3E2E6;
   --sidebar-primary: #C04A2B;
-  --sidebar-primary-foreground: #F7F4EC;
+  --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: #2C2D30;
-  --sidebar-accent-foreground: #F7F4EC;
+  --sidebar-accent-foreground: #C04A2B;
   --sidebar-border: #3A3B3E;
   --sidebar-ring: #C04A2B;
 }
@@ -107,10 +109,14 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground transition-colors duration-300;
   }
   html {
-    @apply font-sans;
+    @apply font-sans antialiased;
+  }
+  ::selection {
+    background-color: rgba(192, 74, 43, 0.15);
+    color: inherit;
   }
 }
 

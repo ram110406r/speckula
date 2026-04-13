@@ -9,10 +9,10 @@ import { getInsights, getDocument, type Insight } from "@/lib/firebase/db";
 import { extractInsightsAction } from "@/lib/ai/actions";
 
 const categoryConfig = {
-  "pain-point": { label: "Pain Point", icon: AlertCircle, color: "text-red-400", bg: "bg-red-400/10 border-red-400/20" },
-  "opportunity": { label: "Opportunity", icon: TrendingUp, color: "text-green-400", bg: "bg-green-400/10 border-green-400/20" },
-  "user-segment": { label: "User Segment", icon: Users, color: "text-blue-400", bg: "bg-blue-400/10 border-blue-400/20" },
-  "pattern": { label: "Pattern", icon: Tag, color: "text-yellow-400", bg: "bg-yellow-400/10 border-yellow-400/20" },
+  "pain-point": { label: "Pain Point", icon: AlertCircle, color: "text-primary", bg: "bg-white border-primary/20 hover:border-primary/40" },
+  "opportunity": { label: "Opportunity", icon: TrendingUp, color: "text-primary", bg: "bg-white border-primary/10 hover:border-primary/30" },
+  "user-segment": { label: "User Segment", icon: Users, color: "text-muted-foreground", bg: "bg-white border-border/60 hover:border-primary/20" },
+  "pattern": { label: "Pattern", icon: Tag, color: "text-muted-foreground", bg: "bg-white border-border/60 hover:border-primary/20" },
 };
 
 export function InsightsView() {
@@ -63,29 +63,30 @@ export function InsightsView() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background selection:bg-primary/10 transition-all duration-500">
       {/* Header */}
-      <div className="flex items-center justify-between px-8 h-14 border-b border-border shrink-0 bg-card/50">
-        <div className="flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-yellow-400" />
-          <h1 className="font-semibold text-sm">Product Insights</h1>
-          <span className="text-[10px] bg-muted px-2 py-0.5 rounded-full text-muted-foreground font-medium">
-            {insights.length} insights
+      <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0 bg-white/50">
+        <div className="flex items-center gap-3">
+          <Lightbulb className="h-4 w-4 text-primary" />
+          <h1 className="font-bold text-sm tracking-tight text-foreground uppercase tracking-[0.05em]">Intelligence Feed</h1>
+          <div className="h-4 w-px bg-border/40 mx-1" />
+          <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+            {insights.length} nodes
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Button
             size="sm"
-            variant="outline"
-            className="h-8 text-xs border-primary/20 hover:border-primary/50 hover:bg-primary/5"
+            variant="ghost"
+            className="h-8 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-transparent"
             onClick={() => setActiveView("editor")}
           >
-            <Plus className="mr-1.5 h-3 w-3 text-primary" />
-            Add from Editor
+            <Plus className="mr-1.5 h-3 w-3" />
+            Manual Entry
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+            className="h-8 text-[10px] font-bold uppercase tracking-widest bg-primary text-white hover:bg-primary/90 shadow-sm"
             onClick={handleExtract}
             disabled={isExtracting || !currentDocId}
           >
@@ -94,60 +95,63 @@ export function InsightsView() {
             ) : (
               <Sparkles className="mr-1.5 h-3 w-3" />
             )}
-            {isExtracting ? "Extracting..." : "Extract with AI"}
+            {isExtracting ? "Processing..." : "Extract with AI"}
           </Button>
         </div>
       </div>
 
       {/* Filter tabs */}
-      <div className="flex items-center gap-1 px-8 py-3 border-b border-border/50 shrink-0">
+      <div className="flex items-center gap-2 px-8 py-4 shrink-0 bg-white/20">
         {categories.map(cat => (
           <button
             key={cat}
             onClick={() => setFilter(cat)}
-            className={`px-3 py-1 rounded-full text-[11px] font-medium capitalize transition-colors ${
+            className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all border ${
               filter === cat
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-primary text-white border-primary"
+                : "bg-white text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground"
             }`}
           >
-            {cat === "all" ? "All" : categoryConfig[cat as keyof typeof categoryConfig]?.label}
+            {cat === "all" ? "All Nodes" : categoryConfig[cat as keyof typeof categoryConfig]?.label}
           </button>
         ))}
       </div>
 
       {/* Insights Grid */}
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 custom-scrollbar">
         {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/40" />
+          <div className="flex flex-col items-center justify-center h-64 gap-4">
+            <Loader2 className="h-6 w-6 animate-spin text-primary/20" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Fetching Intelligence</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center">
-            <Lightbulb className="h-10 w-10 text-muted-foreground/30 mb-4" />
-            <p className="text-sm text-muted-foreground">No insights yet.</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">
-              Write product notes in the Editor and use <strong>Extract with AI</strong> to generate insights.
+          <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-border/40 rounded-2xl max-w-2xl mx-auto">
+            <Lightbulb className="h-8 w-8 text-muted-foreground/20 mb-4" />
+            <p className="text-sm font-bold text-muted-foreground tracking-tight">System Idle</p>
+            <p className="text-xs text-muted-foreground/60 mt-1 max-w-sm">
+              Use the **Extract with AI** tool in the editor to populate this feed with structured product notes.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map(insight => {
               const cfg = categoryConfig[insight.category] || categoryConfig["opportunity"];
               const Icon = cfg.icon;
               return (
                 <div
                   key={insight.id}
-                  className={`rounded-xl border p-4 space-y-2 cursor-pointer hover:shadow-md transition-shadow ${cfg.bg}`}
+                  className={`rounded-xl border p-6 space-y-4 cursor-pointer transition-all duration-300 shadow-sm hover:shadow-md ${cfg.bg}`}
                 >
                   <div className="flex items-center gap-2">
                     <Icon className={`h-3.5 w-3.5 shrink-0 ${cfg.color}`} />
-                    <span className={`text-[10px] uppercase tracking-wider font-semibold ${cfg.color}`}>
+                    <span className={`text-[9px] uppercase tracking-[0.15em] font-bold ${cfg.color}`}>
                       {cfg.label}
                     </span>
                   </div>
-                  <h3 className="text-sm font-semibold text-foreground leading-snug">{insight.title}</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{insight.description}</p>
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-bold text-foreground leading-snug tracking-tight">{insight.title}</h3>
+                    <p className="text-xs text-muted-foreground leading-relaxed font-medium">{insight.description}</p>
+                  </div>
                 </div>
               );
             })}

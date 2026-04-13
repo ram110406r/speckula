@@ -17,8 +17,11 @@ export function Shell() {
 
   if (loading) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-[#030303]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary/40" />
+      <div className="h-screen w-full flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary/40" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 animate-pulse">Initializing Workspace</span>
+        </div>
       </div>
     );
   }
@@ -40,20 +43,20 @@ export function Shell() {
   const showAIPanel = aiPanelOpen && activeView === "editor";
 
   return (
-    <div className="flex h-screen w-full bg-background text-foreground overflow-hidden">
+    <div className="flex h-screen w-full bg-background text-foreground overflow-hidden selection:bg-primary/10">
       {/* Sidebar: Fixed width */}
-      <div className="w-[240px] shrink-0 xl:w-[260px] bg-sidebar relative z-20 shadow-sm border-r border-border/50">
+      <div className="w-[240px] shrink-0 xl:w-[260px] bg-background relative z-20 border-r border-border/60">
         <SidebarNav />
       </div>
 
       {/* Center: Main view */}
-      <div className="flex-1 min-w-0 bg-card/30 overflow-hidden">
+      <div className="flex-1 min-w-0 overflow-hidden">
         {renderMainView()}
       </div>
 
       {/* Right: AI Panel (editor only) */}
       {showAIPanel && (
-        <div className="w-[340px] shrink-0 xl:w-[380px] bg-sidebar border-l border-border relative z-20 shadow-2xl overflow-hidden">
+        <div className="w-[340px] shrink-0 xl:w-[380px] bg-background border-l border-border/60 relative z-20 overflow-hidden animate-in slide-in-from-right duration-500 ease-out">
           <AIPanel />
         </div>
       )}

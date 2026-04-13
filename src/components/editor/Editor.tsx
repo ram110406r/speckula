@@ -39,42 +39,45 @@ export function Editor() {
   };
 
   return (
-    <div className="flex h-full flex-col w-full bg-background">
+    <div className="flex h-full flex-col w-full bg-background selection:bg-primary/10">
       {/* Toolbar */}
-      <div className="flex items-center justify-between border-b border-border h-14 px-6 shrink-0 bg-card/50 backdrop-blur-sm">
-        <div className="flex items-center gap-3 flex-1">
+      <div className="flex items-center justify-between border-b border-border/60 h-14 px-8 shrink-0 bg-background">
+        <div className="flex items-center gap-4 flex-1">
           <Input
             value={localTitle}
             onChange={(e) => handleTitleChange(e.target.value)}
-            className="h-8 w-64 bg-transparent border-none focus-visible:ring-1 focus-visible:ring-primary/20 font-medium text-sm px-2 -ml-2"
+            className="h-8 w-72 bg-transparent border-none focus-visible:ring-0 font-bold text-base px-0 -ml-0.5 placeholder:text-muted-foreground/30"
             placeholder="Document Title..."
           />
           {isSaving && (
-            <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full animate-pulse font-medium tracking-wide">
-              Saving...
-            </span>
+            <div className="flex items-center gap-2 px-2 py-0.5 rounded-md bg-muted/20 animate-pulse">
+              <div className="h-1.5 w-1.5 rounded-full bg-primary/40" />
+              <span className="text-[9px] uppercase tracking-[0.1em] font-bold text-muted-foreground/80">
+                Saving to Cloud
+              </span>
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            className="h-8 gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-transparent px-2"
             onClick={toggleAiPanel}
           >
             {aiPanelOpen ? (
-              <PanelRightClose className="h-3.5 w-3.5" />
+              <PanelRightClose className="h-4 w-4" />
             ) : (
-              <PanelRightOpen className="h-3.5 w-3.5" />
+              <PanelRightOpen className="h-4 w-4" />
             )}
-            {aiPanelOpen ? "Hide AI" : "Show AI"}
+            {aiPanelOpen ? "Close Assistant" : "Focus Mode"}
           </Button>
+          <div className="h-4 w-px bg-border/60 mx-1" />
           <Button
             variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-primary hover:bg-primary/10"
+            size="sm"
+            className="h-8 w-8 text-primary hover:bg-primary/5 p-0"
             onClick={toggleAiPanel}
-            title="Open AI Assistant"
           >
             <Sparkles className="h-4 w-4" />
           </Button>

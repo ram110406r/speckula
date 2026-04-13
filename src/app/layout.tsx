@@ -18,8 +18,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body suppressHydrationWarning className={`${inter.className} min-h-screen bg-background antialiased selection:bg-primary/30 selection:text-primary`}>
+    <html lang="en">
+      <body suppressHydrationWarning className={`${inter.className} min-h-screen bg-background antialiased`}>
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </AuthProvider>
