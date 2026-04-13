@@ -7,7 +7,13 @@ import { useChat, type UIMessage } from "@ai-sdk/react";
 
 export function AIPanel() {
   const { toggleAiPanel } = useAppStore();
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat() as any;
+  const { 
+    messages = [], 
+    input = "", 
+    handleInputChange = () => {}, 
+    handleSubmit = (e: any) => { e?.preventDefault() }, 
+    isLoading = false 
+  } = useChat() as any;
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -67,7 +73,7 @@ export function AIPanel() {
               }
             }}
           />
-          <Button type="submit" disabled={isLoading || !input.trim()} size="sm" className="absolute bottom-2 right-2 h-7 rounded bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button type="submit" disabled={isLoading || !input?.trim()} size="sm" className="absolute bottom-2 right-2 h-7 rounded bg-primary text-primary-foreground hover:bg-primary/90">
             Ask
           </Button>
         </form>

@@ -1,17 +1,33 @@
-import { NextResponse } from "next/server";
+import { createGroq } from '@ai-sdk/groq';
+import { streamText } from 'ai';
+
+// Initialize Groq provider
+const groq = createGroq({
+  apiKey: process.env.GROQ_API_KEY,
+});
+
+// Set to edge runtime for faster streaming
+export const runtime = 'edge';
 
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
-    const lastMessage = messages[messages.length - 1]?.content || "";
-    
-    const text = `[MOCK AI]\nI got: "${lastMessage}".\nConfigure OPENAI_API_KEY in .env.local and use 'ai' SDK for real responses.`;
-    
-    // Simulate streaming data chunk expected by useChat hook
-    return new Response(`0:"${text.replace(/\n/g, '\\n')}"\n`, {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+
+    const result = await streamText({
+      model: groq('llama-3.3-70b-versatile'),
+      system: `You are Buildcase AI, a senior product management assistant. 
+      Your goal is to help product managers discover insights, define product strategy, and build PRDs.
+      Be concise, structured, and professional. Use markdown for all responses.
+      Focus on product thinking: pain points, user segments, and business impact.`,
+      messages,
     });
+
+    return result.toTextStreamResponse();
   } catch (error) {
-    return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
+    console.error('AI Error:', error);
+    return new Response(JSON.stringify({ error: "Intelligence Engine encountered an error." }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

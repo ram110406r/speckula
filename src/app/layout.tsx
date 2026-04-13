@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   description: "The AI-first workspace for product discovery and execution.",
 };
 
+import { AuthProvider } from "@/lib/firebase/AuthProvider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -18,7 +20,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.className} min-h-screen bg-background antialiased selection:bg-primary/30 selection:text-primary`}>
-        <TooltipProvider>{children}</TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+        </AuthProvider>
       </body>
     </html>
   );
