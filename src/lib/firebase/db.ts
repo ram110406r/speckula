@@ -4,8 +4,7 @@ import {
   setDoc, 
   getDoc, 
   getDocs, 
-  query, 
-  where, 
+  query,
   orderBy, 
   serverTimestamp,
   type Timestamp
@@ -17,42 +16,52 @@ export interface BuildcaseDocument {
   title: string;
   content: any; // TipTap JSON
   userId: string;
-  updatedAt: Timestamp | any;
-  createdAt: Timestamp | any;
+  updatedAt: Timestamp | null;
+  createdAt: Timestamp | null;
 }
 
-const DOCUMENTS_COLLECTION = "documents";
+// Path: /users/{userId}/documents/{docId}
+// This matches the Firestore security rules in firestore.rules
+const userDocsCollection = (userId: string) =>
+  collection(db, "users", userId, "documents");
 
-export const saveDocument = async (userId: string, docId: string, data: Partial<BuildcaseDocument>) => {
-  const docRef = doc(db, DOCUMENTS_COLLECTION, docId);
-  await setDoc(docRef, {
-    ...data,
-    userId,
-    updatedAt: serverTimestamp(),
-    // Only set createdAt if it's a new document (needs check or merge logic)
-  }, { merge: true });
+const userDocRef = (userId: string, docId: string) =>
+  doc(db, "users", userId, "documents", docId);
+
+export const saveDocument = async (
+  userId: string,
+  docId: string,
+  data: Partial<BuildcaseDocument>
+) => {
+  const ref = userDocRef(userId, docId);
+  await setDoc(
+    ref,
+    {
+      ...data,
+      userId,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 };
 
-export const getDocument = async (docId: string) => {
-  const docRef = doc(db, DOCUMENTS_COLLECTION, docId);
-  const docSnap = await getDoc(docRef);
-  
-  if (docSnap.exists()) {
-    return { id: docSnap.id, ...docSnap.data() } as BuildcaseDocument;
+export const getDocument = async (userId: string, docId: string) => {
+  const ref = userDocRef(userId, docId);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    return { id: snap.id, ...snap.data() } as BuildcaseDocument;
   }
   return null;
 };
 
 export const getUserDocuments = async (userId: string) => {
   const q = query(
-    collection(db, DOCUMENTS_COLLECTION),
-    where("userId", "==", userId),
+    userDocsCollection(userId),
     orderBy("updatedAt", "desc")
   );
-  
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({
+    id: d.id,
+    ...d.data(),
   })) as BuildcaseDocument[];
 };

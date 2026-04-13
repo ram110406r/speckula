@@ -4,16 +4,19 @@ import Image from "next/image";
 import { FileText, Lightbulb, CheckSquare, LayoutDashboard, LogIn, LogOut, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
+import { useAppStore, type AppView } from "@/store/useAppStore";
 
-const navItems = [
-  { icon: FileText, label: "Editor", active: true },
-  { icon: Lightbulb, label: "Insights" },
-  { icon: LayoutDashboard, label: "PRDs" },
-  { icon: CheckSquare, label: "Tasks" },
+const navItems: { icon: React.ElementType; label: string; view: AppView }[] = [
+  { icon: FileText, label: "Editor", view: "editor" },
+  { icon: Lightbulb, label: "Insights", view: "insights" },
+  { icon: LayoutDashboard, label: "PRDs", view: "prds" },
+  { icon: CheckSquare, label: "Tasks", view: "tasks" },
 ];
 
 export function SidebarNav() {
   const { user, loginWithGoogle, logout, loading } = useAuth();
+  const { activeView, setActiveView } = useAppStore();
+
 
   return (
     <div className="flex h-full flex-col border-r border-border bg-sidebar">
@@ -31,20 +34,24 @@ export function SidebarNav() {
 
       {/* Navigation */}
       <nav className="flex-1 p-2 space-y-0.5 mt-2">
-        {navItems.map((item, index) => (
-          <Button
-            key={index}
-            variant={item.active ? "secondary" : "ghost"}
-            className={`w-full justify-start text-sm h-9 px-3 ${
-              item.active
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <item.icon className="mr-2.5 h-4 w-4 shrink-0" />
-            {item.label}
-          </Button>
-        ))}
+        {navItems.map((item) => {
+          const isActive = activeView === item.view;
+          return (
+            <Button
+              key={item.view}
+              variant={isActive ? "secondary" : "ghost"}
+              className={`w-full justify-start text-sm h-9 px-3 ${
+                isActive
+                  ? "bg-secondary text-secondary-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveView(item.view)}
+            >
+              <item.icon className={`mr-2.5 h-4 w-4 shrink-0 ${isActive ? "text-primary" : ""}`} />
+              {item.label}
+            </Button>
+          );
+        })}
       </nav>
 
       {/* User Section */}
