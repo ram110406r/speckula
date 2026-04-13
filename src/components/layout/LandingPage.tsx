@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 
 export function LandingPage() {
-  const { signInWithGoogle, loading } = useAuth();
+  const { loginWithGoogle, loading } = useAuth();
 
   return (
     <div className="min-h-screen w-full bg-[#030303] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -25,7 +25,7 @@ export function LandingPage() {
         <Button 
           variant="ghost" 
           className="text-sm font-medium hover:bg-white/5"
-          onClick={signInWithGoogle}
+          onClick={loginWithGoogle}
           disabled={loading}
         >
           Sign In
@@ -51,11 +51,12 @@ export function LandingPage() {
           <Button 
             size="lg" 
             className="h-14 px-8 text-base font-semibold bg-primary text-white hover:bg-primary/90 shadow-2xl shadow-primary/20 w-full sm:w-auto"
-            onClick={signInWithGoogle}
+            onClick={loginWithGoogle}
             disabled={loading}
           >
             Get Started for Free
           </Button>
+
           <Button 
             size="lg" 
             variant="outline" 
