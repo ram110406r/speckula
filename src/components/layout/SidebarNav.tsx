@@ -1,8 +1,9 @@
 "use client";
 
-import { FileText, Lightbulb, CheckSquare, LayoutDashboard } from "lucide-react";
+import Image from "next/image";
+import { FileText, Lightbulb, CheckSquare, LayoutDashboard, LogIn, LogOut, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAppStore } from "@/store/useAppStore";
+import { useAuth } from "@/lib/firebase/AuthProvider";
 
 const navItems = [
   { icon: FileText, label: "Editor", active: true },
@@ -11,71 +12,87 @@ const navItems = [
   { icon: CheckSquare, label: "Tasks" },
 ];
 
-import Image from "next/image";
-
-import { useAuth } from "@/lib/firebase/AuthProvider";
-import { LogIn, LogOut, User as UserIcon } from "lucide-react";
-
 export function SidebarNav() {
   const { user, loginWithGoogle, logout, loading } = useAuth();
-  const { isSaving } = useAppStore();
 
   return (
-    <div className="flex h-full flex-col border-r border-border bg-sidebar py-4">
-      <div className="px-4 mb-6 flex items-center justify-between">
-        <Image 
-          src="/logo.png" 
-          alt="Buildcase Logo" 
-          width={150} 
-          height={150} 
-          className="h-12 w-auto mix-blend-multiply dark:mix-blend-normal" 
+    <div className="flex h-full flex-col border-r border-border bg-sidebar">
+      {/* Logo */}
+      <div className="px-4 py-4 border-b border-border/50">
+        <Image
+          src="/logo.png"
+          alt="Buildcase Logo"
+          width={150}
+          height={40}
+          className="h-10 w-auto mix-blend-multiply dark:mix-blend-normal"
           priority
         />
-        {isSaving && (
-          <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full animate-pulse font-medium">
-            Saving...
-          </span>
-        )}
       </div>
-      <nav className="flex-1 space-y-1 px-2">
+
+      {/* Navigation */}
+      <nav className="flex-1 p-2 space-y-0.5 mt-2">
         {navItems.map((item, index) => (
           <Button
             key={index}
             variant={item.active ? "secondary" : "ghost"}
-            className="w-full justify-start text-sm"
+            className={`w-full justify-start text-sm h-9 px-3 ${
+              item.active
+                ? "bg-secondary text-secondary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            <item.icon className="mr-2 h-4 w-4" />
+            <item.icon className="mr-2.5 h-4 w-4 shrink-0" />
             {item.label}
           </Button>
         ))}
       </nav>
-      <div className="px-2 mt-auto pt-4 border-t border-border/50">
-        {!loading && (
-          user ? (
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-                {user.photoURL ? (
-                  <Image src={user.photoURL} alt={user.displayName || "User"} width={20} height={20} className="rounded-full" />
-                ) : (
-                  <UserIcon className="h-4 w-4" />
-                )}
-                <span className="truncate">{user.displayName || user.email}</span>
-              </div>
-              <Button variant="ghost" className="w-full justify-start text-xs text-muted-foreground hover:text-foreground" onClick={logout}>
-                <LogOut className="mr-2 h-3 w-3" />
-                Logout
-              </Button>
+
+      {/* User Section */}
+      <div className="p-2 border-t border-border/50 mt-auto">
+        {loading ? (
+          <div className="h-9 rounded-md bg-muted/30 animate-pulse mx-1" />
+        ) : user ? (
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-md">
+              {user.photoURL ? (
+                <Image
+                  src={user.photoURL}
+                  alt={user.displayName || "User"}
+                  width={24}
+                  height={24}
+                  className="rounded-full shrink-0 ring-1 ring-border"
+                />
+              ) : (
+                <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                  <UserIcon className="h-3.5 w-3.5 text-primary" />
+                </div>
+              )}
+              <span className="text-xs text-muted-foreground truncate">
+                {user.displayName || user.email}
+              </span>
             </div>
-          ) : (
-            <Button variant="outline" className="w-full justify-start text-xs border-primary/20 hover:border-primary/50" onClick={loginWithGoogle}>
-              <LogIn className="mr-2 h-3 w-3 text-primary" />
-              Sign In
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-xs text-muted-foreground hover:text-foreground h-8 px-3"
+              onClick={logout}
+            >
+              <LogOut className="mr-2 h-3 w-3" />
+              Sign Out
             </Button>
-          )
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            className="w-full justify-start text-xs border-primary/20 hover:border-primary/50 hover:bg-primary/5 h-9 px-3"
+            onClick={loginWithGoogle}
+          >
+            <LogIn className="mr-2 h-3 w-3 text-primary" />
+            Sign in with Google
+          </Button>
         )}
-        <div className="mt-4 px-3 text-[10px] uppercase tracking-widest text-muted-foreground/50 font-semibold">
+        <p className="mt-3 px-3 text-[10px] uppercase tracking-widest text-muted-foreground/40 font-semibold">
           Minimal. AI-First.
-        </div>
+        </p>
       </div>
     </div>
   );

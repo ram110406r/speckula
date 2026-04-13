@@ -1,6 +1,5 @@
 "use client";
 
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useAppStore } from "@/store/useAppStore";
 import { Editor } from "@/components/editor/Editor";
 import { AIPanel } from "@/components/ai/AIPanel";
@@ -10,25 +9,23 @@ export function Shell() {
   const { aiPanelOpen } = useAppStore();
 
   return (
-    <ResizablePanelGroup direction="horizontal" className="min-h-screen max-h-screen bg-background text-foreground overflow-hidden">
-      <ResizablePanel defaultSize={15} minSize={10} maxSize={20}>
+    <div className="flex h-screen w-full bg-background text-foreground overflow-hidden">
+      {/* Sidebar: Fixed width */}
+      <div className="w-[240px] shrink-0 xl:w-[260px] bg-sidebar relative z-20 shadow-sm">
         <SidebarNav />
-      </ResizablePanel>
+      </div>
       
-      <ResizableHandle withHandle />
-      
-      <ResizablePanel defaultSize={aiPanelOpen ? 55 : 85} className="bg-card">
+      {/* Center: Main Editor */}
+      <div className="flex-1 min-w-0 bg-card overflow-hidden">
         <Editor />
-      </ResizablePanel>
+      </div>
       
+      {/* Right: AI Panel */}
       {aiPanelOpen && (
-        <>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={30} minSize={20} maxSize={40} className="border-l border-border">
-            <AIPanel />
-          </ResizablePanel>
-        </>
+        <div className="w-[340px] shrink-0 xl:w-[380px] bg-sidebar border-l border-border relative z-20 shadow-xl overflow-hidden transition-all duration-300 ease-in-out">
+          <AIPanel />
+        </div>
       )}
-    </ResizablePanelGroup>
+    </div>
   );
 }

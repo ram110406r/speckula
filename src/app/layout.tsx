@@ -19,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} min-h-screen bg-background antialiased selection:bg-primary/30 selection:text-primary`}>
+      <body suppressHydrationWarning className={`${inter.className} min-h-screen bg-background antialiased selection:bg-primary/30 selection:text-primary`}>
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </AuthProvider>
