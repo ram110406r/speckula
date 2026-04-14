@@ -90,8 +90,14 @@ export function SidebarNav() {
       {/* Logo */}
       <div className="px-6 py-6 border-b border-border/60 mb-2">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shadow-sm">
-            <Sparkles className="h-4.5 w-4.5 text-white" />
+          <div className="w-8 h-8 flex items-center justify-center">
+            <Image 
+              src="/logo.png" 
+              alt="Buildcase Logo" 
+              width={24} 
+              height={24} 
+              className="object-contain"
+            />
           </div>
           <span className="font-semibold text-lg tracking-tight text-foreground">Buildcase</span>
         </div>

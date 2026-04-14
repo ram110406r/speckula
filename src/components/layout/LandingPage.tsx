@@ -13,8 +13,12 @@ export function LandingPage() {
       {/* Navigation */}
       <nav className="w-full max-w-6xl h-20 flex items-center justify-between px-4 z-10 border-b border-border/40">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center shadow-sm">
-            <Sparkles className="h-4.5 w-4.5 text-white" />
+          <div className="w-8 h-8 flex items-center justify-center">
+            <img 
+              src="/logo.png" 
+              alt="Buildcase Logo" 
+              className="w-full h-full object-contain"
+            />
           </div>
           <span className="font-semibold text-lg tracking-tight text-foreground">Buildcase</span>
         </div>
@@ -35,8 +39,8 @@ export function LandingPage() {
 
       {/* Hero Section */}
       <header className="relative z-10 text-center max-w-4xl space-y-10 pt-24 pb-32">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/5 border border-primary/10 label-system text-[12px] text-primary animate-fade-in shadow-sm">
-          <Sparkles className="h-3.5 w-3.5" />
+        <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-primary/5 border border-primary/10 label-system text-[12px] text-primary animate-fade-in shadow-sm">
+          <img src="/logo.png" alt="" className="h-3.5 w-3.5 object-contain" />
           <span>The Decision Engine for Product Teams</span>
         </div>
         
