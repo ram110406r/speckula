@@ -1,16 +1,45 @@
 import { createGroq } from '@ai-sdk/groq';
 import { streamText } from 'ai';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 // Initialize Groq provider
 const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+const firebaseProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+const firebaseJwks = createRemoteJWKSet(
+  new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
+);
+
+async function verifyFirebaseToken(authHeader: string | null) {
+  if (!authHeader?.startsWith("Bearer ")) {
+    throw new Error("Missing authorization token.");
+  }
+
+  if (!firebaseProjectId) {
+    throw new Error("Missing Firebase project configuration.");
+  }
+
+  const token = authHeader.slice("Bearer ".length).trim();
+  const { payload } = await jwtVerify(token, firebaseJwks, {
+    issuer: `https://securetoken.google.com/${firebaseProjectId}`,
+    audience: firebaseProjectId,
+  });
+
+  if (!payload.sub) {
+    throw new Error("Invalid Firebase token.");
+  }
+
+  return payload;
+}
+
 // Remove edge runtime — the WASM Next.js build doesn't handle it properly
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    await verifyFirebaseToken(req.headers.get("authorization"));
     const { messages } = await req.json();
 
     const result = streamText({

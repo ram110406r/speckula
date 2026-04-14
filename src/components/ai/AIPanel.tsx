@@ -13,7 +13,7 @@ interface Message {
 }
 
 export function AIPanel() {
-  const { toggleAiPanel } = useAppStore();
+  const { toggleAiPanel, activeContext } = useAppStore();
   const { user } = useAuth();
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState("");
@@ -31,11 +31,23 @@ export function AIPanel() {
   const sendMessage = async (messageText: string) => {
     if (!messageText.trim() || isLoading) return;
 
+    const token = await user?.getIdToken();
+    if (!token) {
+      setMessages((prev) => [...prev, {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: "Please sign in again to use the AI assistant.",
+      }]);
+      return;
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content: messageText.trim(),
     };
+
+    const conversation = [...messages, userMessage];
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
@@ -48,9 +60,17 @@ export function AIPanel() {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          messages: [...messages, userMessage].map((m) => ({
+          messages: [
+            ...(activeContext.trim()
+              ? [{ role: "system", content: `Current workspace context:\n${activeContext.trim()}` }]
+              : []),
+            ...conversation,
+          ].map((m) => ({
             role: m.role,
             content: m.content,
           })),
@@ -171,7 +191,7 @@ export function AIPanel() {
             </div>
           ))
         )}
-        {isLoading && messages.at(-1)?.role === "user" && (
+        {isLoading && (
           <div className="flex items-center gap-2 label-system text-[12px] p-2">
             <Loader2 className="h-3 w-3 animate-spin text-primary/40" />
             <span>Thinking...</span>

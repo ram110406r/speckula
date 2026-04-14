@@ -64,7 +64,10 @@ export const createDocument = async (userId: string, title: string = "Untitled D
   const ref = userDocsCollection(userId);
   const docRef = await addDoc(ref, {
     title,
-    content: {},
+    content: {
+      type: "doc",
+      content: [{ type: "paragraph" }],
+    },
     userId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

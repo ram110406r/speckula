@@ -18,7 +18,7 @@ export function TipTapEditor() {
   const [mounted, setMounted] = React.useState(false);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const { user } = useAuth();
-  const { currentDocId, setIsSaving, documents } = useAppStore();
+  const { currentDocId, setIsSaving, documents, setActiveContext } = useAppStore();
 
   const editor = useEditor({
     extensions: [
@@ -91,6 +91,7 @@ export function TipTapEditor() {
         } else {
           editor.commands.setContent("");
         }
+        setActiveContext(editor.getText().trim());
       } catch (error) {
         console.error("Error loading document:", error);
       } finally {
@@ -99,7 +100,26 @@ export function TipTapEditor() {
     };
 
     loadContent();
-  }, [currentDocId, editor, user]);
+  }, [currentDocId, editor, user, setActiveContext]);
+
+  React.useEffect(() => {
+    if (!editor) return;
+
+    const updateContext = () => {
+      const { from, to } = editor.state.selection;
+      const selectedText = editor.state.doc.textBetween(from, to).trim();
+      setActiveContext(selectedText || editor.getText().trim());
+    };
+
+    updateContext();
+    editor.on("update", updateContext);
+    editor.on("selectionUpdate", updateContext);
+
+    return () => {
+      editor.off("update", updateContext);
+      editor.off("selectionUpdate", updateContext);
+    };
+  }, [editor, setActiveContext]);
 
   // Debounced auto-save logic
   React.useEffect(() => {

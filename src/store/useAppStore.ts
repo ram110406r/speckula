@@ -21,20 +21,26 @@ interface AppState {
   setIsSaving: (status: boolean) => void;
   activeView: AppView;
   setActiveView: (view: AppView) => void;
+  resetState: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+const initialState = {
   aiPanelOpen: true,
-  toggleAiPanel: () => set((state) => ({ aiPanelOpen: !state.aiPanelOpen })),
   activeContext: '',
-  setActiveContext: (context) => set({ activeContext: context }),
   currentDocId: null,
-  setCurrentDocId: (id) => set({ currentDocId: id }),
   documents: [],
-  setDocuments: (docs) => set({ documents: docs }),
   isSaving: false,
+  activeView: 'editor' as AppView,
+};
+
+export const useAppStore = create<AppState>((set) => ({
+  ...initialState,
+  toggleAiPanel: () => set((state) => ({ aiPanelOpen: !state.aiPanelOpen })),
+  setActiveContext: (context) => set({ activeContext: context }),
+  setCurrentDocId: (id) => set({ currentDocId: id }),
+  setDocuments: (docs) => set({ documents: docs }),
   setIsSaving: (status) => set({ isSaving: status }),
-  activeView: 'editor',
   setActiveView: (view) => set({ activeView: view }),
+  resetState: () => set({ ...initialState, documents: [] }),
 }));
 

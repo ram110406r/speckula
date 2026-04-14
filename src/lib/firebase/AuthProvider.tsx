@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { auth } from "./config";
+import { useAppStore } from "@/store/useAppStore";
 
 interface AuthContextType {
   user: User | null;
@@ -25,6 +26,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
+      if (!user) {
+        useAppStore.getState().resetState();
+      }
       setLoading(false);
     });
 
@@ -38,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await signOut(auth);
+    useAppStore.getState().resetState();
   };
 
   return (

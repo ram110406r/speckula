@@ -22,20 +22,28 @@ export function Editor() {
     }
   }, [currentDocId, currentDoc]);
 
+  useEffect(() => {
+    if (!user || !currentDocId || !currentDoc) return;
+
+    if (localTitle.trim() === currentDoc.title.trim()) return;
+
+    const handler = setTimeout(async () => {
+      try {
+        const title = localTitle.trim() || "Untitled Document";
+        await saveDocument(user.uid, currentDocId, { title });
+        setDocuments(documents.map(d =>
+          d.id === currentDocId ? { ...d, title } : d
+        ));
+      } catch (error) {
+        console.error("Failed to save title:", error);
+      }
+    }, 500);
+
+    return () => clearTimeout(handler);
+  }, [localTitle, currentDocId, currentDoc, documents, setDocuments, user]);
+
   const handleTitleChange = async (newTitle: string) => {
     setLocalTitle(newTitle);
-    if (!user || !currentDocId) return;
-
-    // Save to Firestore
-    try {
-      await saveDocument(user.uid, currentDocId, { title: newTitle });
-      // Update local store list to reflect change in sidebar immediately
-      setDocuments(documents.map(d => 
-        d.id === currentDocId ? { ...d, title: newTitle } : d
-      ));
-    } catch (error) {
-      console.error("Failed to save title:", error);
-    }
   };
 
   return (

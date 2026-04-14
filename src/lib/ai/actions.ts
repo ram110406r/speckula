@@ -1,3 +1,4 @@
+import { auth } from "../firebase/config";
 import { saveInsight, savePRD, saveTask } from "../firebase/db";
 
 /**
@@ -19,10 +20,23 @@ function tipTapToText(json: any): string {
   return text;
 }
 
+async function getAuthToken() {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("Authentication required.");
+  }
+
+  return currentUser.getIdToken();
+}
+
 async function callAI(prompt: string, context: string) {
+  const token = await getAuthToken();
   const response = await fetch("/api/chat", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({
       messages: [
         { 
