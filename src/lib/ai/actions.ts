@@ -66,7 +66,16 @@ export const extractInsightsAction = async (userId: string, docContent: any) => 
 
 export const generatePRDAction = async (userId: string, docContent: any, title: string) => {
   const context = tipTapToText(docContent);
-  const prompt = `Generate a professional, detailed PRD based on these notes. Format in clean Markdown.`;
+  const prompt = `Generate a professional, detailed PRD based on these notes. 
+  The PRD MUST include the following sections:
+  1. Problem Statement (Deep dive into current friction)
+  2. Target Users (Primary/Secondary segments)
+  3. Feature Breakdown (Core capabilities)
+  4. User Stories (As a... I want to... so that...)
+  5. Edge Cases (Potential pitfalls)
+  6. Success Metrics (KPIs to measure impact)
+  
+  Format in clean Markdown with professional headings.`;
   
   const content = await callAI(prompt, context);
   await savePRD(userId, {
@@ -97,4 +106,44 @@ export const suggestTasksAction = async (userId: string, docContent: any) => {
     console.error("Failed to parse tasks JSON:", e);
     throw e;
   }
+};
+
+export const suggestDirectionAction = async (userId: string, docContent: any) => {
+  const context = tipTapToText(docContent);
+  const prompt = `Based on these product notes, suggest what we should build next. 
+  Extract 3 potential features/directions. 
+  Format as a JSON array of objects with keys: 
+  - title (The feature name)
+  - justification (Why we should build it, data-backed)
+  - priority (high, medium, low)
+  - impact (1-10 score)
+  - effort (1-10 score)
+  - userStory (The primary user story for this feature)`;
+  
+  const result = await callAI(prompt, context);
+  try {
+    const jsonStr = result.replace(/```json|```/g, "").trim();
+    const suggestions = JSON.parse(jsonStr);
+    
+    // We'll return these for the view to handle or save as "Decisions" if needed
+    // For MVP, we'll return them directly to the view state
+    return suggestions;
+  } catch (e) {
+    console.error("Failed to parse decision JSON:", e);
+    throw e;
+  }
+};
+
+export const processEditorAction = async (userId: string, selectedText: string, action: 'improve' | 'expand' | 'challenge') => {
+  const prompts = {
+    improve: "Improve this text for clarity, flow, and professional product tone. Keep the same general meaning but make it sound like a senior PM wrote it.",
+    expand: "Expand on this product idea. Add more detail, specific examples, or technical considerations that would help a team understand how to build it.",
+    challenge: "Critically analyze this idea. Identify potential risks, edge cases, or reasons why it might fail. Be constructive but direct."
+  };
+
+  const prompt = `Action: ${prompts[action]}\n\nText to process:\n${selectedText}`;
+  
+  // Reuse callAI for consistency
+  const result = await callAI(prompt, "You are a senior PM assistant assisting with inline editor improvements.");
+  return result;
 };

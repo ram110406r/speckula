@@ -12,7 +12,8 @@ import {
   File,
   Trash2,
   Loader2,
-  Sparkles
+  Sparkles,
+  Compass
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -22,6 +23,7 @@ import { getUserDocuments, createDocument, deleteDocument } from "@/lib/firebase
 const navItems: { icon: React.ElementType; label: string; view: AppView }[] = [
   { icon: FileText, label: "Editor", view: "editor" },
   { icon: Lightbulb, label: "Insights", view: "insights" },
+  { icon: Compass, label: "Decisions", view: "decisions" },
   { icon: LayoutDashboard, label: "PRDs", view: "prds" },
   { icon: CheckSquare, label: "Tasks", view: "tasks" },
 ];

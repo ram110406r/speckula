@@ -2,12 +2,17 @@
 
 import React, { useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
+import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import Heading from '@tiptap/extension-heading';
+import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
+import { Sparkles, Wand2, Lightbulb, Zap, Loader2 } from "lucide-react";
 
 import { useAuth } from '@/lib/firebase/AuthProvider';
 import { saveDocument, getDocument } from '@/lib/firebase/db';
 import { useAppStore } from '@/store/useAppStore';
+import { processEditorAction } from '@/lib/ai/actions';
 
 export function TipTapEditor() {
   const [mounted, setMounted] = React.useState(false);
@@ -18,9 +23,10 @@ export function TipTapEditor() {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: {
-          levels: [1, 2, 3]
-        }
+        heading: false, // Disable default heading to use our own extension
+      }),
+      Heading.configure({
+        levels: [1, 2, 3]
       }),
       Placeholder.configure({
         placeholder: ({ node }) => {
@@ -29,6 +35,9 @@ export function TipTapEditor() {
           }
           return 'Start typing your product thoughts...';
         },
+      }),
+      BubbleMenuExtension.configure({
+        element: mounted ? document.querySelector('.bubble-menu') as HTMLElement : undefined,
       }),
     ],
     immediatelyRender: false,
@@ -39,6 +48,35 @@ export function TipTapEditor() {
       },
     },
   });
+
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+
+  const handleAiAction = async (action: 'improve' | 'expand' | 'challenge') => {
+    if (!editor || !user || isAiProcessing) return;
+
+    const { from, to } = editor.state.selection;
+    const selectedText = editor.state.doc.textBetween(from, to);
+
+    if (!selectedText.trim()) return;
+
+    setIsAiProcessing(true);
+    try {
+      const result = await processEditorAction(user.uid, selectedText, action);
+      
+      // Replace selection with original text + result if it's "expand" or "challenge", 
+      // or just replace if it's "improve"
+      if (action === 'improve') {
+        editor.chain().focus().insertContentAt({ from, to }, result).run();
+      } else {
+        // For expand/challenge, we append it after the selection
+        editor.chain().focus().insertContentAt(to, `\n\n> **AI ${action.toUpperCase()}:** ${result}\n\n`).run();
+      }
+    } catch (error) {
+      console.error("AI Action failed:", error);
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
 
   // Load content when currentDocId changes
   React.useEffect(() => {
@@ -103,6 +141,39 @@ export function TipTapEditor() {
           </div>
         </div>
       )}
+
+      {editor && (
+        <BubbleMenu editor={editor}>
+          <div className="flex items-center gap-1 bg-sidebar border border-border shadow-xl rounded-lg p-1 animate-in fade-in zoom-in duration-200">
+            <button
+              onClick={() => handleAiAction('improve')}
+              disabled={isAiProcessing}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 label-system text-[11px] hover:bg-primary/10 hover:text-primary rounded-md transition-all disabled:opacity-50"
+            >
+              <Sparkles className="h-3 w-3" />
+              {isAiProcessing ? "Thinking..." : "Improve"}
+            </button>
+            <div className="w-px h-3 bg-border/60 mx-0.5" />
+            <button
+              onClick={() => handleAiAction('expand')}
+              disabled={isAiProcessing}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 label-system text-[11px] hover:bg-primary/10 hover:text-primary rounded-md transition-all disabled:opacity-50"
+            >
+              <Wand2 className="h-3 w-3" />
+              Expand
+            </button>
+            <button
+              onClick={() => handleAiAction('challenge')}
+              disabled={isAiProcessing}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 label-system text-[11px] hover:bg-primary/10 hover:text-primary rounded-md transition-all disabled:opacity-50"
+            >
+              <Lightbulb className="h-3 w-3" />
+              Challenge
+            </button>
+          </div>
+        </BubbleMenu>
+      )}
+
       <EditorContent editor={editor} className="h-full w-full" />
     </div>
   );
