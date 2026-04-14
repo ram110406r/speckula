@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import { TipTapEditor } from "./TipTapEditor";
 import { useAppStore } from "@/store/useAppStore";
 import { Sparkles, PanelRightOpen, PanelRightClose } from "lucide-react";
@@ -13,23 +13,16 @@ export function Editor() {
   const { user } = useAuth();
   const { aiPanelOpen, toggleAiPanel, isSaving, currentDocId, documents, setDocuments } = useAppStore();
   const currentDoc = documents.find(d => d.id === currentDocId);
-  const [localTitle, setLocalTitle] = useState(currentDoc?.title || "Untitled Document");
-
-  // Sync local title when switching documents
-  useEffect(() => {
-    if (currentDoc) {
-      setLocalTitle(currentDoc.title);
-    }
-  }, [currentDocId, currentDoc]);
 
   useEffect(() => {
     if (!user || !currentDocId || !currentDoc) return;
 
-    if (localTitle.trim() === currentDoc.title.trim()) return;
+    const normalizedTitle = currentDoc.title.trim() || "Untitled Document";
+    if (normalizedTitle === currentDoc.title.trim()) return;
 
     const handler = setTimeout(async () => {
       try {
-        const title = localTitle.trim() || "Untitled Document";
+        const title = normalizedTitle;
         await saveDocument(user.uid, currentDocId, { title });
         setDocuments(documents.map(d =>
           d.id === currentDocId ? { ...d, title } : d
@@ -40,10 +33,14 @@ export function Editor() {
     }, 500);
 
     return () => clearTimeout(handler);
-  }, [localTitle, currentDocId, currentDoc, documents, setDocuments, user]);
+  }, [currentDoc?.title, currentDocId, currentDoc, documents, setDocuments, user]);
 
-  const handleTitleChange = async (newTitle: string) => {
-    setLocalTitle(newTitle);
+  const handleTitleChange = (newTitle: string) => {
+    if (!currentDocId) return;
+
+    setDocuments(documents.map(d =>
+      d.id === currentDocId ? { ...d, title: newTitle } : d
+    ));
   };
 
   return (
@@ -52,7 +49,7 @@ export function Editor() {
       <div className="flex items-center justify-between border-b border-border/60 h-14 px-8 shrink-0 bg-background">
         <div className="flex items-center gap-4 flex-1">
           <Input
-            value={localTitle}
+            value={currentDoc?.title ?? "Untitled Document"}
             onChange={(e) => handleTitleChange(e.target.value)}
             className="h-8 w-72 bg-transparent border-none focus-visible:ring-0 font-semibold text-base px-0 -ml-0.5 placeholder:text-muted-foreground/30"
             placeholder="Document Title..."

@@ -58,9 +58,10 @@ export function PRDsView() {
     }
   };
 
-  const formatDate = (d: any) => {
+  const formatDate = (d: unknown) => {
     if (!d) return "Recently";
-    const date = d.toDate ? d.toDate() : new Date(d);
+    const maybeTimestamp = d as { toDate?: () => Date };
+    const date = typeof maybeTimestamp.toDate === "function" ? maybeTimestamp.toDate() : new Date(d as string | number | Date);
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 

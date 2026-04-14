@@ -12,13 +12,16 @@ import { Sparkles, Wand2, Lightbulb, Zap, Loader2 } from "lucide-react";
 import { useAuth } from '@/lib/firebase/AuthProvider';
 import { saveDocument, getDocument } from '@/lib/firebase/db';
 import { useAppStore } from '@/store/useAppStore';
-import { processEditorAction } from '@/lib/ai/actions';
+import { extractInsightsAction, processEditorAction } from '@/lib/ai/actions';
 
 export function TipTapEditor() {
   const [mounted, setMounted] = React.useState(false);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [isAutoExtracting, setIsAutoExtracting] = useState(false);
   const { user } = useAuth();
-  const { currentDocId, setIsSaving, documents, setActiveContext } = useAppStore();
+  const { currentDocId, setIsSaving, documents, setActiveContext, pendingInsertion, setPendingInsertion } = useAppStore();
+  const lastExtractedHashRef = React.useRef<string | null>(null);
+  const extractTimerRef = React.useRef<number | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -88,8 +91,10 @@ export function TipTapEditor() {
         const doc = await getDocument(user.uid, currentDocId);
         if (doc) {
           editor.commands.setContent(doc.content || "");
+          lastExtractedHashRef.current = doc.lastInsightExtractionHash ?? null;
         } else {
           editor.commands.setContent("");
+          lastExtractedHashRef.current = null;
         }
         setActiveContext(editor.getText().trim());
       } catch (error) {
@@ -120,6 +125,48 @@ export function TipTapEditor() {
       editor.off("selectionUpdate", updateContext);
     };
   }, [editor, setActiveContext]);
+
+  React.useEffect(() => {
+    if (!editor || !pendingInsertion) return;
+
+    editor.chain().focus().insertContent(`\n\n${pendingInsertion}\n\n`).run();
+    setPendingInsertion(null);
+  }, [editor, pendingInsertion, setPendingInsertion]);
+
+  React.useEffect(() => {
+    if (!editor || !user || !currentDocId || isLoadingContent) return;
+
+    const contentText = editor.getText().trim();
+    if (contentText.length < 120) return;
+
+    const currentHash = contentText;
+    if (lastExtractedHashRef.current === currentHash) return;
+
+    if (extractTimerRef.current) {
+      window.clearTimeout(extractTimerRef.current);
+    }
+
+    extractTimerRef.current = window.setTimeout(async () => {
+      setIsAutoExtracting(true);
+      try {
+        await extractInsightsAction(user.uid, editor.getJSON());
+        await saveDocument(user.uid, currentDocId, {
+          lastInsightExtractionHash: currentHash,
+        });
+        lastExtractedHashRef.current = currentHash;
+      } catch (error) {
+        console.error("Auto insight extraction failed:", error);
+      } finally {
+        setIsAutoExtracting(false);
+      }
+    }, 4000);
+
+    return () => {
+      if (extractTimerRef.current) {
+        window.clearTimeout(extractTimerRef.current);
+      }
+    };
+  }, [editor?.state.doc, editor, user, currentDocId, isLoadingContent]);
 
   // Debounced auto-save logic
   React.useEffect(() => {
@@ -153,6 +200,13 @@ export function TipTapEditor() {
 
   return (
     <div className="relative h-full w-full">
+      {isAutoExtracting && (
+        <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-full border border-primary/20 bg-white px-3 py-1.5 shadow-sm">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+          <span className="label-system text-[11px] text-primary">Extracting insights</span>
+        </div>
+      )}
+
       {isLoadingContent && (
         <div className="absolute inset-0 z-10 bg-background/50 backdrop-blur-[1px] flex items-center justify-center">
           <div className="flex flex-col items-center gap-2">

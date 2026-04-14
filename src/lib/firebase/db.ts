@@ -16,8 +16,9 @@ import { db } from "./config";
 export interface BuildcaseDocument {
   id: string;
   title: string;
-  content: any; // TipTap JSON
+  content: unknown; // TipTap JSON
   userId: string;
+  lastInsightExtractionHash?: string | null;
   updatedAt: Timestamp | null;
   createdAt: Timestamp | null;
 }
@@ -69,6 +70,7 @@ export const createDocument = async (userId: string, title: string = "Untitled D
       content: [{ type: "paragraph" }],
     },
     userId,
+    lastInsightExtractionHash: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });

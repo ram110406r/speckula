@@ -2,9 +2,15 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { X, Sparkles, Wand2, Lightbulb, ListChecks, Send, Loader2, CheckSquare } from "lucide-react";
+import { X, Sparkles, Wand2, Lightbulb, Send, Loader2, CheckSquare, AlertTriangle, Plus } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAuth } from "@/lib/firebase/AuthProvider";
+import {
+  analyzeThinkingSignalsAction,
+  generateFeatureFromInsightAction,
+  type ProactiveInsight,
+  type ProactiveThinkingSignals,
+} from "@/lib/ai/actions";
 
 interface Message {
   id: string;
@@ -13,12 +19,111 @@ interface Message {
 }
 
 export function AIPanel() {
-  const { toggleAiPanel, activeContext } = useAppStore();
+  const {
+    toggleAiPanel,
+    activeContext,
+    currentDocId,
+    dismissedHintsByDoc,
+    dismissHintForDoc,
+    setPendingInsertion,
+  } = useAppStore();
   const { user } = useAuth();
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [signals, setSignals] = React.useState<ProactiveThinkingSignals>({ insights: [], suggestions: [], challenges: [] });
+  const [featureDrafts, setFeatureDrafts] = React.useState<Record<string, string>>({});
+  const [isGeneratingFeatureId, setIsGeneratingFeatureId] = React.useState<string | null>(null);
+  const lastAnalyzedRef = React.useRef("");
+  const lastAnalyzedAtRef = React.useRef(0);
+  const analyzeTimerRef = React.useRef<number | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+
+  const ANALYZE_DEBOUNCE_MS = 4000;
+  const ANALYZE_COOLDOWN_MS = 12000;
+  const MAX_CONTEXT_CHARS = 6000;
+
+  const hashContent = (value: string) => value.trim().replace(/\s+/g, " ");
+
+  const dismissed = React.useMemo(() => {
+    if (!currentDocId) return new Set<string>();
+    return new Set(dismissedHintsByDoc[currentDocId] ?? []);
+  }, [currentDocId, dismissedHintsByDoc]);
+
+  React.useEffect(() => {
+    const normalized = hashContent(activeContext);
+
+    if (!user || normalized.length < 120) {
+      return;
+    }
+
+    if (normalized === lastAnalyzedRef.current) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastAnalyzedAtRef.current < ANALYZE_COOLDOWN_MS) {
+      return;
+    }
+
+    if (analyzeTimerRef.current) {
+      window.clearTimeout(analyzeTimerRef.current);
+    }
+
+    analyzeTimerRef.current = window.setTimeout(async () => {
+      setIsAnalyzing(true);
+      try {
+        const boundedContext = activeContext.length > MAX_CONTEXT_CHARS
+          ? activeContext.slice(-MAX_CONTEXT_CHARS)
+          : activeContext;
+        const data = await analyzeThinkingSignalsAction(boundedContext);
+        setSignals(data);
+        lastAnalyzedRef.current = normalized;
+        lastAnalyzedAtRef.current = Date.now();
+      } catch (error) {
+        console.error("Proactive analysis failed:", error);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    }, ANALYZE_DEBOUNCE_MS);
+
+    return () => {
+      if (analyzeTimerRef.current) {
+        window.clearTimeout(analyzeTimerRef.current);
+      }
+    };
+  }, [activeContext, user]);
+
+  const dismissHint = (id: string) => {
+    if (!currentDocId) return;
+    dismissHintForDoc(currentDocId, id);
+  };
+
+  const convertInsightToFeature = async (insight: ProactiveInsight, idx: number) => {
+    const key = `insight-${idx}`;
+    setIsGeneratingFeatureId(key);
+    try {
+      const draft = await generateFeatureFromInsightAction(insight);
+      setFeatureDrafts((prev) => ({ ...prev, [key]: draft }));
+    } catch (error) {
+      console.error("Feature generation failed:", error);
+    } finally {
+      setIsGeneratingFeatureId(null);
+    }
+  };
+
+  const insertFeatureDraft = (key: string) => {
+    const content = featureDrafts[key];
+    if (!content) return;
+
+    setPendingInsertion(content);
+    setFeatureDrafts((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -138,6 +243,120 @@ export function AIPanel() {
 
       {/* Messages */}
       <div className="flex-1 p-4 overflow-auto space-y-3 bg-background/30">
+        <div className="rounded-lg border border-primary/20 bg-white/80 p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span className="label-system text-[11px] text-primary">Proactive Intelligence</span>
+            </div>
+            {isAnalyzing && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/60" />}
+          </div>
+
+          {signals.insights
+            .map((insight, idx) => ({ insight, idx, id: `insight-${idx}` }))
+            .filter(({ id }) => !dismissed.has(id))
+            .map(({ insight, idx, id }) => (
+              <div key={id} className="rounded-md border border-primary/20 bg-white p-2.5 border-l-4 border-l-primary">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[12px] font-semibold text-foreground">{insight.title}</p>
+                    <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">{insight.description}</p>
+                  </div>
+                  <button
+                    onClick={() => dismissHint(id)}
+                    className="text-muted-foreground/70 hover:text-foreground"
+                    aria-label="Dismiss insight"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    onClick={() => convertInsightToFeature(insight, idx)}
+                    disabled={isGeneratingFeatureId === id}
+                  >
+                    {isGeneratingFeatureId === id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
+                    Convert to Feature
+                  </Button>
+                  {featureDrafts[id] && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[11px] text-primary"
+                      onClick={() => insertFeatureDraft(id)}
+                    >
+                      Insert in Editor
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+          {signals.suggestions
+            .map((s, idx) => ({ s, id: `suggestion-${idx}` }))
+            .filter(({ id }) => !dismissed.has(id))
+            .map(({ s, id }) => (
+              <div key={id} className="rounded-md border border-border/70 bg-white p-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb className="h-3.5 w-3.5 text-primary mt-0.5" />
+                    <div>
+                      <p className="text-[12px] leading-relaxed text-foreground">{s.text}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">Why: {s.why}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="label-system text-[10px] px-1.5 py-0.5 rounded bg-muted/20">{s.confidence}/10</span>
+                    <button
+                      onClick={() => dismissHint(id)}
+                      className="text-muted-foreground/70 hover:text-foreground"
+                      aria-label="Dismiss suggestion"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+          {signals.challenges
+            .map((c, idx) => ({ c, id: `challenge-${idx}` }))
+            .filter(({ id }) => !dismissed.has(id))
+            .map(({ c, id }) => (
+              <div key={id} className="rounded-md border border-primary/20 bg-primary/5 p-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-primary mt-0.5" />
+                    <div>
+                      <p className="text-[12px] leading-relaxed text-foreground">{c.text}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">Why: {c.why}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="label-system text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">{c.confidence}/10</span>
+                    <button
+                      onClick={() => dismissHint(id)}
+                      className="text-muted-foreground/70 hover:text-foreground"
+                      aria-label="Dismiss challenge"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+          {!isAnalyzing &&
+            signals.insights.length === 0 &&
+            signals.suggestions.length === 0 &&
+            signals.challenges.length === 0 && (
+              <p className="text-[12px] text-muted-foreground">Keep writing. AI will surface proactive guidance after a few seconds of stable context.</p>
+            )}
+        </div>
+
         {messages.length === 0 ? (
           <div className="space-y-3">
             <div className="rounded-lg bg-sidebar border border-border p-3 text-sm shadow-sm">
@@ -222,7 +441,7 @@ export function AIPanel() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                handleSubmit(e as any);
+                sendMessage(input);
               }
             }}
           />

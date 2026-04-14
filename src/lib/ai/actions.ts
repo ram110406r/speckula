@@ -1,14 +1,43 @@
 import { auth } from "../firebase/config";
 import { saveInsight, savePRD, saveTask } from "../firebase/db";
 
+export interface ProactiveInsight {
+  title: string;
+  description: string;
+  category: "pain-point" | "opportunity" | "pattern";
+}
+
+export interface ProactiveHint {
+  text: string;
+  confidence: number;
+  why: string;
+}
+
+export interface ProactiveThinkingSignals {
+  insights: ProactiveInsight[];
+  suggestions: ProactiveHint[];
+  challenges: ProactiveHint[];
+}
+
+interface TipTapNode {
+  type?: string;
+  text?: string;
+  content?: TipTapNode[];
+}
+
+interface TipTapDoc {
+  content?: TipTapNode[];
+}
+
 /**
  * Simplistic helper to convert TipTap JSON to plain text for LLM context
  */
-function tipTapToText(json: any): string {
-  if (!json || !json.content) return "";
+function tipTapToText(json: unknown): string {
+  const doc = (json ?? {}) as TipTapDoc;
+  if (!doc.content) return "";
   let text = "";
   
-  const processNodes = (nodes: any[]) => {
+  const processNodes = (nodes: TipTapNode[]) => {
     nodes.forEach(node => {
       if (node.text) text += node.text;
       if (node.content) processNodes(node.content);
@@ -16,7 +45,7 @@ function tipTapToText(json: any): string {
     });
   };
 
-  processNodes(json.content);
+  processNodes(doc.content);
   return text;
 }
 
@@ -58,15 +87,18 @@ async function callAI(prompt: string, context: string) {
   return raw;
 }
 
-export const extractInsightsAction = async (userId: string, docContent: any) => {
+function parseJsonPayload(raw: string): unknown {
+  const stripped = raw.replace(/```json|```/g, "").trim();
+  return JSON.parse(stripped);
+}
+
+export const extractInsightsAction = async (userId: string, docContent: unknown) => {
   const context = tipTapToText(docContent);
   const prompt = `Extract exactly 4 key product insights. Format as a JSON array of objects with keys: title, description, and category (one of: pain-point, opportunity, user-segment, pattern).`;
   
   const result = await callAI(prompt, context);
   try {
-    // Regex out code blocks if AI included them
-    const jsonStr = result.replace(/```json|```/g, "").trim();
-    const insights = JSON.parse(jsonStr);
+    const insights = parseJsonPayload(result);
     
     for (const insight of insights) {
       await saveInsight(userId, insight);
@@ -78,7 +110,7 @@ export const extractInsightsAction = async (userId: string, docContent: any) => 
   }
 };
 
-export const generatePRDAction = async (userId: string, docContent: any, title: string) => {
+export const generatePRDAction = async (userId: string, docContent: unknown, title: string) => {
   const context = tipTapToText(docContent);
   const prompt = `Generate a professional, detailed PRD based on these notes. 
   The PRD MUST include the following sections:
@@ -100,14 +132,13 @@ export const generatePRDAction = async (userId: string, docContent: any, title: 
   return content;
 };
 
-export const suggestTasksAction = async (userId: string, docContent: any) => {
+export const suggestTasksAction = async (userId: string, docContent: unknown) => {
   const context = tipTapToText(docContent);
   const prompt = `Suggest 5 concrete execution tasks. Format as a JSON array of objects with keys: title, priority (high, medium, low), milestone (short string).`;
   
   const result = await callAI(prompt, context);
   try {
-    const jsonStr = result.replace(/```json|```/g, "").trim();
-    const tasks = JSON.parse(jsonStr);
+    const tasks = parseJsonPayload(result);
     
     for (const task of tasks) {
       await saveTask(userId, {
@@ -122,7 +153,7 @@ export const suggestTasksAction = async (userId: string, docContent: any) => {
   }
 };
 
-export const suggestDirectionAction = async (userId: string, docContent: any) => {
+export const suggestDirectionAction = async (userId: string, docContent: unknown) => {
   const context = tipTapToText(docContent);
   const prompt = `Based on these product notes, suggest what we should build next. 
   Extract 3 potential features/directions. 
@@ -136,8 +167,7 @@ export const suggestDirectionAction = async (userId: string, docContent: any) =>
   
   const result = await callAI(prompt, context);
   try {
-    const jsonStr = result.replace(/```json|```/g, "").trim();
-    const suggestions = JSON.parse(jsonStr);
+    const suggestions = parseJsonPayload(result);
     
     // We'll return these for the view to handle or save as "Decisions" if needed
     // For MVP, we'll return them directly to the view state
@@ -160,4 +190,76 @@ export const processEditorAction = async (userId: string, selectedText: string, 
   // Reuse callAI for consistency
   const result = await callAI(prompt, "You are a senior PM assistant assisting with inline editor improvements.");
   return result;
+};
+
+export const analyzeThinkingSignalsAction = async (contextText: string): Promise<ProactiveThinkingSignals> => {
+  const boundedContext = contextText.length > 6000 ? contextText.slice(-6000) : contextText;
+  const prompt = `Analyze the current product writing and return JSON only with this exact shape:
+{
+  "insights": [{ "title": string, "description": string, "category": "pain-point" | "opportunity" | "pattern" }],
+  "suggestions": [{ "text": string, "confidence": number, "why": string }],
+  "challenges": [{ "text": string, "confidence": number, "why": string }]
+}
+
+Rules:
+- insights: max 3 items
+- suggestions: max 3 items, each short and actionable
+- challenges: max 2 items, direct but constructive
+- confidence must be 1-10
+- why must be a brief reason (max 100 chars)
+- If context is weak, return empty arrays`;
+
+  const raw = await callAI(prompt, boundedContext);
+  const parsed = parseJsonPayload(raw);
+
+  const normalizeHints = (input: unknown): ProactiveHint[] => {
+    if (!Array.isArray(input)) return [];
+
+    return input
+      .map((item): ProactiveHint | null => {
+        if (typeof item === "string") {
+          return { text: item, confidence: 6, why: "Derived from recent context." };
+        }
+
+        if (!item || typeof item !== "object") return null;
+
+        const maybe = item as { text?: unknown; confidence?: unknown; why?: unknown };
+        const text = typeof maybe.text === "string" ? maybe.text.trim() : "";
+        if (!text) return null;
+
+        const rawConfidence = typeof maybe.confidence === "number" ? maybe.confidence : 6;
+        const confidence = Math.max(1, Math.min(10, Math.round(rawConfidence)));
+        const why = typeof maybe.why === "string" && maybe.why.trim().length > 0
+          ? maybe.why.trim()
+          : "Derived from recent context.";
+
+        return { text, confidence, why };
+      })
+      .filter((item): item is ProactiveHint => item !== null);
+  };
+
+  return {
+    insights: Array.isArray((parsed as { insights?: unknown[] })?.insights)
+      ? ((parsed as { insights?: ProactiveInsight[] }).insights ?? []).slice(0, 3)
+      : [],
+    suggestions: normalizeHints((parsed as { suggestions?: unknown }).suggestions).slice(0, 3),
+    challenges: normalizeHints((parsed as { challenges?: unknown }).challenges).slice(0, 2),
+  };
+};
+
+export const generateFeatureFromInsightAction = async (insight: ProactiveInsight): Promise<string> => {
+  const prompt = `Convert this insight into one concrete product feature proposal.
+
+Insight Title: ${insight.title}
+Insight Category: ${insight.category}
+Insight Description: ${insight.description}
+
+Return markdown with:
+- Feature Name
+- Problem it solves
+- Scope (MVP)
+- Primary user story
+- Success metric`;
+
+  return callAI(prompt, `${insight.title}\n${insight.description}`);
 };

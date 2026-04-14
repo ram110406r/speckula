@@ -5,7 +5,7 @@ export type AppView = 'editor' | 'insights' | 'prds' | 'tasks' | 'decisions';
 interface BuildcaseDocument {
   id: string;
   title: string;
-  updatedAt: any;
+  updatedAt: unknown;
 }
 
 interface AppState {
@@ -21,6 +21,11 @@ interface AppState {
   setIsSaving: (status: boolean) => void;
   activeView: AppView;
   setActiveView: (view: AppView) => void;
+  pendingInsertion: string | null;
+  setPendingInsertion: (content: string | null) => void;
+  dismissedHintsByDoc: Record<string, string[]>;
+  dismissHintForDoc: (docId: string, hintId: string) => void;
+  clearDismissedHintsForDoc: (docId: string) => void;
   resetState: () => void;
 }
 
@@ -31,6 +36,8 @@ const initialState = {
   documents: [],
   isSaving: false,
   activeView: 'editor' as AppView,
+  pendingInsertion: null,
+  dismissedHintsByDoc: {},
 };
 
 export const useAppStore = create<AppState>((set) => ({
@@ -41,6 +48,25 @@ export const useAppStore = create<AppState>((set) => ({
   setDocuments: (docs) => set({ documents: docs }),
   setIsSaving: (status) => set({ isSaving: status }),
   setActiveView: (view) => set({ activeView: view }),
+  setPendingInsertion: (content) => set({ pendingInsertion: content }),
+  dismissHintForDoc: (docId, hintId) =>
+    set((state) => {
+      const existing = state.dismissedHintsByDoc[docId] ?? [];
+      if (existing.includes(hintId)) return state;
+
+      return {
+        dismissedHintsByDoc: {
+          ...state.dismissedHintsByDoc,
+          [docId]: [...existing, hintId],
+        },
+      };
+    }),
+  clearDismissedHintsForDoc: (docId) =>
+    set((state) => {
+      const next = { ...state.dismissedHintsByDoc };
+      delete next[docId];
+      return { dismissedHintsByDoc: next };
+    }),
   resetState: () => set({ ...initialState, documents: [] }),
 }));
 
