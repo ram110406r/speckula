@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { X, Sparkles, Wand2, Lightbulb, ListChecks, Send, Loader2 } from "lucide-react";
+import { X, Sparkles, Wand2, Lightbulb, ListChecks, Send, Loader2, CheckSquare } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 
