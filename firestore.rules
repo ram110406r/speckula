@@ -34,6 +34,20 @@ service cloud.firestore {
       match /tasks/{id} {
         allow read, write: if isAuthenticated() && isOwner(userId);
       }
+
+      // New Buildcase Sub-collections
+      match /insights/{id} {
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
+      match /decisions/{id} {
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
+      match /prds/{id} {
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
+      match /tasks/{id} {
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
     }
 
     // ── Settings ───────────────────────────────────────────

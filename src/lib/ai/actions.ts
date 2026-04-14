@@ -187,18 +187,24 @@ export const extractInsightsAction = async (userId: string, docContent: unknown)
   const prompt = `Extract exactly 4 key product insights. Format as a JSON array of objects with keys: title, description, and category (one of: pain-point, opportunity, user-segment, pattern).`;
   
   const result = await callAI(prompt, context);
+  let insights: unknown;
   try {
-    const insights = parseJsonPayload(result);
+    insights = parseJsonPayload(result);
     if (!Array.isArray(insights)) {
       throw new Error("Insights response was not an array.");
     }
-    
-    for (const insight of insights) {
+  } catch (e) {
+    console.error("Failed to parse insights JSON:", e);
+    throw e;
+  }
+
+  try {
+    for (const insight of insights as Array<Omit<import("../firebase/db").Insight, "id" | "userId" | "createdAt">>) {
       await saveInsight(userId, insight);
     }
     return insights;
   } catch (e) {
-    console.error("Failed to parse insights JSON:", e);
+    console.error("Failed to persist insights:", e);
     throw e;
   }
 };
@@ -230,21 +236,27 @@ export const suggestTasksAction = async (userId: string, docContent: unknown) =>
   const prompt = `Suggest 5 concrete execution tasks. Format as a JSON array of objects with keys: title, priority (high, medium, low), milestone (short string).`;
   
   const result = await callAI(prompt, context);
+  let tasks: unknown;
   try {
-    const tasks = parseJsonPayload(result);
+    tasks = parseJsonPayload(result);
     if (!Array.isArray(tasks)) {
       throw new Error("Tasks response was not an array.");
     }
-    
-    for (const task of tasks) {
+  } catch (e) {
+    console.error("Failed to parse tasks JSON:", e);
+    throw e;
+  }
+
+  try {
+    for (const task of tasks as Array<Record<string, unknown>>) {
       await saveTask(userId, {
         ...task,
         status: "todo"
-      });
+      } as Omit<import("../firebase/db").ExecutionTask, "userId" | "updatedAt">);
     }
     return tasks;
   } catch (e) {
-    console.error("Failed to parse tasks JSON:", e);
+    console.error("Failed to persist tasks:", e);
     throw e;
   }
 };
@@ -435,6 +447,18 @@ export interface TaskDependency {
   reason: string;
 }
 
+interface TaskDependencyPayload {
+  taskIndex?: unknown;
+  dependsOnIndices?: unknown;
+  reason?: unknown;
+}
+
+interface TaskPriorityPayload {
+  index?: unknown;
+  priority?: unknown;
+  reasoning?: unknown;
+}
+
 export const generateTasksFromPRDAction = async (prdContent: string): Promise<TaskWithMetadata[]> => {
   const prompt = `Convert this PRD into 5-7 concrete, actionable implementation tasks. 
 
@@ -514,9 +538,11 @@ Rules:
       return [];
     }
     
-    return dependencies.map(d => ({
-      taskIndex: parseInt(d.taskIndex) || 0,
-      dependsOnIndices: Array.isArray(d.dependsOnIndices) ? d.dependsOnIndices.map(i => parseInt(i)) : [],
+    return dependencies.map((d: TaskDependencyPayload) => ({
+      taskIndex: Number.parseInt(String(d.taskIndex ?? 0), 10) || 0,
+      dependsOnIndices: Array.isArray(d.dependsOnIndices)
+        ? d.dependsOnIndices.map((index: unknown) => Number.parseInt(String(index), 10))
+        : [],
       reason: typeof d.reason === "string" ? d.reason : "Task dependency"
     })) as TaskDependency[];
   } catch (e) {
@@ -559,12 +585,12 @@ Return JSON with revised priorities:
     }
     
     const updatedTasks = [...tasks];
-    for (const item of reprioritized) {
-      const idx = parseInt(item.index);
-      if (idx >= 0 && idx < updatedTasks.length && ["high", "medium", "low"].includes(item.priority)) {
+    for (const item of reprioritized as TaskPriorityPayload[]) {
+      const idx = Number.parseInt(String(item.index ?? 0), 10);
+      if (idx >= 0 && idx < updatedTasks.length && ["high", "medium", "low"].includes(String(item.priority))) {
         updatedTasks[idx] = {
           ...updatedTasks[idx],
-          priority: item.priority
+          priority: item.priority as "high" | "medium" | "low"
         };
       }
     }

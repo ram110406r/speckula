@@ -28,6 +28,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
         if (user) {
+          // Ensure a fresh token is available before first Firestore access.
+          await user.getIdToken(true);
           // Initialize user document BEFORE setting user state to prevent race conditions
           await initializeUser(user.uid);
         }

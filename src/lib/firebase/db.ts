@@ -13,6 +13,19 @@ import {
 } from "firebase/firestore";
 import { db } from "./config";
 
+function isPermissionDenied(error: unknown): boolean {
+  return !!error && typeof error === "object" && (error as { code?: string }).code === "permission-denied";
+}
+
+function logFirestorePermissionHint(operation: string, error: unknown) {
+  if (!isPermissionDenied(error)) return;
+
+  console.error(
+    `[${operation}] Firestore permission denied. Ensure firestore.rules are deployed to project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}'.`,
+    error
+  );
+}
+
 export interface BuildcaseDocument {
   id: string;
   title: string;
@@ -131,24 +144,39 @@ export const getUserDocuments = async (userId: string) => {
 // --- INSIGHTS ACTIONS ---
 
 export const saveInsight = async (userId: string, data: Omit<Insight, "userId" | "createdAt">) => {
-  await addDoc(userInsightsCollection(userId), { ...data, userId, createdAt: serverTimestamp() });
+  try {
+    await addDoc(userInsightsCollection(userId), { ...data, userId, createdAt: serverTimestamp() });
+  } catch (error) {
+    logFirestorePermissionHint("saveInsight", error);
+    throw error;
+  }
 };
 
 export const getInsights = async (userId: string) => {
-  const q = query(userInsightsCollection(userId), orderBy("createdAt", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Insight[];
+  try {
+    const q = query(userInsightsCollection(userId), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Insight[];
+  } catch (error) {
+    logFirestorePermissionHint("getInsights", error);
+    throw error;
+  }
 };
 
 // --- DECISION ACTIONS ---
 
 export const saveDecision = async (userId: string, data: Omit<DecisionRecord, "userId" | "createdAt" | "updatedAt">) => {
-  await addDoc(userDecisionsCollection(userId), {
-    ...data,
-    userId,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  try {
+    await addDoc(userDecisionsCollection(userId), {
+      ...data,
+      userId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    logFirestorePermissionHint("saveDecision", error);
+    throw error;
+  }
 };
 
 export const getDecisions = async (userId: string) => {
@@ -160,31 +188,56 @@ export const getDecisions = async (userId: string) => {
 // --- PRD ACTIONS ---
 
 export const savePRD = async (userId: string, data: Omit<PRD, "userId" | "updatedAt">) => {
-  await addDoc(userPrdsCollection(userId), { ...data, userId, updatedAt: serverTimestamp() });
+  try {
+    await addDoc(userPrdsCollection(userId), { ...data, userId, updatedAt: serverTimestamp() });
+  } catch (error) {
+    logFirestorePermissionHint("savePRD", error);
+    throw error;
+  }
 };
 
 export const getPRDs = async (userId: string) => {
-  const q = query(userPrdsCollection(userId), orderBy("updatedAt", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as PRD[];
+  try {
+    const q = query(userPrdsCollection(userId), orderBy("updatedAt", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as PRD[];
+  } catch (error) {
+    logFirestorePermissionHint("getPRDs", error);
+    throw error;
+  }
 };
 
 // --- TASKS ACTIONS ---
 
 export const saveTask = async (userId: string, data: Omit<ExecutionTask, "userId" | "updatedAt">) => {
-  const docRef = await addDoc(userTasksCollection(userId), { ...data, userId, updatedAt: serverTimestamp() });
-  return docRef;
+  try {
+    const docRef = await addDoc(userTasksCollection(userId), { ...data, userId, updatedAt: serverTimestamp() });
+    return docRef;
+  } catch (error) {
+    logFirestorePermissionHint("saveTask", error);
+    throw error;
+  }
 };
 
 export const updateTask = async (userId: string, taskId: string, data: Partial<ExecutionTask>) => {
-  const ref = doc(db, "users", userId, "tasks", taskId);
-  await setDoc(ref, { ...data, updatedAt: serverTimestamp() }, { merge: true });
+  try {
+    const ref = doc(db, "users", userId, "tasks", taskId);
+    await setDoc(ref, { ...data, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("updateTask", error);
+    throw error;
+  }
 };
 
 export const getTasks = async (userId: string) => {
-  const q = query(userTasksCollection(userId), orderBy("updatedAt", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as ExecutionTask[];
+  try {
+    const q = query(userTasksCollection(userId), orderBy("updatedAt", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as ExecutionTask[];
+  } catch (error) {
+    logFirestorePermissionHint("getTasks", error);
+    throw error;
+  }
 };
 
 export const getTaskById = async (userId: string, taskId: string): Promise<ExecutionTask | null> => {
