@@ -416,3 +416,162 @@ Be concise, specific, and actionable.`;
   const context = `${decision.title}\n${decision.justification}\n${decision.userStory}`;
   return callAI(prompt, context);
 };
+
+// --- PHASE 4: EXECUTION LAYER ---
+
+export interface TaskWithMetadata {
+  title: string;
+  description: string;
+  priority: "high" | "medium" | "low";
+  effort: number;
+  category: string;
+  prdSection: string;
+  milestone?: string;
+}
+
+export interface TaskDependency {
+  taskIndex: number;
+  dependsOnIndices: number[];
+  reason: string;
+}
+
+export const generateTasksFromPRDAction = async (prdContent: string): Promise<TaskWithMetadata[]> => {
+  const prompt = `Convert this PRD into 5-7 concrete, actionable implementation tasks. 
+
+Instructions:
+- Each task must be specific and measurable
+- Include details about implementation approach
+- Assign a category: backend, frontend, design, qa, integration, or devops
+- For each task, identify which PRD section it relates to
+- Estimate effort on 1-10 scale
+
+Output ONLY a JSON array with this structure:
+[
+  {
+    "title": "Task name",
+    "description": "Detailed what to do and how",
+    "priority": "high|medium|low",
+    "effort": 1-10,
+    "category": "backend|frontend|design|qa|integration|devops",
+    "prdSection": "Which PRD section this implements",
+    "milestone": "Optional milestone name"
+  }
+]`;
+
+  const result = await callAI(prompt, prdContent);
+  try {
+    const tasks = parseJsonPayload(result);
+    if (!Array.isArray(tasks)) {
+      throw new Error("Tasks response was not an array.");
+    }
+    
+    return tasks.map(t => ({
+      title: t.title || "Untitled Task",
+      description: t.description || t.title || "",
+      priority: (["high", "medium", "low"].includes(t.priority) ? t.priority : "medium") as "high" | "medium" | "low",
+      effort: Math.min(10, Math.max(1, parseInt(t.effort) || 5)),
+      category: t.category || "general",
+      prdSection: t.prdSection || "General",
+      milestone: t.milestone
+    })) as TaskWithMetadata[];
+  } catch (e) {
+    console.error("[generateTasksFromPRDAction] Failed to parse tasks JSON:", e);
+    throw e;
+  }
+};
+
+export const analyzeDependenciesAction = async (tasks: TaskWithMetadata[], docContext: string): Promise<TaskDependency[]> => {
+  const taskSummary = tasks.map((t, i) => `${i}. ${t.title} [${t.category}]`).join("\n");
+  
+  const prompt = `Analyze these implementation tasks and identify dependencies.
+
+Tasks:
+${taskSummary}
+
+Product Context:
+${docContext}
+
+Return JSON array showing which tasks depend on which:
+[
+  {
+    "taskIndex": 0,
+    "dependsOnIndices": [1, 2],
+    "reason": "Why this task depends on those"
+  }
+]
+
+Rules:
+- Only include tasks that have dependencies
+- dependsOnIndices lists 0-based indices of tasks this one depends on
+- reason must be brief (max 100 chars)
+- For example: frontend work often depends on backend API being ready
+- Use your judgment to infer realistic dependencies from task descriptions`;
+
+  const result = await callAI(prompt, `${taskSummary}\n\n${docContext}`);
+  try {
+    const dependencies = parseJsonPayload(result);
+    if (!Array.isArray(dependencies)) {
+      return [];
+    }
+    
+    return dependencies.map(d => ({
+      taskIndex: parseInt(d.taskIndex) || 0,
+      dependsOnIndices: Array.isArray(d.dependsOnIndices) ? d.dependsOnIndices.map(i => parseInt(i)) : [],
+      reason: typeof d.reason === "string" ? d.reason : "Task dependency"
+    })) as TaskDependency[];
+  } catch (e) {
+    console.error("[analyzeDependenciesAction] Failed to parse dependencies:", e);
+    return [];
+  }
+};
+
+export const intelligentPrioritizeAction = async (tasks: TaskWithMetadata[], dependencies: TaskDependency[]): Promise<TaskWithMetadata[]> => {
+  const taskSummary = tasks.map((t, i) => {
+    const deps = dependencies.find(d => d.taskIndex === i)?.dependsOnIndices || [];
+    return `${i}. ${t.title} [${t.priority}, effort:${t.effort}, blocking: ${deps.length > 0 ? 'YES' : 'NO'}]`;
+  }).join("\n");
+  
+  const prompt = `Re-evaluate task priorities based on dependencies and effort.
+
+Tasks:
+${taskSummary}
+
+Dependency Context:
+- Tasks that block others should have higher priority
+- High-effort blocking tasks should be done first
+- Quick wins (low effort, high-blocking) should be prioritized
+- Balance between starting quickly and unblocking others
+
+Return JSON with revised priorities:
+[
+  {
+    "index": 0,
+    "priority": "high|medium|low",
+    "reasoning": "Why this priority"
+  }
+]`;
+
+  const result = await callAI(prompt, taskSummary);
+  try {
+    const reprioritized = parseJsonPayload(result);
+    if (!Array.isArray(reprioritized)) {
+      return tasks;
+    }
+    
+    const updatedTasks = [...tasks];
+    for (const item of reprioritized) {
+      const idx = parseInt(item.index);
+      if (idx >= 0 && idx < updatedTasks.length && ["high", "medium", "low"].includes(item.priority)) {
+        updatedTasks[idx] = {
+          ...updatedTasks[idx],
+          priority: item.priority
+        };
+      }
+    }
+    
+    return updatedTasks;
+  } catch (e) {
+    console.error("[intelligentPrioritizeAction] Failed to re-prioritize:", e);
+    return tasks;
+  }
+};

@@ -59,10 +59,18 @@ export interface DecisionRecord {
 export interface ExecutionTask {
   id?: string;
   title: string;
+  description?: string;
   status: "todo" | "in-progress" | "done";
   priority: "high" | "medium" | "low";
   milestone?: string;
+  effort?: number; // 1-10 scale
+  category?: string; // backend, frontend, design, qa, integration
+  prdSection?: string; // Reference to which PRD section this came from
+  prdId?: string; // Reference to PRD document
+  dependsOn?: string[]; // Array of task IDs this task depends on
+  assignee?: string; // User ID or email of assigned team member
   userId: string;
+  createdAt?: Timestamp | null;
   updatedAt: Timestamp | null;
 }
 
@@ -164,7 +172,8 @@ export const getPRDs = async (userId: string) => {
 // --- TASKS ACTIONS ---
 
 export const saveTask = async (userId: string, data: Omit<ExecutionTask, "userId" | "updatedAt">) => {
-  await addDoc(userTasksCollection(userId), { ...data, userId, updatedAt: serverTimestamp() });
+  const docRef = await addDoc(userTasksCollection(userId), { ...data, userId, updatedAt: serverTimestamp() });
+  return docRef;
 };
 
 export const updateTask = async (userId: string, taskId: string, data: Partial<ExecutionTask>) => {
@@ -176,6 +185,23 @@ export const getTasks = async (userId: string) => {
   const q = query(userTasksCollection(userId), orderBy("updatedAt", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() })) as ExecutionTask[];
+};
+
+export const getTaskById = async (userId: string, taskId: string): Promise<ExecutionTask | null> => {
+  const ref = doc(db, "users", userId, "tasks", taskId);
+  const snap = await getDoc(ref);
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as ExecutionTask) : null;
+};
+
+export const getTasksByPRD = async (userId: string, prdId: string): Promise<ExecutionTask[]> => {
+  const q = query(
+    userTasksCollection(userId),
+    orderBy("priority", "desc"),
+    orderBy("updatedAt", "desc")
+  );
+  const snap = await getDocs(q);
+  const tasks = snap.docs.map(d => ({ id: d.id, ...d.data() } as ExecutionTask));
+  return tasks.filter(t => t.prdId === prdId);
 };
 
 // --- USER INITIALIZATION ---

@@ -20,6 +20,18 @@ interface DecisionForPRD {
   tradeoffs: string;
 }
 
+interface PRDForTasks {
+  id: string;
+  title: string;
+  content: string;
+}
+
+interface TaskDependencyRecord {
+  taskIndex: number;
+  dependsOnIndices: number[];
+  reason: string;
+}
+
 interface AppState {
   aiPanelOpen: boolean;
   toggleAiPanel: () => void;
@@ -42,6 +54,10 @@ interface AppState {
   setStrategicContext: (context: StrategicContext | null) => void;
   pendingDecisionForPRD: DecisionForPRD | null;
   setPendingDecisionForPRD: (decision: DecisionForPRD | null) => void;
+  selectedPRDForTasks: PRDForTasks | null;
+  setSelectedPRDForTasks: (prd: PRDForTasks | null) => void;
+  taskDependencies: TaskDependencyRecord[] | null;
+  setTaskDependencies: (deps: TaskDependencyRecord[] | null) => void;
   resetState: () => void;
 }
 
@@ -56,6 +72,8 @@ const initialState = {
   dismissedHintsByDoc: {},
   strategicContext: null,
   pendingDecisionForPRD: null,
+  selectedPRDForTasks: null,
+  taskDependencies: null,
 };
 
 export const useAppStore = create<AppState>((set) => ({
@@ -69,6 +87,8 @@ export const useAppStore = create<AppState>((set) => ({
   setPendingInsertion: (content) => set({ pendingInsertion: content }),
   setStrategicContext: (context) => set({ strategicContext: context }),
   setPendingDecisionForPRD: (decision) => set({ pendingDecisionForPRD: decision }),
+  setSelectedPRDForTasks: (prd) => set({ selectedPRDForTasks: prd }),
+  setTaskDependencies: (deps) => set({ taskDependencies: deps }),
   dismissHintForDoc: (docId, hintId) =>
     set((state) => {
       const existing = state.dismissedHintsByDoc[docId] ?? [];
@@ -89,4 +109,3 @@ export const useAppStore = create<AppState>((set) => ({
     }),
   resetState: () => set({ ...initialState, documents: [] }),
 }));
-
