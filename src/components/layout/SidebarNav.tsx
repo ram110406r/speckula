@@ -41,12 +41,17 @@ export function SidebarNav() {
     }
 
     const fetchDocs = async () => {
-      const docs = await getUserDocuments(user.uid);
-      setDocuments(docs);
-      
-      // Auto-select first doc if none selected
-      if (docs.length > 0 && !currentDocId) {
-        setCurrentDocId(docs[0].id);
+      try {
+        const docs = await getUserDocuments(user.uid);
+        setDocuments(docs);
+        
+        // Auto-select first doc if none selected
+        if (docs.length > 0 && !currentDocId) {
+          setCurrentDocId(docs[0].id);
+        }
+      } catch (error) {
+        console.error("[SidebarNav] Failed to fetch documents:", error);
+        setDocuments([]);
       }
     };
 
@@ -63,7 +68,8 @@ export function SidebarNav() {
       setCurrentDocId(newId);
       setActiveView("editor");
     } catch (error) {
-      console.error("Failed to create document:", error);
+      console.error("[SidebarNav] Failed to create document:", error);
+      alert("Failed to create document. Please check console for details.");
     } finally {
       setIsCreating(false);
     }

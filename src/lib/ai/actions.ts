@@ -17,6 +17,24 @@ export interface ProactiveThinkingSignals {
   insights: ProactiveInsight[];
   suggestions: ProactiveHint[];
   challenges: ProactiveHint[];
+  decisions?: ProactiveHint[];
+}
+
+export interface DecisionSuggestion {
+  title: string;
+  justification: string;
+  priority: "high" | "medium" | "low";
+  impact: number;
+  effort: number;
+  userStory: string;
+  tradeoffs: string;
+}
+
+export interface StrategicGuidance {
+  theme: string;
+  rationale: string;
+  gaps: string[];
+  recommendation: string;
 }
 
 interface TipTapNode {
@@ -87,9 +105,81 @@ async function callAI(prompt: string, context: string) {
   return raw;
 }
 
+function tryParseJson(candidate: string): unknown | null {
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function extractBalancedJsonCandidate(text: string): string | null {
+  const starts: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "{" || ch === "[") starts.push(i);
+  }
+
+  for (const start of starts) {
+    const open = text[start];
+    const close = open === "{" ? "}" : "]";
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === "\\") {
+          escaped = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (ch === open) depth++;
+      if (ch === close) depth--;
+
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
 function parseJsonPayload(raw: string): unknown {
-  const stripped = raw.replace(/```json|```/g, "").trim();
-  return JSON.parse(stripped);
+  const trimmed = raw.trim();
+
+  const direct = tryParseJson(trimmed);
+  if (direct !== null) return direct;
+
+  const fencedMatches = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/gi) ?? [];
+  for (const block of fencedMatches) {
+    const inner = block.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+    const parsed = tryParseJson(inner);
+    if (parsed !== null) return parsed;
+  }
+
+  const balanced = extractBalancedJsonCandidate(trimmed);
+  if (balanced) {
+    const parsed = tryParseJson(balanced);
+    if (parsed !== null) return parsed;
+  }
+
+  const preview = trimmed.slice(0, 160).replace(/\s+/g, " ");
+  throw new Error(`AI did not return valid JSON. Preview: ${preview}`);
 }
 
 export const extractInsightsAction = async (userId: string, docContent: unknown) => {
@@ -99,6 +189,9 @@ export const extractInsightsAction = async (userId: string, docContent: unknown)
   const result = await callAI(prompt, context);
   try {
     const insights = parseJsonPayload(result);
+    if (!Array.isArray(insights)) {
+      throw new Error("Insights response was not an array.");
+    }
     
     for (const insight of insights) {
       await saveInsight(userId, insight);
@@ -139,6 +232,9 @@ export const suggestTasksAction = async (userId: string, docContent: unknown) =>
   const result = await callAI(prompt, context);
   try {
     const tasks = parseJsonPayload(result);
+    if (!Array.isArray(tasks)) {
+      throw new Error("Tasks response was not an array.");
+    }
     
     for (const task of tasks) {
       await saveTask(userId, {
@@ -153,7 +249,32 @@ export const suggestTasksAction = async (userId: string, docContent: unknown) =>
   }
 };
 
-export const suggestDirectionAction = async (userId: string, docContent: unknown) => {
+export const strategicGuidanceAction = async (docContent: unknown): Promise<StrategicGuidance> => {
+  const context = tipTapToText(docContent);
+  const prompt = `Analyze this product context and provide strategic guidance. Return JSON with:
+{
+  "theme": "One sentence strategic focus (e.g., 'Prioritize retention before expansion')",
+  "rationale": "Why this is the right focus (1-2 sentences)",
+  "gaps": ["Critical missing piece 1", "Critical missing piece 2"],
+  "recommendation": "Top strategic priority (1 sentence)"
+}`;
+
+  const result = await callAI(prompt, context);
+  try {
+    const guidance = parseJsonPayload(result) as StrategicGuidance;
+    return {
+      theme: guidance.theme || "No clear theme identified",
+      rationale: guidance.rationale || "Analyze your current priorities",
+      gaps: Array.isArray(guidance.gaps) ? guidance.gaps.slice(0, 3) : [],
+      recommendation: guidance.recommendation || "Document your product vision"
+    };
+  } catch (e) {
+    console.error("[strategicGuidanceAction] Failed to parse guidance JSON:", e);
+    throw e;
+  }
+};
+
+export const suggestDirectionAction = async (userId: string, docContent: unknown): Promise<DecisionSuggestion[]> => {
   const context = tipTapToText(docContent);
   const prompt = `Based on these product notes, suggest what we should build next. 
   Extract 3 potential features/directions. 
@@ -163,17 +284,19 @@ export const suggestDirectionAction = async (userId: string, docContent: unknown
   - priority (high, medium, low)
   - impact (1-10 score)
   - effort (1-10 score)
-  - userStory (The primary user story for this feature)`;
+  - userStory (The primary user story for this feature)
+  - tradeoffs (Trade-offs or limitations of this approach, e.g. "High effort but future-proof" or "Quick win but limited scope")`;
   
   const result = await callAI(prompt, context);
   try {
     const suggestions = parseJsonPayload(result);
+    if (!Array.isArray(suggestions)) {
+      throw new Error("Direction response was not an array.");
+    }
     
-    // We'll return these for the view to handle or save as "Decisions" if needed
-    // For MVP, we'll return them directly to the view state
-    return suggestions;
+    return suggestions as DecisionSuggestion[];
   } catch (e) {
-    console.error("Failed to parse decision JSON:", e);
+    console.error("[suggestDirectionAction] Failed to parse decision JSON:", e);
     throw e;
   }
 };
@@ -198,14 +321,16 @@ export const analyzeThinkingSignalsAction = async (contextText: string): Promise
 {
   "insights": [{ "title": string, "description": string, "category": "pain-point" | "opportunity" | "pattern" }],
   "suggestions": [{ "text": string, "confidence": number, "why": string }],
-  "challenges": [{ "text": string, "confidence": number, "why": string }]
+  "challenges": [{ "text": string, "confidence": number, "why": string }],
+  "decisions": [{ "text": string, "confidence": number, "why": string }]
 }
 
 Rules:
 - insights: max 3 items
-- suggestions: max 3 items, each short and actionable
+- suggestions: max 3 items (feature ideas), each short and actionable
 - challenges: max 2 items, direct but constructive
-- confidence must be 1-10
+- decisions: max 2 items (strategic feature directions user should consider), low confidence (exploratory)
+- confidence must be 1-10 (decisions typically 4-7 range)
 - why must be a brief reason (max 100 chars)
 - If context is weak, return empty arrays`;
 
@@ -244,6 +369,7 @@ Rules:
       : [],
     suggestions: normalizeHints((parsed as { suggestions?: unknown }).suggestions).slice(0, 3),
     challenges: normalizeHints((parsed as { challenges?: unknown }).challenges).slice(0, 2),
+     decisions: normalizeHints((parsed as { decisions?: unknown }).decisions).slice(0, 2),
   };
 };
 
@@ -262,4 +388,31 @@ Return markdown with:
 - Success metric`;
 
   return callAI(prompt, `${insight.title}\n${insight.description}`);
+};
+
+export const generatePRDFromDecisionAction = async (decision: DecisionSuggestion): Promise<string> => {
+  const prompt = `Generate a professional PRD (Product Requirements Document) based on this strategic decision.
+
+Feature: ${decision.title}
+Justification: ${decision.justification}
+User Story: ${decision.userStory}
+Priority: ${decision.priority}
+Estimated Impact: ${decision.impact}/10
+Estimated Effort: ${decision.effort}/10
+Trade-offs: ${decision.tradeoffs}
+
+Return clean Markdown with these sections:
+1. Overview (The feature in 1-2 sentences)
+2. Problem Statement (What problem does this solve?)
+3. User Story (As a... I want... so that...)
+4. Goals (What success looks like)
+5. Acceptance Criteria (How to know when it's done)
+6. Technical Considerations (Any technical challenges or dependencies)
+7. Trade-offs & Risks (Implementation trade-offs and potential risks)
+8. Success Metrics (How to measure impact)
+
+Be concise, specific, and actionable.`;
+
+  const context = `${decision.title}\n${decision.justification}\n${decision.userStory}`;
+  return callAI(prompt, context);
 };

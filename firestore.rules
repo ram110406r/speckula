@@ -25,6 +25,9 @@ service cloud.firestore {
       match /insights/{id} {
         allow read, write: if isAuthenticated() && isOwner(userId);
       }
+      match /decisions/{id} {
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
       match /prds/{id} {
         allow read, write: if isAuthenticated() && isOwner(userId);
       }

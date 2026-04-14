@@ -41,6 +41,21 @@ export interface PRD {
   updatedAt: Timestamp | null;
 }
 
+export interface DecisionRecord {
+  id?: string;
+  title: string;
+  justification: string;
+  priority: "high" | "medium" | "low";
+  impact: number;
+  effort: number;
+  userStory: string;
+  tradeoffs: string;
+  strategyTheme?: string | null;
+  userId: string;
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
 export interface ExecutionTask {
   id?: string;
   title: string;
@@ -54,6 +69,7 @@ export interface ExecutionTask {
 // Path Helpers
 const userDocsCollection = (userId: string) => collection(db, "users", userId, "documents");
 const userInsightsCollection = (userId: string) => collection(db, "users", userId, "insights");
+const userDecisionsCollection = (userId: string) => collection(db, "users", userId, "decisions");
 const userPrdsCollection = (userId: string) => collection(db, "users", userId, "prds");
 const userTasksCollection = (userId: string) => collection(db, "users", userId, "tasks");
 
@@ -99,6 +115,7 @@ export const getUserDocuments = async (userId: string) => {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as BuildcaseDocument[];
   } catch (error) {
     console.error("Error fetching documents:", error);
+    // Return empty array instead of throwing to allow graceful degradation
     return [];
   }
 };
@@ -113,6 +130,23 @@ export const getInsights = async (userId: string) => {
   const q = query(userInsightsCollection(userId), orderBy("createdAt", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Insight[];
+};
+
+// --- DECISION ACTIONS ---
+
+export const saveDecision = async (userId: string, data: Omit<DecisionRecord, "userId" | "createdAt" | "updatedAt">) => {
+  await addDoc(userDecisionsCollection(userId), {
+    ...data,
+    userId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const getDecisions = async (userId: string) => {
+  const q = query(userDecisionsCollection(userId), orderBy("createdAt", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as DecisionRecord[];
 };
 
 // --- PRD ACTIONS ---
@@ -142,6 +176,26 @@ export const getTasks = async (userId: string) => {
   const q = query(userTasksCollection(userId), orderBy("updatedAt", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() })) as ExecutionTask[];
+};
+
+// --- USER INITIALIZATION ---
+
+export const initializeUser = async (userId: string) => {
+  try {
+    const userRef = doc(db, "users", userId);
+    
+    // Use merge to create or update, avoiding permission issues with checking existence first
+    await setDoc(userRef, {
+      userId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    
+    console.log(`[initializeUser] Initialized user document for ${userId}`);
+  } catch (error) {
+    console.error(`[initializeUser] Failed to initialize user ${userId}:`, error);
+    throw error;
+  }
 };
 
 

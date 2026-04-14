@@ -8,6 +8,18 @@ interface BuildcaseDocument {
   updatedAt: unknown;
 }
 
+interface StrategicContext {
+  theme: string;
+  rationale: string;
+}
+
+interface DecisionForPRD {
+  title: string;
+  priority: "high" | "medium" | "low";
+  userStory: string;
+  tradeoffs: string;
+}
+
 interface AppState {
   aiPanelOpen: boolean;
   toggleAiPanel: () => void;
@@ -26,6 +38,10 @@ interface AppState {
   dismissedHintsByDoc: Record<string, string[]>;
   dismissHintForDoc: (docId: string, hintId: string) => void;
   clearDismissedHintsForDoc: (docId: string) => void;
+  strategicContext: StrategicContext | null;
+  setStrategicContext: (context: StrategicContext | null) => void;
+  pendingDecisionForPRD: DecisionForPRD | null;
+  setPendingDecisionForPRD: (decision: DecisionForPRD | null) => void;
   resetState: () => void;
 }
 
@@ -38,6 +54,8 @@ const initialState = {
   activeView: 'editor' as AppView,
   pendingInsertion: null,
   dismissedHintsByDoc: {},
+  strategicContext: null,
+  pendingDecisionForPRD: null,
 };
 
 export const useAppStore = create<AppState>((set) => ({
@@ -49,6 +67,8 @@ export const useAppStore = create<AppState>((set) => ({
   setIsSaving: (status) => set({ isSaving: status }),
   setActiveView: (view) => set({ activeView: view }),
   setPendingInsertion: (content) => set({ pendingInsertion: content }),
+  setStrategicContext: (context) => set({ strategicContext: context }),
+  setPendingDecisionForPRD: (decision) => set({ pendingDecisionForPRD: decision }),
   dismissHintForDoc: (docId, hintId) =>
     set((state) => {
       const existing = state.dismissedHintsByDoc[docId] ?? [];

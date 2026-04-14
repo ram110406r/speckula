@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 import {
   analyzeThinkingSignalsAction,
   generateFeatureFromInsightAction,
+  generatePRDFromDecisionAction,
   type ProactiveInsight,
   type ProactiveThinkingSignals,
 } from "@/lib/ai/actions";
@@ -26,6 +27,7 @@ export function AIPanel() {
     dismissedHintsByDoc,
     dismissHintForDoc,
     setPendingInsertion,
+   setPendingDecisionForPRD,
   } = useAppStore();
   const { user } = useAuth();
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -35,6 +37,7 @@ export function AIPanel() {
   const [signals, setSignals] = React.useState<ProactiveThinkingSignals>({ insights: [], suggestions: [], challenges: [] });
   const [featureDrafts, setFeatureDrafts] = React.useState<Record<string, string>>({});
   const [isGeneratingFeatureId, setIsGeneratingFeatureId] = React.useState<string | null>(null);
+    const [isGeneratingPRDFromDecision, setIsGeneratingPRDFromDecision] = React.useState<string | null>(null);
   const lastAnalyzedRef = React.useRef("");
   const lastAnalyzedAtRef = React.useRef(0);
   const analyzeTimerRef = React.useRef<number | null>(null);
@@ -125,6 +128,35 @@ export function AIPanel() {
     });
   };
 
+  const convertDecisionToPRD = async (decision: { text: string; confidence: number; why: string }, idx: number) => {
+    const decisionId = `decision-${idx}`;
+    setIsGeneratingPRDFromDecision(decisionId);
+    try {
+      const prdMarkdown = await generatePRDFromDecisionAction({
+        title: decision.text,
+        justification: decision.why,
+        priority: "medium",
+        impact: Math.max(4, Math.min(8, decision.confidence)),
+        effort: 5,
+        userStory: `As a product team, we want to explore ${decision.text.toLowerCase()} so that we can validate whether it should become a roadmap item.`,
+        tradeoffs: "Exploratory direction; validate before committing to delivery.",
+      });
+      setPendingDecisionForPRD({
+        title: decision.text,
+        priority: "medium",
+        userStory: `As a product team, we want to explore ${decision.text.toLowerCase()} so that we can validate whether it should become a roadmap item.`,
+        tradeoffs: "Exploratory direction; validate before committing to delivery.",
+      });
+      setPendingInsertion(prdMarkdown);
+      dismissHint(decisionId);
+    } catch (error) {
+      console.error("[AIPanel] Failed to generate PRD from decision:", error);
+      alert("Failed to generate PRD. Please try again.");
+    } finally {
+      setIsGeneratingPRDFromDecision(null);
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -145,7 +177,6 @@ export function AIPanel() {
       }]);
       return;
     }
-
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
@@ -349,10 +380,48 @@ export function AIPanel() {
               </div>
             ))}
 
+          {signals.decisions
+            ?.map((d, idx) => ({ d, id: `decision-${idx}` }))
+            .filter(({ id }) => !dismissed.has(id))
+            .map(({ d, id }) => (
+              <div key={id} className="rounded-md border border-primary/20 bg-white p-2.5 border-l-4 border-l-primary">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <p className="text-[12px] font-semibold text-foreground">{d.text}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Why: {d.why}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="label-system text-[10px] px-1.5 py-0.5 rounded bg-muted/20">{d.confidence}/10</span>
+                    <button
+                      onClick={() => dismissHint(id)}
+                      className="text-muted-foreground/70 hover:text-foreground"
+                      aria-label="Dismiss decision"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-7 text-[11px] mt-2 w-full"
+                  onClick={() => convertDecisionToPRD(d, idx)}
+                  disabled={isGeneratingPRDFromDecision === id}
+                >
+                  {isGeneratingPRDFromDecision === id ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  ) : (
+                    <Sparkles className="h-3 w-3 mr-1" />
+                  )}
+                  {isGeneratingPRDFromDecision === id ? "Generating PRD..." : "Convert to PRD"}
+                </Button>
+              </div>
+            ))}
+
           {!isAnalyzing &&
             signals.insights.length === 0 &&
             signals.suggestions.length === 0 &&
-            signals.challenges.length === 0 && (
+            signals.challenges.length === 0 &&
+            (!signals.decisions || signals.decisions.length === 0) && (
               <p className="text-[12px] text-muted-foreground">Keep writing. AI will surface proactive guidance after a few seconds of stable context.</p>
             )}
         </div>

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { auth } from "./config";
 import { useAppStore } from "@/store/useAppStore";
+import { initializeUser } from "./db";
 
 interface AuthContextType {
   user: User | null;
@@ -24,12 +25,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      if (!user) {
-        useAppStore.getState().resetState();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (user) {
+          // Initialize user document BEFORE setting user state to prevent race conditions
+          await initializeUser(user.uid);
+        }
+        setUser(user);
+        if (!user) {
+          useAppStore.getState().resetState();
+        }
+      } catch (error) {
+        console.error("Auth state error:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
