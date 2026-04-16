@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { LayoutDashboard, Plus, Sparkles, FileText, Clock, ChevronRight, Loader2, Download } from "lucide-react";
+import { LayoutDashboard, Plus, FileText, Clock, Loader2, Download, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
@@ -15,13 +15,13 @@ const statusConfig = {
 
 export function PRDsView() {
   const { user } = useAuth();
-  const { setActiveView, currentDocId, documents } = useAppStore();
+  const { currentDocId, documents } = useAppStore();
   const [prds, setPrds] = React.useState<PRD[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [selectedPRD, setSelectedPRD] = React.useState<PRD | null>(null);
 
-  const fetchPRDs = async () => {
+  const fetchPRDs = React.useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
     try {
@@ -32,11 +32,11 @@ export function PRDsView() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchPRDs();
-  }, [user]);
+  }, [fetchPRDs]);
 
   const handleGenerate = async () => {
     if (!user || !currentDocId || isGenerating) return;

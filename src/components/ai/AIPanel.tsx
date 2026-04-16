@@ -383,7 +383,7 @@ export function AIPanel() {
           {signals.decisions
             ?.map((d, idx) => ({ d, id: `decision-${idx}` }))
             .filter(({ id }) => !dismissed.has(id))
-            .map(({ d, id }) => (
+            .map(({ d, id }, idx) => (
               <div key={id} className="rounded-md border border-primary/20 bg-white p-2.5 border-l-4 border-l-primary">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">

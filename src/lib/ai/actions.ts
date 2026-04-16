@@ -459,8 +459,11 @@ interface TaskPriorityPayload {
   reasoning?: unknown;
 }
 
-export const generateTasksFromPRDAction = async (prdContent: string): Promise<TaskWithMetadata[]> => {
-  const prompt = `Convert this PRD into 5-7 concrete, actionable implementation tasks. 
+export const generateTasksFromPRDAction = async (prdContent: string, prdTitle?: string): Promise<TaskWithMetadata[]> => {
+  const prompt = `Convert this PRD into 5-7 concrete, actionable implementation tasks.
+
+PRD Title:
+${prdTitle ?? "Untitled PRD"}
 
 Instructions:
 - Each task must be specific and measurable
@@ -504,8 +507,9 @@ Output ONLY a JSON array with this structure:
   }
 };
 
-export const analyzeDependenciesAction = async (tasks: TaskWithMetadata[], docContext: string): Promise<TaskDependency[]> => {
+export const analyzeDependenciesAction = async (tasks: TaskWithMetadata[], docContext: unknown): Promise<TaskDependency[]> => {
   const taskSummary = tasks.map((t, i) => `${i}. ${t.title} [${t.category}]`).join("\n");
+  const contextText = typeof docContext === "string" ? docContext : JSON.stringify(docContext ?? "");
   
   const prompt = `Analyze these implementation tasks and identify dependencies.
 
@@ -513,7 +517,7 @@ Tasks:
 ${taskSummary}
 
 Product Context:
-${docContext}
+${contextText}
 
 Return JSON array showing which tasks depend on which:
 [
@@ -531,7 +535,7 @@ Rules:
 - For example: frontend work often depends on backend API being ready
 - Use your judgment to infer realistic dependencies from task descriptions`;
 
-  const result = await callAI(prompt, `${taskSummary}\n\n${docContext}`);
+  const result = await callAI(prompt, `${taskSummary}\n\n${contextText}`);
   try {
     const dependencies = parseJsonPayload(result);
     if (!Array.isArray(dependencies)) {

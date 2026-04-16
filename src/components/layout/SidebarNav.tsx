@@ -5,14 +5,12 @@ import {
   Lightbulb, 
   CheckSquare, 
   LayoutDashboard, 
-  LogIn, 
   LogOut, 
   User as UserIcon, 
   Plus, 
   File,
   Trash2,
   Loader2,
-  Sparkles,
   Compass
 } from "lucide-react";
 import { Button } from "@/components/ui/button";

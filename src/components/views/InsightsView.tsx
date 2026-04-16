@@ -23,7 +23,7 @@ export function InsightsView() {
   const [isExtracting, setIsExtracting] = React.useState(false);
   const [filter, setFilter] = React.useState<string>("all");
 
-  const fetchInsights = async () => {
+  const fetchInsights = React.useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
     try {
@@ -34,11 +34,11 @@ export function InsightsView() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchInsights();
-  }, [user]);
+  }, [fetchInsights]);
 
   const categories = ["all", "pain-point", "opportunity", "user-segment", "pattern"];
   const filtered = filter === "all" ? insights : insights.filter(i => i.category === filter);

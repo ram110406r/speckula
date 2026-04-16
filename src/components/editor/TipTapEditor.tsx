@@ -7,7 +7,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Heading from '@tiptap/extension-heading';
 import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
-import { Sparkles, Wand2, Lightbulb, Zap, Loader2 } from "lucide-react";
+import { Sparkles, Wand2, Lightbulb, Loader2 } from "lucide-react";
 
 import { useAuth } from '@/lib/firebase/AuthProvider';
 import { saveDocument, getDocument } from '@/lib/firebase/db';
@@ -188,7 +188,7 @@ export function TipTapEditor() {
     }, 2000); // 2 second debounce
 
     return () => clearTimeout(handler);
-  }, [editor?.state.doc, user, currentDocId, setIsSaving, isLoadingContent, documents]);
+  }, [editor?.state.doc, editor, user, currentDocId, setIsSaving, isLoadingContent, documents]);
 
   React.useEffect(() => {
     setMounted(true);
