@@ -1,6 +1,3 @@
-Here’s a **clean, AI-first, build-ready PRD** for Buildcase — rewritten to match your true vision (Cursor for PMs), not a dashboard tool.
-
----
 
 # 📄 BUILDCASE — PRODUCT REQUIREMENTS DOCUMENT (PRD)
 
