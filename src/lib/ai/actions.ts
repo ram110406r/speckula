@@ -2,6 +2,7 @@ import { auth } from "../firebase/config";
 import { saveInsight, savePRD, saveTask } from "../firebase/db";
 import type { ExtractedEntities, HierarchicalContext, ThinkingGap } from "./aiContext";
 import type { ProgressState } from "./progressTracker";
+import { clampScoreValue } from "./scoreEngine";
 
 export interface ProactiveInsight {
   title: string;
@@ -37,6 +38,18 @@ export interface StrategicGuidance {
   rationale: string;
   gaps: string[];
   recommendation: string;
+}
+
+export interface OpportunityScoreBreakdown {
+  impact: number;
+  effort: number;
+  confidence: number;
+  demand: number;
+}
+
+export interface OpportunityScoreResult extends OpportunityScoreBreakdown {
+  score: number;
+  reasoning: string;
 }
 
 export interface InlineSuggestionPayload {
@@ -391,6 +404,50 @@ Return JSON:
       "What problem are you solving?",
       "How will you know it worked?",
     ],
+  };
+};
+
+export const generateOpportunityScore = async (context: string): Promise<OpportunityScoreResult> => {
+  const prompt = `
+You are a senior product manager.
+
+Evaluate the idea based on:
+* Impact
+* Effort
+* Confidence
+* Demand
+
+Return JSON:
+{
+  "impact": number (0-10),
+  "effort": number (0-10),
+  "confidence": number (0-10),
+  "demand": number (0-10),
+  "reasoning": "short explanation"
+}
+
+Be strict. Penalize vague ideas. Reward validated problems.
+`;
+
+  const res = await callAI(prompt, context);
+  const parsed = parseJsonPayload(res) as Partial<OpportunityScoreResult>;
+
+  const impact = clampScoreValue(Number(parsed.impact ?? 0));
+  const effort = clampScoreValue(Number(parsed.effort ?? 0));
+  const confidence = clampScoreValue(Number(parsed.confidence ?? 0));
+  const demand = clampScoreValue(Number(parsed.demand ?? 0));
+
+  const rawScore = effort === 0 ? 0 : Math.min(100, Math.round(((impact * demand * confidence) / effort) * 10));
+
+  return {
+    impact,
+    effort,
+    confidence,
+    demand,
+    score: rawScore,
+    reasoning: typeof parsed.reasoning === "string" && parsed.reasoning.trim().length > 0
+      ? parsed.reasoning.trim()
+      : "The idea lacks enough signal to justify a higher score.",
   };
 };
 

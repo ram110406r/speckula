@@ -18,9 +18,16 @@ import {
   suggestDirectionAction,
   strategicGuidanceAction,
   generatePRDFromDecisionAction,
+  generateOpportunityScore,
   type DecisionSuggestion,
   type StrategicGuidance,
 } from "@/lib/ai/actions";
+import { calculateScore, type OpportunityScoreData } from "@/lib/ai/scoreEngine";
+import { updateScore } from "@/lib/ai/scoreEvolution";
+import { getScoreHistory, recordScoreHistory, type OpportunityScoreHistoryEntry } from "@/lib/ai/scoreHistory";
+import { ScoreCard } from "@/components/decision/ScoreCard";
+import { BreakdownChart } from "@/components/decision/BreakdownChart";
+import { ScoreHistoryGraph } from "@/components/decision/ScoreHistoryGraph";
 
 const priorityColors = {
   high: "text-primary border-primary/20 bg-primary/5",
@@ -28,14 +35,28 @@ const priorityColors = {
   low: "text-muted-foreground/60 border-border/40 bg-transparent",
 };
 
+interface ScoredDecision extends DecisionSuggestion {
+  scoreBreakdown: OpportunityScoreData;
+  score: number;
+}
+
 export function DecisionView() {
   const { user } = useAuth();
   const { currentDocId, setPendingInsertion, setActiveView, setPendingDecisionForPRD } = useAppStore();
   const [suggestions, setSuggestions] = React.useState<DecisionSuggestion[]>([]);
+  const [scoredSuggestions, setScoredSuggestions] = React.useState<ScoredDecision[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [strategicGuidance, setStrategicGuidance] = React.useState<StrategicGuidance | null>(null);
+  const [scoreSummary, setScoreSummary] = React.useState<OpportunityScoreData & { score: number } | null>(null);
+  const [scoreHistory, setScoreHistory] = React.useState<OpportunityScoreHistoryEntry[]>([]);
   const [isGeneratingPRDFor, setIsGeneratingPRDFor] = React.useState<string | null>(null);
   const [prdPreview, setPrdPreview] = React.useState<{ title: string; content: string; decision: DecisionSuggestion } | null>(null);
+
+  React.useEffect(() => {
+    if (currentDocId) {
+      setScoreHistory(getScoreHistory(currentDocId));
+    }
+  }, [currentDocId]);
 
   const convertDecisionToPRD = async (decision: DecisionSuggestion, index: number) => {
     if (!user) return;
@@ -105,9 +126,43 @@ export function DecisionView() {
       setStrategicGuidance(guidance);
       setSuggestions(data);
 
+      const opportunityScore = await generateOpportunityScore(JSON.stringify(doc.content));
+      const latestHistory = scoreHistory.at(-1);
+      const evolvedBreakdown = latestHistory
+        ? updateScore({ ...latestHistory.breakdown, score: latestHistory.score }, opportunityScore)
+        : { ...opportunityScore, score: opportunityScore.score };
+      const score = calculateScore(evolvedBreakdown);
+      const scoreData = { ...evolvedBreakdown, score };
+      setScoreSummary(scoreData);
+      recordScoreHistory(currentDocId, {
+        timestamp: Date.now(),
+        score,
+        breakdown: {
+          impact: scoreData.impact,
+          effort: scoreData.effort,
+          confidence: scoreData.confidence,
+          demand: scoreData.demand,
+        },
+      });
+      setScoreHistory(getScoreHistory(currentDocId));
+
+      const scored = await Promise.all(
+        data.map(async (decision) => {
+          const breakdown = await generateOpportunityScore(`${decision.title}\n${decision.justification}\n${doc.content ? JSON.stringify(doc.content) : ""}`);
+          const scoreValue = calculateScore(breakdown);
+          return {
+            ...decision,
+            scoreBreakdown: breakdown,
+            score: scoreValue,
+          } satisfies ScoredDecision;
+        })
+      );
+
+      setScoredSuggestions(scored.sort((left, right) => right.score - left.score));
+
       try {
         await Promise.all(
-          data.map((decision) =>
+          scored.map((decision) =>
             saveDecision(user.uid, {
               title: decision.title,
               justification: decision.justification,
@@ -183,6 +238,32 @@ export function DecisionView() {
       </Dialog>
 
       <div className="flex-1 overflow-y-auto p-10 space-y-12 max-w-5xl custom-scrollbar">
+        {scoreSummary && (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="md:col-span-1">
+              <ScoreCard
+                score={scoreSummary.score}
+                impact={scoreSummary.impact}
+                effort={scoreSummary.effort}
+                confidence={scoreSummary.confidence}
+                demand={scoreSummary.demand}
+                reasoning={scoreSummary.reasoning}
+              />
+            </div>
+            <div className="md:col-span-1">
+              <BreakdownChart
+                impact={scoreSummary.impact}
+                effort={scoreSummary.effort}
+                confidence={scoreSummary.confidence}
+                demand={scoreSummary.demand}
+              />
+            </div>
+            <div className="md:col-span-1">
+              <ScoreHistoryGraph history={scoreHistory} />
+            </div>
+          </div>
+        )}
+
         {strategicGuidance && (
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
             <p className="label-system text-[10px] uppercase tracking-widest text-primary mb-2">Strategic Focus</p>
@@ -223,12 +304,15 @@ export function DecisionView() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {suggestions.map((s, i) => (
+            {scoredSuggestions.map((s, i) => (
               <div key={i} className="flex flex-col bg-white border border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md transition-all hover:border-primary/20 group">
                 <div className="p-5 flex-1">
                   <div className="flex items-center justify-between mb-4">
                     <span className={`label-system text-[10px] px-2 py-0.5 rounded-sm border ${priorityColors[s.priority]}`}>
                       {s.priority} priority
+                    </span>
+                    <span className="label-system text-[10px] rounded-sm border border-primary/20 bg-primary/5 px-2 py-0.5 text-primary">
+                      Score {s.score}
                     </span>
                     <div className="flex items-center gap-2">
                        <Users className="h-3 w-3 text-muted-foreground/40" />
