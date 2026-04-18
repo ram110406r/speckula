@@ -1,5 +1,5 @@
 import React from "react";
-import { Loader2, Lightbulb, AlertTriangle, Rocket, Check, X } from "lucide-react";
+import { Loader2, Target, AlertTriangle, LineChart, HelpCircle, Check, X } from "lucide-react";
 import type { InlineSuggestionPayload } from "@/lib/ai/actions";
 
 interface InlineSuggestionProps {
@@ -17,9 +17,23 @@ export function InlineSuggestion({
   onAccept,
   onDismiss,
 }: InlineSuggestionProps) {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
   if (!loading && !suggestion) {
     return null;
   }
+
+  const typeConfig = {
+    problem: { label: "Problem Insight", icon: Target },
+    solution: { label: "Solution Risk", icon: AlertTriangle },
+    metrics: { label: "Metric Suggestion", icon: LineChart },
+    unclear: { label: "Clarify Thought", icon: HelpCircle },
+  } as const;
+
+  const suggestionType = suggestion?.type ?? "unclear";
+  const TypeIcon = typeConfig[suggestionType].icon;
+  const rows = suggestion?.suggestions ?? [];
+  const visibleRows = isExpanded ? rows : rows.slice(0, 1);
 
   return (
     <div
@@ -27,6 +41,8 @@ export function InlineSuggestion({
       style={{ left: `${position.x}px`, top: `${position.y}px` }}
       role="status"
       aria-live="polite"
+      onMouseEnter={() => setIsExpanded(true)}
+      onMouseLeave={() => setIsExpanded(false)}
     >
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -36,18 +52,21 @@ export function InlineSuggestion({
       ) : suggestion ? (
         <>
           <div className="space-y-2 text-[12px] leading-relaxed text-muted-foreground">
-            <p className="flex items-start gap-2">
-              <Lightbulb className="mt-0.5 h-3.5 w-3.5 text-primary/80" />
-              <span>{suggestion.insight}</span>
+            <p className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground/80">
+              <TypeIcon className="h-3.5 w-3.5 text-primary/80" />
+              {typeConfig[suggestionType].label}
             </p>
-            <p className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 text-primary/70" />
-              <span>{suggestion.gap}</span>
-            </p>
-            <p className="flex items-start gap-2 text-foreground">
-              <Rocket className="mt-0.5 h-3.5 w-3.5 text-primary" />
-              <span>{suggestion.action}</span>
-            </p>
+            <ul className="space-y-1.5">
+              {visibleRows.map((row, index) => (
+                <li key={`${row}-${index}`} className="flex items-start gap-2">
+                  <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-primary/60" />
+                  <span>{row}</span>
+                </li>
+              ))}
+            </ul>
+            {!isExpanded && rows.length > 1 && (
+              <p className="text-[10px] text-muted-foreground/70">Hover to expand</p>
+            )}
           </div>
           <div className="mt-3 flex items-center justify-end gap-2 border-t border-border/50 pt-2">
             <button

@@ -12,10 +12,21 @@ import { Sparkles, Wand2, Lightbulb, Loader2 } from "lucide-react";
 import { useAuth } from '@/lib/firebase/AuthProvider';
 import { saveDocument, getDocument } from '@/lib/firebase/db';
 import { useAppStore } from '@/store/useAppStore';
-import { extractInsightsAction, processEditorAction, type InlineSuggestionPayload } from '@/lib/ai/actions';
-import { extractContext } from '@/lib/ai/aiContext';
+import {
+  extractInsightsAction,
+  processEditorAction,
+  type InlineLearningProfile,
+  type InlineSuggestionPayload,
+} from '@/lib/ai/actions';
 import { triggerAISuggestion, cancelAISuggestionTrigger } from '@/lib/ai/aiTrigger';
 import { InlineSuggestion } from './InlineSuggestion';
+
+const INLINE_AI_LEARNING_KEY = "buildcase-inline-ai-learning-v1";
+
+interface InlineLearningState {
+  acceptedSuggestions: string[];
+  dismissedSuggestions: string[];
+}
 
 export function TipTapEditor() {
   const [mounted, setMounted] = React.useState(false);
@@ -29,8 +40,9 @@ export function TipTapEditor() {
   const lastExtractedHashRef = React.useRef<string | null>(null);
   const extractTimerRef = React.useRef<number | null>(null);
   const editorContainerRef = React.useRef<HTMLDivElement | null>(null);
-  const lastInlineContextKeyRef = React.useRef("");
-  const dismissedInlineContextKeyRef = React.useRef("");
+  const dismissedInlineHashRef = React.useRef("");
+  const activeInlineHashRef = React.useRef("");
+  const learningRef = React.useRef<InlineLearningState>({ acceptedSuggestions: [], dismissedSuggestions: [] });
 
   const editor = useEditor({
     extensions: [
@@ -63,21 +75,78 @@ export function TipTapEditor() {
 
   const [isAiProcessing, setIsAiProcessing] = useState(false);
 
-  const dismissInlineSuggestion = React.useCallback(() => {
-    if (lastInlineContextKeyRef.current) {
-      dismissedInlineContextKeyRef.current = lastInlineContextKeyRef.current;
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const raw = window.localStorage.getItem(INLINE_AI_LEARNING_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as Partial<InlineLearningState>;
+      learningRef.current = {
+        acceptedSuggestions: Array.isArray(parsed.acceptedSuggestions)
+          ? parsed.acceptedSuggestions.filter((item): item is string => typeof item === "string").slice(-30)
+          : [],
+        dismissedSuggestions: Array.isArray(parsed.dismissedSuggestions)
+          ? parsed.dismissedSuggestions.filter((item): item is string => typeof item === "string").slice(-30)
+          : [],
+      };
+    } catch (error) {
+      console.error("Failed to load inline AI learning state:", error);
     }
+  }, []);
+
+  const persistLearningState = React.useCallback((nextState: InlineLearningState) => {
+    learningRef.current = nextState;
+    try {
+      window.localStorage.setItem(INLINE_AI_LEARNING_KEY, JSON.stringify(nextState));
+    } catch (error) {
+      console.error("Failed to persist inline AI learning state:", error);
+    }
+  }, []);
+
+  const getLearningProfile = React.useCallback((): InlineLearningProfile => {
+    const current = learningRef.current;
+    return {
+      accepted: current.acceptedSuggestions.slice(-5),
+      dismissed: current.dismissedSuggestions.slice(-5),
+    };
+  }, []);
+
+  const dismissInlineSuggestion = React.useCallback(() => {
+    if (activeInlineHashRef.current) {
+      dismissedInlineHashRef.current = activeInlineHashRef.current;
+    }
+
+    if (inlineSuggestion?.suggestions?.[0]) {
+      const current = learningRef.current;
+      persistLearningState({
+        acceptedSuggestions: current.acceptedSuggestions,
+        dismissedSuggestions: [...current.dismissedSuggestions, inlineSuggestion.suggestions[0]].slice(-30),
+      });
+    }
+
     setInlineSuggestion(null);
     setIsInlineThinking(false);
-  }, []);
+  }, [inlineSuggestion, persistLearningState]);
 
   const acceptInlineSuggestion = React.useCallback(() => {
     if (!editor || !inlineSuggestion) return;
 
-    const insertion = `\n\n${inlineSuggestion.action}\n`;
+    const suggestionText = inlineSuggestion.suggestions[0];
+    if (!suggestionText) return;
+
+    const insertion = `\n\n${suggestionText}\n`;
     editor.chain().focus().insertContent(insertion).run();
+
+    const current = learningRef.current;
+    persistLearningState({
+      acceptedSuggestions: [...current.acceptedSuggestions, suggestionText].slice(-30),
+      dismissedSuggestions: current.dismissedSuggestions,
+    });
+
     dismissInlineSuggestion();
-  }, [editor, inlineSuggestion, dismissInlineSuggestion]);
+  }, [editor, inlineSuggestion, dismissInlineSuggestion, persistLearningState]);
 
   const handleAiAction = async (action: 'improve' | 'expand' | 'challenge') => {
     if (!editor || !user || isAiProcessing) return;
@@ -172,34 +241,30 @@ export function TipTapEditor() {
     const requestInlineSuggestion = () => {
       const fullText = editor.getText();
       const cursorOffset = editor.state.doc.textBetween(0, editor.state.selection.from, "\n", "\n").length;
-      const { context } = extractContext(fullText, cursorOffset);
-      const contextKey = context.toLowerCase().replace(/\s+/g, " ");
 
       updateInlinePosition();
-
-      if (context.length < 80) {
-        cancelAISuggestionTrigger();
-        setInlineSuggestion(null);
-        setIsInlineThinking(false);
-        return;
-      }
-
-      if (contextKey === dismissedInlineContextKeyRef.current) {
-        setInlineSuggestion(null);
-        setIsInlineThinking(false);
-        return;
-      }
 
       triggerAISuggestion({
         text: fullText,
         cursorPos: cursorOffset,
+        learning: getLearningProfile(),
         onStart: () => setIsInlineThinking(true),
-        onSuggestion: (suggestion) => {
-          setIsInlineThinking(false);
-          setInlineSuggestion(suggestion);
-          if (suggestion) {
-            lastInlineContextKeyRef.current = contextKey;
+        onSuggestion: (result) => {
+          if (!result) {
+            setInlineSuggestion(null);
+            setIsInlineThinking(false);
+            return;
           }
+
+          if (result.contextHash === dismissedInlineHashRef.current) {
+            setInlineSuggestion(null);
+            setIsInlineThinking(false);
+            return;
+          }
+
+          setIsInlineThinking(false);
+          activeInlineHashRef.current = result.contextHash;
+          setInlineSuggestion(result.suggestion);
         },
         onError: (error) => {
           console.error("Inline suggestion failed:", error);
@@ -217,7 +282,7 @@ export function TipTapEditor() {
       editor.off("update", requestInlineSuggestion);
       editor.off("selectionUpdate", requestInlineSuggestion);
     };
-  }, [editor, user, currentDocId, isLoadingContent]);
+  }, [editor, user, currentDocId, isLoadingContent, getLearningProfile]);
 
   React.useEffect(() => {
     if (!editor) return;

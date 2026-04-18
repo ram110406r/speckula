@@ -1,5 +1,6 @@
 import { auth } from "../firebase/config";
 import { saveInsight, savePRD, saveTask } from "../firebase/db";
+import type { SmartContextWindow } from "./aiContext";
 
 export interface ProactiveInsight {
   title: string;
@@ -38,9 +39,13 @@ export interface StrategicGuidance {
 }
 
 export interface InlineSuggestionPayload {
-  insight: string;
-  gap: string;
-  action: string;
+  type: "problem" | "solution" | "metrics" | "unclear";
+  suggestions: string[];
+}
+
+export interface InlineLearningProfile {
+  accepted: string[];
+  dismissed: string[];
 }
 
 interface TipTapNode {
@@ -213,35 +218,67 @@ function parseJsonPayload(raw: string): unknown {
   throw new Error(`AI did not return valid JSON. Preview: ${preview}`);
 }
 
-export const generateInlineSuggestion = async (context: string): Promise<InlineSuggestionPayload> => {
-  const prompt = `You are a product thinking copilot writing concise inline guidance.
+export const generateInlineSuggestion = async (
+  context: SmartContextWindow,
+  learning?: InlineLearningProfile
+): Promise<InlineSuggestionPayload> => {
+  const acceptedExamples = (learning?.accepted ?? []).slice(-3).join(" | ") || "none";
+  const dismissedExamples = (learning?.dismissed ?? []).slice(-3).join(" | ") || "none";
 
-Analyze the context and return exactly this JSON object:
+  const prompt = `You are a senior product manager co-thinking inline while someone writes.
+
+Classify current intent as one of:
+- problem
+- solution
+- metrics
+- unclear
+
+Based on the active sentence and active block, return concise adaptive suggestions.
+
+Preference signals:
+- Previously accepted suggestion styles: ${acceptedExamples}
+- Previously dismissed suggestion styles: ${dismissedExamples}
+
+Return JSON only:
 {
-  "insight": "One sharp observation from the current writing",
-  "gap": "One missing element or ambiguity",
-  "action": "One specific next sentence or next step"
+  "type": "problem | solution | metrics | unclear",
+  "suggestions": [
+    "short suggestion 1",
+    "short suggestion 2",
+    "short suggestion 3"
+  ]
 }
 
 Rules:
-- Keep each value under 140 characters
-- Be constructive and concrete
-- Do not add markdown
-- Return JSON only`;
+- suggestions should be actionable and under 120 chars each
+- avoid repeating dismissed styles
+- no markdown
+- max 3 suggestions`;
 
-  const raw = await callAI(prompt, context);
+  const raw = await callAI(prompt, `Active sentence:\n${context.sentence}\n\nActive block:\n${context.block}`);
   const parsed = parseJsonPayload(raw) as Partial<InlineSuggestionPayload>;
+  const allowedTypes: InlineSuggestionPayload["type"][] = ["problem", "solution", "metrics", "unclear"];
+  const type = allowedTypes.includes(parsed.type as InlineSuggestionPayload["type"]) ? parsed.type as InlineSuggestionPayload["type"] : "unclear";
+
+  const suggestions = Array.isArray(parsed.suggestions)
+    ? parsed.suggestions
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+        .slice(0, 3)
+    : [];
+
+  if (suggestions.length > 0) {
+    return { type, suggestions };
+  }
 
   return {
-    insight: typeof parsed.insight === "string" && parsed.insight.trim().length > 0
-      ? parsed.insight.trim()
-      : "Your point is directionally strong but can be sharper.",
-    gap: typeof parsed.gap === "string" && parsed.gap.trim().length > 0
-      ? parsed.gap.trim()
-      : "The user segment or measurable outcome is not explicit yet.",
-    action: typeof parsed.action === "string" && parsed.action.trim().length > 0
-      ? parsed.action.trim()
-      : "Add one sentence naming the target user and success metric.",
+    type: "unclear",
+    suggestions: [
+      "Clarify who this is for and what changes for them.",
+      "Add one measurable outcome to anchor the idea.",
+      "State the next concrete product decision.",
+    ],
   };
 };
 
