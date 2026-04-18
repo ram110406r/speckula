@@ -10,6 +10,10 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
+    function isWorkspaceMember(workspaceId) {
+      return isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.memberIds;
+    }
+
     // ── Users ──────────────────────────────────────────────
     match /users/{userId} {
       allow read: if isAuthenticated() && isOwner(userId);
@@ -34,6 +38,33 @@ service cloud.firestore {
       match /tasks/{id} {
         allow read, write: if isAuthenticated() && isOwner(userId);
       }
+    }
+
+    // ── Public Profiles ────────────────────────────────────
+    match /publicProfiles/{userId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated() && isOwner(userId);
+    }
+
+    // ── Public Cases ────────────────────────────────────────
+    match /publicCases/{caseId} {
+      allow read: if resource.data.visibility == "public" || (isAuthenticated() && isOwner(resource.data.userId));
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
+
+      match /comments/{commentId} {
+        allow read: if get(/databases/$(database)/documents/publicCases/$(caseId)).data.visibility == "public" || (isAuthenticated() && request.auth.uid == resource.data.userId);
+        allow create: if isAuthenticated();
+        allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      }
+    }
+
+    // ── Workspaces ──────────────────────────────────────────
+    match /workspaces/{workspaceId} {
+      allow read: if isWorkspaceMember(workspaceId);
+      allow create: if isAuthenticated();
+      allow update: if isWorkspaceMember(workspaceId);
+      allow delete: if isWorkspaceMember(workspaceId) && resource.data.members[0].userId == request.auth.uid;
     }
 
     // ── Settings ───────────────────────────────────────────

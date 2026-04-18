@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/logo.png" alt="Buildcase Logo" width="180" />
+  <img src="public/logo.png" alt="Buildcase Logo" width="120" />
   
   <h1>Buildcase</h1>
   <p><strong>The AI-first workspace for product discovery and execution.</strong></p>
@@ -184,27 +184,22 @@ Buildcase follows four core principles:
 
 ---
 
-## Roadmap
+## Publish Flow QA
 
-### MVP (Current)
-- [x] AI Editor with TipTap
-- [x] Groq AI streaming (Llama 3.3 70B)
-- [x] Firebase Google Authentication
-- [x] Firestore auto-save
-- [x] PRD Generator, Insight Extractor, Task Suggester
-- [x] 3-panel responsive layout
+Use these checks for Phase 6 publish activation:
 
-### Phase 2
-- [ ] Document library (multiple documents per user)
-- [ ] Collaboration & shared documents
-- [ ] Inline AI suggestions while typing
-- [ ] Export to PDF/Notion
+1. **User clicks publish**
+  - Generate decisions in the decision engine.
+  - Save an expected outcome.
+  - Click **Publish Case** from a decision card.
+  - Publish with visibility set to `public`.
+  - Expected result: the case is visible on `/u/{userId}` immediately and score average updates.
 
-### Phase 3
-- [ ] Integrations (Figma, Linear, Mixpanel)
-- [ ] AI-driven product iteration suggestions
-- [ ] Product performance tracking
-- [ ] Team workspaces
+2. **User edits before publish**
+  - Open publish modal from a decision card.
+  - Edit title and description before publishing.
+  - Publish and open `/c/{caseId}`.
+  - Expected result: the saved case reflects edited values.
 
 ---
 

@@ -55,6 +55,7 @@ export interface OpportunityScoreResult extends OpportunityScoreBreakdown {
 export interface InlineSuggestionPayload {
   stage: "problem" | "solution" | "metrics" | "exploration";
   next_steps: string[];
+  suggestions?: string[];
 }
 
 export interface InlineLearningProfile {
@@ -303,12 +304,17 @@ Rules:
     : [];
 
   if (nextSteps.length > 0) {
-    return { stage: parsedStage, next_steps: nextSteps };
+    return { stage: parsedStage, next_steps: nextSteps, suggestions: nextSteps };
   }
 
   return {
     stage: parsedStage,
     next_steps: [
+      parsedStage === "problem" ? "What problem are you solving?" : "What is the user decision you are guiding?",
+      parsedStage === "metrics" ? "Do you have a baseline and target metric?" : "How will you know this matters?",
+      parsedStage === "solution" ? "What assumption needs validation first?" : "What is the next concrete product decision?",
+    ],
+    suggestions: [
       parsedStage === "problem" ? "What problem are you solving?" : "What is the user decision you are guiding?",
       parsedStage === "metrics" ? "Do you have a baseline and target metric?" : "How will you know this matters?",
       parsedStage === "solution" ? "What assumption needs validation first?" : "What is the next concrete product decision?",
@@ -350,6 +356,10 @@ Return JSON:
   return {
     stage: parsed.stage && ["problem", "solution", "metrics", "exploration"].includes(parsed.stage) ? parsed.stage as InlineSuggestionPayload["stage"] : stage,
     next_steps: next_steps.length > 0 ? next_steps : [
+      stage === "problem" ? "What problem are you solving?" : "What is the next logical product question?",
+      stage === "metrics" ? "What metric should change first?" : "How will you measure success?",
+    ],
+    suggestions: next_steps.length > 0 ? next_steps : [
       stage === "problem" ? "What problem are you solving?" : "What is the next logical product question?",
       stage === "metrics" ? "What metric should change first?" : "How will you measure success?",
     ],
@@ -401,6 +411,10 @@ Return JSON:
   return {
     stage: parsed.stage && ["problem", "solution", "metrics", "exploration"].includes(parsed.stage) ? parsed.stage as InlineSuggestionPayload["stage"] : stage,
     next_steps: next_steps.length > 0 ? next_steps : [
+      "What problem are you solving?",
+      "How will you know it worked?",
+    ],
+    suggestions: next_steps.length > 0 ? next_steps : [
       "What problem are you solving?",
       "How will you know it worked?",
     ],

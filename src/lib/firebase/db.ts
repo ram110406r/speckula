@@ -87,14 +87,70 @@ export interface ExecutionTask {
   updatedAt: Timestamp | null;
 }
 
+export interface PublicProfile {
+  userId: string;
+  name: string;
+  bio: string;
+  skills: string[];
+  publicCases: string[];
+  scoreAverage: number;
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+export interface PublicCase {
+  id?: string;
+  caseId?: string;
+  userId: string;
+  title: string;
+  content: string;
+  score: number;
+  outcome: Record<string, unknown>;
+  visibility: "public" | "private";
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+export interface WorkspaceMember {
+  userId: string;
+  role: "owner" | "editor" | "viewer";
+}
+
+export interface TeamWorkspace {
+  id?: string;
+  workspaceId?: string;
+  name: string;
+  members: WorkspaceMember[];
+  memberIds?: string[];
+  cases: string[];
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+export interface CaseComment {
+  id?: string;
+  commentId?: string;
+  caseId: string;
+  userId: string;
+  content: string;
+  timestamp: number;
+  parentId?: string | null;
+}
+
 // Path Helpers
 const userDocsCollection = (userId: string) => collection(db, "users", userId, "documents");
 const userInsightsCollection = (userId: string) => collection(db, "users", userId, "insights");
 const userDecisionsCollection = (userId: string) => collection(db, "users", userId, "decisions");
 const userPrdsCollection = (userId: string) => collection(db, "users", userId, "prds");
 const userTasksCollection = (userId: string) => collection(db, "users", userId, "tasks");
+const publicProfilesCollection = () => collection(db, "publicProfiles");
+const publicCasesCollection = () => collection(db, "publicCases");
+const workspacesCollection = () => collection(db, "workspaces");
 
 const userDocRef = (userId: string, docId: string) => doc(db, "users", userId, "documents", docId);
+const publicProfileRef = (userId: string) => doc(db, "publicProfiles", userId);
+const publicCaseRef = (caseId: string) => doc(db, "publicCases", caseId);
+const workspaceRef = (workspaceId: string) => doc(db, "workspaces", workspaceId);
 
 // --- DOCUMENT ACTIONS ---
 
@@ -306,6 +362,7 @@ export const getTasksByPRD = async (userId: string, prdId: string): Promise<Exec
 export const initializeUser = async (userId: string) => {
   try {
     const userRef = doc(db, "users", userId);
+    const profileRef = publicProfileRef(userId);
 
     const snap = await getDoc(userRef);
     if (snap.exists()) {
@@ -320,11 +377,220 @@ export const initializeUser = async (userId: string) => {
         updatedAt: serverTimestamp(),
       });
     }
+
+    const profileSnap = await getDoc(profileRef);
+    if (!profileSnap.exists()) {
+      await setDoc(profileRef, {
+        userId,
+        name: "",
+        bio: "",
+        skills: [],
+        publicCases: [],
+        scoreAverage: 0,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
     
     console.log(`[initializeUser] Initialized user document for ${userId}`);
   } catch (error) {
     logFirestorePermissionHint("initializeUser", error);
     console.error(`[initializeUser] Failed to initialize user ${userId}:`, error);
+    throw error;
+  }
+};
+
+// --- PLATFORM ACTIONS ---
+
+export const getPublicProfile = async (userId: string): Promise<PublicProfile | null> => {
+  try {
+    const snap = await getDoc(publicProfileRef(userId));
+    return snap.exists() ? ({ id: snap.id, ...snap.data() } as PublicProfile & { id: string }) : null;
+  } catch (error) {
+    console.error("Error fetching public profile:", error);
+    return null;
+  }
+};
+
+export const savePublicProfile = async (userId: string, data: Partial<PublicProfile>) => {
+  try {
+    await setDoc(
+      publicProfileRef(userId),
+      {
+        ...data,
+        userId,
+        updatedAt: serverTimestamp(),
+        ...(data.createdAt ? {} : { createdAt: serverTimestamp() }),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    logFirestorePermissionHint("savePublicProfile", error);
+    throw error;
+  }
+};
+
+export const getPublicProfiles = async () => {
+  try {
+    const snap = await getDocs(publicProfilesCollection());
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (PublicProfile & { id: string })[];
+  } catch (error) {
+    console.error("Error fetching public profiles:", error);
+    return [];
+  }
+};
+
+export const getPublicCases = async () => {
+  try {
+    const snap = await getDocs(publicCasesCollection());
+    const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (PublicCase & { id: string })[];
+    return entries.filter((entry) => entry.visibility === "public");
+  } catch (error) {
+    console.error("Error fetching public cases:", error);
+    return [];
+  }
+};
+
+export const getPublicCasesByUser = async (userId: string, includePrivate = false) => {
+  try {
+    const snap = await getDocs(publicCasesCollection());
+    const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (PublicCase & { id: string })[];
+    return entries.filter((entry) => entry.userId === userId && (includePrivate || entry.visibility === "public"));
+  } catch (error) {
+    console.error("Error fetching user public cases:", error);
+    return [];
+  }
+};
+
+export const getPublicCase = async (caseId: string) => {
+  try {
+    const snap = await getDoc(publicCaseRef(caseId));
+    return snap.exists() ? ({ id: snap.id, ...snap.data() } as PublicCase & { id: string }) : null;
+  } catch (error) {
+    console.error("Error fetching public case:", error);
+    return null;
+  }
+};
+
+export const savePublicCase = async (data: Omit<PublicCase, "createdAt" | "updatedAt">) => {
+  try {
+    if (data.caseId) {
+      await setDoc(
+        publicCaseRef(data.caseId),
+        {
+          ...data,
+          caseId: data.caseId,
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return data.caseId;
+    }
+
+    const ref = await addDoc(publicCasesCollection(), {
+      ...data,
+      caseId: "",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await setDoc(ref, { caseId: ref.id }, { merge: true });
+    return ref.id;
+  } catch (error) {
+    logFirestorePermissionHint("savePublicCase", error);
+    throw error;
+  }
+};
+
+export const updatePublicCase = async (caseId: string, data: Partial<PublicCase>) => {
+  try {
+    await setDoc(publicCaseRef(caseId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("updatePublicCase", error);
+    throw error;
+  }
+};
+
+export const getCaseComments = async (caseId: string) => {
+  try {
+    const snap = await getDocs(collection(db, "publicCases", caseId, "comments"));
+    const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CaseComment & { id: string })[];
+    return entries.sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0));
+  } catch (error) {
+    console.error("Error fetching case comments:", error);
+    return [];
+  }
+};
+
+export const addCaseComment = async (caseId: string, userId: string, content: string, parentId?: string | null) => {
+  try {
+    const ref = await addDoc(collection(db, "publicCases", caseId, "comments"), {
+      caseId,
+      userId,
+      content,
+      timestamp: Date.now(),
+      parentId: parentId ?? null,
+    });
+    return ref.id;
+  } catch (error) {
+    logFirestorePermissionHint("addCaseComment", error);
+    throw error;
+  }
+};
+
+export const saveWorkspace = async (userId: string, name: string, cases: string[] = []) => {
+  try {
+    const ref = await addDoc(workspacesCollection(), {
+      name,
+      members: [{ userId, role: "owner" as const }],
+      memberIds: [userId],
+      cases,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await setDoc(ref, { workspaceId: ref.id }, { merge: true });
+    return ref.id;
+  } catch (error) {
+    logFirestorePermissionHint("saveWorkspace", error);
+    throw error;
+  }
+};
+
+export const getWorkspacesForUser = async (userId: string) => {
+  try {
+    const snap = await getDocs(workspacesCollection());
+    const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (TeamWorkspace & { id: string })[];
+    return entries.filter((workspace) => Array.isArray(workspace.memberIds) && workspace.memberIds.includes(userId));
+  } catch (error) {
+    console.error("Error fetching workspaces:", error);
+    return [];
+  }
+};
+
+export const updateWorkspace = async (workspaceId: string, data: Partial<TeamWorkspace>) => {
+  try {
+    await setDoc(workspaceRef(workspaceId), { ...data, workspaceId, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("updateWorkspace", error);
+    throw error;
+  }
+};
+
+export const inviteWorkspaceMember = async (workspaceId: string, member: WorkspaceMember) => {
+  try {
+    const snap = await getDoc(workspaceRef(workspaceId));
+    if (!snap.exists()) return;
+    const current = snap.data() as TeamWorkspace;
+    const members = Array.isArray(current.members) ? current.members : [];
+    const memberIds = Array.isArray(current.memberIds) ? current.memberIds : [];
+    const nextMembers = members.some((entry) => entry.userId === member.userId)
+      ? members.map((entry) => (entry.userId === member.userId ? member : entry))
+      : [...members, member];
+    const nextMemberIds = Array.from(new Set([...memberIds, member.userId]));
+
+    await setDoc(workspaceRef(workspaceId), { members: nextMembers, memberIds: nextMemberIds, workspaceId, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("inviteWorkspaceMember", error);
     throw error;
   }
 };

@@ -30,6 +30,7 @@ import { ScoreCard } from "@/components/decision/ScoreCard";
 import { BreakdownChart } from "@/components/decision/BreakdownChart";
 import { ScoreHistoryGraph } from "@/components/decision/ScoreHistoryGraph";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { OutcomeCard } from "@/components/outcome/OutcomeCard";
 import { LearningInsight } from "@/components/outcome/LearningInsight";
 import { ScoreAdjustment } from "@/components/outcome/ScoreAdjustment";
@@ -37,6 +38,8 @@ import { compareOutcomes, type OutcomeComparison } from "@/lib/ai/comparisonEngi
 import { getExpectedOutcome, setExpectedOutcome, type ExpectedOutcomeRecord } from "@/lib/ai/expectedOutcome";
 import { getActualOutcome, recordActualOutcome, type ActualOutcomeRecord } from "@/lib/ai/actualOutcome";
 import { updateConfidenceScore } from "@/lib/ai/scoreFeedback";
+import { buildPublicCase } from "@/lib/platform/caseBuilder";
+import { publishCase, validatePublishReadiness } from "@/lib/platform/publishCase";
 
 const priorityColors = {
   high: "text-primary border-primary/20 bg-primary/5",
@@ -47,6 +50,14 @@ const priorityColors = {
 interface ScoredDecision extends DecisionSuggestion {
   scoreBreakdown: OpportunityScoreData;
   score: number;
+}
+
+interface PublishModalState {
+  decision: ScoredDecision;
+  index: number;
+  title: string;
+  description: string;
+  visibility: "public" | "private";
 }
 
 export function DecisionView() {
@@ -71,6 +82,9 @@ export function DecisionView() {
   const [actualValue, setActualValue] = React.useState("");
   const [isGeneratingPRDFor, setIsGeneratingPRDFor] = React.useState<string | null>(null);
   const [prdPreview, setPrdPreview] = React.useState<{ title: string; content: string; decision: DecisionSuggestion } | null>(null);
+  const [publishModal, setPublishModal] = React.useState<PublishModalState | null>(null);
+  const [publishingKey, setPublishingKey] = React.useState<string | null>(null);
+  const [publishFeedback, setPublishFeedback] = React.useState<{ status: "success" | "error"; message: string } | null>(null);
 
   React.useEffect(() => {
     if (currentDocId) {
@@ -131,6 +145,54 @@ export function DecisionView() {
     setActiveView("editor");
   };
 
+  const handleOpenPublishModal = (decision: ScoredDecision, index: number) => {
+    if (!expectedOutcome) return;
+
+    setPublishFeedback(null);
+    setPublishModal({
+      decision,
+      index,
+      title: decision.title,
+      description: decision.justification,
+      visibility: "public",
+    });
+  };
+
+  const handlePublishDecision = async () => {
+    if (!user || !publishModal || !expectedOutcome) return;
+
+    const key = `${publishModal.decision.title}-${publishModal.index}`;
+    setPublishingKey(key);
+    setPublishFeedback(null);
+
+    try {
+      const problem = strategicGuidance?.theme || publishModal.decision.justification;
+      const solution = publishModal.decision.userStory;
+      const draft = buildPublicCase({
+        title: publishModal.title,
+        problem,
+        solution,
+        score: publishModal.decision.score,
+        expected: expectedOutcome.expected,
+        description: publishModal.description,
+      });
+
+      await publishCase({
+        userId: user.uid,
+        draft,
+        visibility: publishModal.visibility,
+      });
+
+      setPublishFeedback({ status: "success", message: "Published successfully. This case now appears on your public profile." });
+      setPublishModal(null);
+    } catch (error) {
+      console.error("Failed to publish case:", error);
+      setPublishFeedback({ status: "error", message: "Publishing failed. Please retry." });
+    } finally {
+      setPublishingKey(null);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!user || !currentDocId || isLoading) return;
     setIsLoading(true);
@@ -154,7 +216,7 @@ export function DecisionView() {
         ? updateScore({ ...latestHistory.breakdown, score: latestHistory.score }, opportunityScore)
         : { ...opportunityScore, score: opportunityScore.score };
       const score = calculateScore(evolvedBreakdown);
-      const scoreData = { ...evolvedBreakdown, score };
+      const scoreData = { ...evolvedBreakdown, score, reasoning: opportunityScore.reasoning };
       setScoreSummary(scoreData);
       recordScoreHistory(currentDocId, {
         timestamp: Date.now(),
@@ -247,7 +309,7 @@ export function DecisionView() {
       const previousConfidence = scoreSummary.confidence;
       const adjusted = updateConfidenceScore({ ...scoreSummary, score: scoreSummary.score }, nextComparison.success);
       const recalculated = calculateScore(adjusted);
-      const nextScore = { ...adjusted, score: recalculated };
+      const nextScore = { ...adjusted, score: recalculated, reasoning: scoreSummary.reasoning };
       setScoreSummary(nextScore);
       setConfidenceBefore(previousConfidence);
       setConfidenceAfter(nextScore.confidence);
@@ -337,6 +399,82 @@ export function DecisionView() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(publishModal)} onOpenChange={(open) => {
+        if (!open) {
+          setPublishModal(null);
+          setPublishFeedback(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Publish Case</DialogTitle>
+            <DialogDescription>
+              Convert this decision into a shareable product case. You can edit the title, notes, and visibility before publishing.
+            </DialogDescription>
+          </DialogHeader>
+
+          {publishModal && (
+            <div className="flex-1 overflow-auto space-y-4 py-1">
+              <div>
+                <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Title</p>
+                <Input
+                  className="mt-2"
+                  value={publishModal.title}
+                  onChange={(event) => setPublishModal((current) => current ? { ...current, title: event.target.value } : current)}
+                  placeholder="Case title"
+                />
+              </div>
+
+              <div>
+                <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Description</p>
+                <Textarea
+                  className="mt-2 min-h-[120px]"
+                  value={publishModal.description}
+                  onChange={(event) => setPublishModal((current) => current ? { ...current, description: event.target.value } : current)}
+                  placeholder="Short public summary"
+                />
+              </div>
+
+              <div>
+                <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Visibility</p>
+                <select
+                  className="mt-2 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={publishModal.visibility}
+                  onChange={(event) => setPublishModal((current) => current ? { ...current, visibility: event.target.value as "public" | "private" } : current)}
+                >
+                  <option value="public">Public</option>
+                  <option value="private">Private</option>
+                </select>
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs space-y-1">
+                <p><span className="label-system text-[10px] uppercase text-muted-foreground">Problem:</span> {strategicGuidance?.theme || publishModal.decision.justification}</p>
+                <p><span className="label-system text-[10px] uppercase text-muted-foreground">Solution:</span> {publishModal.decision.userStory}</p>
+                <p><span className="label-system text-[10px] uppercase text-muted-foreground">Score:</span> {publishModal.decision.score}</p>
+                {expectedOutcome && (
+                  <p>
+                    <span className="label-system text-[10px] uppercase text-muted-foreground">Expected Outcome:</span>{" "}
+                    {expectedOutcome.expected.metric} {expectedOutcome.expected.target_value} in {expectedOutcome.expected.timeframe}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="sm:justify-between">
+            <Button variant="outline" onClick={() => setPublishModal(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePublishDecision}
+              disabled={!publishModal?.title.trim() || !publishModal?.description.trim() || publishingKey === (publishModal ? `${publishModal.decision.title}-${publishModal.index}` : null)}
+            >
+              {publishingKey === (publishModal ? `${publishModal.decision.title}-${publishModal.index}` : null) ? "Publishing..." : "Publish Case"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex-1 overflow-y-auto p-10 space-y-12 max-w-5xl custom-scrollbar">
         {scoreSummary && (
           <div className="grid gap-4 md:grid-cols-3">
@@ -393,6 +531,12 @@ export function DecisionView() {
           <LearningInsight insight={learningInsight} />
           <ScoreAdjustment oldConfidence={confidenceBefore} newConfidence={confidenceAfter} />
         </div>
+
+        {publishFeedback && (
+          <div className={`rounded-lg border px-4 py-3 text-sm ${publishFeedback.status === "success" ? "border-primary/20 bg-primary/5 text-primary" : "border-red-200 bg-red-50 text-red-700"}`}>
+            {publishFeedback.message}
+          </div>
+        )}
 
         {strategicGuidance && (
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
@@ -485,15 +629,33 @@ export function DecisionView() {
                   </div>
                 </div>
                 <div className="px-5 pb-5">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full label-system text-[11px]"
-                    onClick={() => convertDecisionToPRD(s, i)}
-                    disabled={isGeneratingPRDFor === `${s.title}-${i}`}
-                  >
-                    {isGeneratingPRDFor === `${s.title}-${i}` ? "Generating PRD..." : "Convert to PRD"}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full label-system text-[11px]"
+                      onClick={() => convertDecisionToPRD(s, i)}
+                      disabled={isGeneratingPRDFor === `${s.title}-${i}`}
+                    >
+                      {isGeneratingPRDFor === `${s.title}-${i}` ? "Generating PRD..." : "Convert to PRD"}
+                    </Button>
+
+                    {validatePublishReadiness(expectedOutcome?.expected) ? (
+                      <>
+                        <p className="text-[11px] text-muted-foreground text-center">Ready to share this thinking as a public case.</p>
+                        <Button
+                          size="sm"
+                          className="w-full label-system text-[11px]"
+                          onClick={() => handleOpenPublishModal(s, i)}
+                          disabled={publishingKey === `${s.title}-${i}`}
+                        >
+                          {publishingKey === `${s.title}-${i}` ? "Publishing..." : "Publish Case"}
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground text-center">Save Expected Outcome to unlock publishing.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

@@ -134,7 +134,7 @@ export function TipTapEditor() {
   const acceptInlineSuggestion = React.useCallback(() => {
     if (!editor || !inlineSuggestion) return;
 
-    const suggestionText = inlineSuggestion.suggestions[0];
+    const suggestionText = (inlineSuggestion.suggestions ?? inlineSuggestion.next_steps)[0];
     if (!suggestionText) return;
 
     const replacement = inlineSuggestion.stage === "problem" || inlineSuggestion.stage === "metrics"

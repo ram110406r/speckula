@@ -11,7 +11,8 @@ import {
   File,
   Trash2,
   Loader2,
-  Compass
+  Compass,
+  Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -24,6 +25,7 @@ const navItems: { icon: React.ElementType; label: string; view: AppView }[] = [
   { icon: Compass, label: "Decisions", view: "decisions" },
   { icon: LayoutDashboard, label: "PRDs", view: "prds" },
   { icon: CheckSquare, label: "Tasks", view: "tasks" },
+  { icon: Users, label: "Platform", view: "platform" },
 ];
 
 export function SidebarNav() {

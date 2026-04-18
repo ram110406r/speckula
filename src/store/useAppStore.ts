@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type AppView = 'editor' | 'insights' | 'prds' | 'tasks' | 'decisions';
+export type AppView = 'editor' | 'insights' | 'prds' | 'tasks' | 'decisions' | 'platform';
 
 interface BuildcaseDocument {
   id: string;

@@ -10,6 +10,7 @@ import { TasksView } from "../views/TasksView";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { LandingPage } from "./LandingPage";
 import { DecisionView } from "../views/DecisionView";
+import { PlatformView } from "../views/PlatformView";
 import { Loader2 } from "lucide-react";
 
 export function Shell() {
@@ -37,6 +38,7 @@ export function Shell() {
       case "prds": return <PRDsView />;
       case "tasks": return <TasksView />;
       case "decisions": return <DecisionView />;
+      case "platform": return <PlatformView />;
       default: return <Editor />;
     }
   };

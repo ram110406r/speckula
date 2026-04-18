@@ -1,4 +1,5 @@
-import type { ActualOutcome, ExpectedOutcome } from "./expectedOutcome";
+import type { ActualOutcome } from "./actualOutcome";
+import type { ExpectedOutcome } from "./expectedOutcome";
 
 export interface OutcomeComparison {
   deviation: number;
