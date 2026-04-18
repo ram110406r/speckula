@@ -2,6 +2,12 @@ import type { ExpectedOutcome } from "@/lib/ai/expectedOutcome";
 import { getPublicCasesByUser, getPublicProfile, savePublicCase, savePublicProfile } from "@/lib/firebase/db";
 import type { PublicCaseDraft } from "./caseBuilder";
 
+export interface CaseAuditEvent {
+  publishedAt: number;
+  publishedBy: string;
+  lastEditedAt: number;
+}
+
 export interface PublishCaseInput {
   userId: string;
   draft: PublicCaseDraft;
@@ -25,6 +31,12 @@ function averageScore(scores: number[]) {
 }
 
 export async function publishCase({ userId, draft, visibility }: PublishCaseInput) {
+  const audit: CaseAuditEvent = {
+    publishedAt: draft.createdAt,
+    publishedBy: userId,
+    lastEditedAt: draft.createdAt,
+  };
+
   const caseId = await savePublicCase({
     userId,
     title: draft.title,
@@ -32,7 +44,7 @@ export async function publishCase({ userId, draft, visibility }: PublishCaseInpu
     score: draft.score,
     outcome: {
       expectedOutcome: draft.expectedOutcome,
-      publishedAt: draft.createdAt,
+      audit,
     },
     visibility,
   });

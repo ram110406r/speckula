@@ -8,6 +8,27 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { addCaseComment, getCaseComments, getPublicCase, updatePublicCase, type CaseComment, type PublicCase } from "@/lib/firebase/db";
+import type { CaseAuditEvent } from "@/lib/platform/publishCase";
+
+interface CaseOutcomeData {
+  expectedOutcome?: {
+    metric?: string;
+    target_value?: number;
+    timeframe?: string;
+  };
+  audit?: CaseAuditEvent;
+  [key: string]: unknown;
+}
+
+function parseCaseOutcome(outcome: Record<string, unknown> | undefined | null): CaseOutcomeData {
+  if (!outcome || typeof outcome !== "object") return {};
+  return outcome as CaseOutcomeData;
+}
+
+function formatAuditTime(value: number | undefined) {
+  if (!value || Number.isNaN(value)) return "-";
+  return new Date(value).toLocaleString();
+}
 
 export function CaseViewer({ caseId }: { caseId: string }) {
   const { user } = useAuth();
@@ -48,7 +69,20 @@ export function CaseViewer({ caseId }: { caseId: string }) {
 
   const toggleVisibility = async () => {
     if (!record || record.userId !== user?.uid) return;
-    await updatePublicCase(caseId, { visibility: record.visibility === "public" ? "private" : "public" });
+    const currentOutcome = parseCaseOutcome(record.outcome);
+    const currentAudit = currentOutcome.audit;
+
+    await updatePublicCase(caseId, {
+      visibility: record.visibility === "public" ? "private" : "public",
+      outcome: {
+        ...currentOutcome,
+        audit: {
+          publishedAt: currentAudit?.publishedAt ?? Date.now(),
+          publishedBy: currentAudit?.publishedBy ?? record.userId,
+          lastEditedAt: Date.now(),
+        },
+      },
+    });
     await load();
   };
 
@@ -68,6 +102,9 @@ export function CaseViewer({ caseId }: { caseId: string }) {
       </div>
     );
   }
+
+  const outcomeData = parseCaseOutcome(record.outcome);
+  const audit = outcomeData.audit;
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,6 +144,21 @@ export function CaseViewer({ caseId }: { caseId: string }) {
           <InfoCard label="Visibility" value={record.visibility} />
           <InfoCard label="Outcome" value={record.outcome && Object.keys(record.outcome).length > 0 ? "Recorded" : "Pending"} />
           <InfoCard label="Discussion" value={comments.length.toString()} />
+        </section>
+
+        <section className="rounded-3xl border border-border/60 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="label-system text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Publish Audit Log</p>
+              <h2 className="mt-2 text-lg font-semibold">Recruiter verification</h2>
+            </div>
+            <span className="label-system text-[11px] text-muted-foreground">Traceable events</span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <InfoCard label="Published At" value={formatAuditTime(audit?.publishedAt)} />
+            <InfoCard label="Published By" value={audit?.publishedBy || "-"} />
+            <InfoCard label="Last Edited" value={formatAuditTime(audit?.lastEditedAt)} />
+          </div>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1fr_0.8fr]">
