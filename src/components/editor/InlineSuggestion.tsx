@@ -54,7 +54,7 @@ export function InlineSuggestion({
           <div className="space-y-2 border-l-2 border-primary/15 pl-2 text-[12px] leading-relaxed text-muted-foreground">
             <p className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground/80">
               <TypeIcon className="h-3.5 w-3.5 text-primary/80" />
-              → You are in {typeConfig[suggestionType].label.toLowerCase()}
+              → Thinking Guide
             </p>
             <ul className="space-y-1.5">
               {visibleRows.map((row, index) => (

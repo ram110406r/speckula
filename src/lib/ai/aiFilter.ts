@@ -18,3 +18,7 @@ export function shouldRenderSuggestions(data: InlineSuggestionPayload | null | u
 export function shouldShowNextSteps(data: InlineSuggestionPayload | null | undefined) {
   return shouldRenderSuggestions(data);
 }
+
+export function shouldRender(data: InlineSuggestionPayload | null | undefined) {
+  return shouldRenderSuggestions(data);
+}

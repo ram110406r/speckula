@@ -1,6 +1,6 @@
 import { auth } from "../firebase/config";
 import { saveInsight, savePRD, saveTask } from "../firebase/db";
-import type { HierarchicalContext } from "./aiContext";
+import type { ExtractedEntities, HierarchicalContext, ThinkingGap } from "./aiContext";
 import type { ProgressState } from "./progressTracker";
 
 export interface ProactiveInsight {
@@ -339,6 +339,57 @@ Return JSON:
     next_steps: next_steps.length > 0 ? next_steps : [
       stage === "problem" ? "What problem are you solving?" : "What is the next logical product question?",
       stage === "metrics" ? "What metric should change first?" : "How will you measure success?",
+    ],
+  };
+};
+
+export const generateNextStepsWithSignals = async (
+  context: string,
+  entities: ExtractedEntities,
+  gaps: ThinkingGap[],
+  progress?: ProgressState
+): Promise<InlineSuggestionPayload> => {
+  const stage = detectThinkingStage(context);
+  const prompt = `
+You are a senior product manager.
+
+Sentence:
+${context}
+
+Detected:
+* Problem: ${entities.hasProblem}
+* Metric: ${entities.hasMetric}
+* Action: ${entities.hasAction}
+
+Missing:
+${gaps.join(", ") || "none"}
+
+Progress:
+* hasProblem: ${progress?.hasProblem ?? false}
+* hasSolution: ${progress?.hasSolution ?? false}
+* hasMetrics: ${progress?.hasMetrics ?? false}
+
+Task:
+Give sharp, non-generic next steps based on missing thinking.
+
+Return JSON:
+{
+  "stage": "${stage}",
+  "next_steps": ["...", "..."]
+}
+`;
+
+  const res = await callAI(prompt, context);
+  const parsed = parseJsonPayload(res) as Partial<InlineSuggestionPayload>;
+  const next_steps = Array.isArray(parsed.next_steps)
+    ? parsed.next_steps.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean).slice(0, 3)
+    : [];
+
+  return {
+    stage: parsed.stage && ["problem", "solution", "metrics", "exploration"].includes(parsed.stage) ? parsed.stage as InlineSuggestionPayload["stage"] : stage,
+    next_steps: next_steps.length > 0 ? next_steps : [
+      "What problem are you solving?",
+      "How will you know it worked?",
     ],
   };
 };

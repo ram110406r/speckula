@@ -1,12 +1,13 @@
 import { extractHierarchicalContext, type HierarchicalContext } from "./aiContext";
 import {
-  generateNextSteps,
+  generateNextStepsWithSignals,
   type InlineLearningProfile,
   type InlineSuggestionPayload,
 } from "./actions";
 import { shouldShowNextSteps } from "./aiFilter";
 import { getProgress, updateProgress } from "./progressTracker";
 import { prioritizeSteps } from "./priorityEngine";
+import { extractEntities, detectGaps } from "./aiContext";
 
 interface TriggerParams {
   text: string;
@@ -79,8 +80,10 @@ export function triggerAISuggestion({ text, cursorPos, learning, onSuggestion, o
     onStart?.();
 
     try {
+      const entities = extractEntities(context.sentence || context.block || text);
+      const gaps = detectGaps(entities);
       const progress = updateProgress(context.block || context.sentence || text);
-      const suggestion = await generateNextSteps(context.block || context.sentence || text, progress);
+      const suggestion = await generateNextStepsWithSignals(context.block || context.sentence || text, entities, gaps, progress);
       if (activeRequest !== requestId) return;
       if (!shouldShowNextSteps(suggestion)) {
         onSuggestion(null);

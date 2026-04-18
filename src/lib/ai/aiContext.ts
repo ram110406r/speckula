@@ -17,6 +17,15 @@ export interface HierarchicalContext {
   contextKey: string;
 }
 
+export interface ExtractedEntities {
+  hasUser: boolean;
+  hasMetric: boolean;
+  hasAction: boolean;
+  hasProblem: boolean;
+}
+
+export type ThinkingGap = "missing_problem" | "missing_metric" | "missing_solution";
+
 function normalizeForKey(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -117,4 +126,23 @@ export function extractHierarchicalContext(text: string, cursorPos: number): Hie
     cursorPosInBlock: activeBlock.cursorPosInBlock,
     contextKey,
   };
+}
+
+export function extractEntities(sentence: string): ExtractedEntities {
+  return {
+    hasUser: /user/i.test(sentence),
+    hasMetric: /%|rate|conversion/i.test(sentence),
+    hasAction: /build|create|add/i.test(sentence),
+    hasProblem: /drop|issue|problem|fail/i.test(sentence),
+  };
+}
+
+export function detectGaps(entities: ExtractedEntities): ThinkingGap[] {
+  const gaps: ThinkingGap[] = [];
+
+  if (!entities.hasProblem) gaps.push("missing_problem");
+  if (!entities.hasMetric) gaps.push("missing_metric");
+  if (!entities.hasAction) gaps.push("missing_solution");
+
+  return gaps;
 }
