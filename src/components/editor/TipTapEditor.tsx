@@ -12,16 +12,25 @@ import { Sparkles, Wand2, Lightbulb, Loader2 } from "lucide-react";
 import { useAuth } from '@/lib/firebase/AuthProvider';
 import { saveDocument, getDocument } from '@/lib/firebase/db';
 import { useAppStore } from '@/store/useAppStore';
-import { extractInsightsAction, processEditorAction } from '@/lib/ai/actions';
+import { extractInsightsAction, processEditorAction, type InlineSuggestionPayload } from '@/lib/ai/actions';
+import { extractContext } from '@/lib/ai/aiContext';
+import { triggerAISuggestion, cancelAISuggestionTrigger } from '@/lib/ai/aiTrigger';
+import { InlineSuggestion } from './InlineSuggestion';
 
 export function TipTapEditor() {
   const [mounted, setMounted] = React.useState(false);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [isAutoExtracting, setIsAutoExtracting] = useState(false);
+  const [isInlineThinking, setIsInlineThinking] = useState(false);
+  const [inlineSuggestion, setInlineSuggestion] = useState<InlineSuggestionPayload | null>(null);
+  const [inlinePosition, setInlinePosition] = useState({ x: 16, y: 96 });
   const { user } = useAuth();
   const { currentDocId, setIsSaving, documents, setActiveContext, pendingInsertion, setPendingInsertion } = useAppStore();
   const lastExtractedHashRef = React.useRef<string | null>(null);
   const extractTimerRef = React.useRef<number | null>(null);
+  const editorContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const lastInlineContextKeyRef = React.useRef("");
+  const dismissedInlineContextKeyRef = React.useRef("");
 
   const editor = useEditor({
     extensions: [
@@ -53,6 +62,22 @@ export function TipTapEditor() {
   });
 
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+
+  const dismissInlineSuggestion = React.useCallback(() => {
+    if (lastInlineContextKeyRef.current) {
+      dismissedInlineContextKeyRef.current = lastInlineContextKeyRef.current;
+    }
+    setInlineSuggestion(null);
+    setIsInlineThinking(false);
+  }, []);
+
+  const acceptInlineSuggestion = React.useCallback(() => {
+    if (!editor || !inlineSuggestion) return;
+
+    const insertion = `\n\n${inlineSuggestion.action}\n`;
+    editor.chain().focus().insertContent(insertion).run();
+    dismissInlineSuggestion();
+  }, [editor, inlineSuggestion, dismissInlineSuggestion]);
 
   const handleAiAction = async (action: 'improve' | 'expand' | 'challenge') => {
     if (!editor || !user || isAiProcessing) return;
@@ -127,6 +152,97 @@ export function TipTapEditor() {
   }, [editor, setActiveContext]);
 
   React.useEffect(() => {
+    if (!editor || !user || !currentDocId || isLoadingContent) return;
+
+    const updateInlinePosition = () => {
+      if (!editorContainerRef.current) return;
+
+      try {
+        const containerRect = editorContainerRef.current.getBoundingClientRect();
+        const coords = editor.view.coordsAtPos(editor.state.selection.from);
+
+        const nextX = Math.max(12, Math.min(coords.left - containerRect.left, containerRect.width - 340));
+        const nextY = Math.max(64, Math.min(coords.bottom - containerRect.top + 8, containerRect.height - 120));
+        setInlinePosition({ x: nextX, y: nextY });
+      } catch {
+        setInlinePosition((prev) => prev);
+      }
+    };
+
+    const requestInlineSuggestion = () => {
+      const fullText = editor.getText();
+      const cursorOffset = editor.state.doc.textBetween(0, editor.state.selection.from, "\n", "\n").length;
+      const { context } = extractContext(fullText, cursorOffset);
+      const contextKey = context.toLowerCase().replace(/\s+/g, " ");
+
+      updateInlinePosition();
+
+      if (context.length < 80) {
+        cancelAISuggestionTrigger();
+        setInlineSuggestion(null);
+        setIsInlineThinking(false);
+        return;
+      }
+
+      if (contextKey === dismissedInlineContextKeyRef.current) {
+        setInlineSuggestion(null);
+        setIsInlineThinking(false);
+        return;
+      }
+
+      triggerAISuggestion({
+        text: fullText,
+        cursorPos: cursorOffset,
+        onStart: () => setIsInlineThinking(true),
+        onSuggestion: (suggestion) => {
+          setIsInlineThinking(false);
+          setInlineSuggestion(suggestion);
+          if (suggestion) {
+            lastInlineContextKeyRef.current = contextKey;
+          }
+        },
+        onError: (error) => {
+          console.error("Inline suggestion failed:", error);
+          setIsInlineThinking(false);
+        },
+      });
+    };
+
+    requestInlineSuggestion();
+    editor.on("update", requestInlineSuggestion);
+    editor.on("selectionUpdate", requestInlineSuggestion);
+
+    return () => {
+      cancelAISuggestionTrigger();
+      editor.off("update", requestInlineSuggestion);
+      editor.off("selectionUpdate", requestInlineSuggestion);
+    };
+  }, [editor, user, currentDocId, isLoadingContent]);
+
+  React.useEffect(() => {
+    if (!editor) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && (inlineSuggestion || isInlineThinking)) {
+        event.preventDefault();
+        dismissInlineSuggestion();
+        return;
+      }
+
+      if (event.key === "Tab" && inlineSuggestion) {
+        event.preventDefault();
+        acceptInlineSuggestion();
+      }
+    };
+
+    editor.view.dom.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      editor.view.dom.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [editor, inlineSuggestion, isInlineThinking, dismissInlineSuggestion, acceptInlineSuggestion]);
+
+  React.useEffect(() => {
     if (!editor || !pendingInsertion) return;
 
     editor.chain().focus().insertContent(`\n\n${pendingInsertion}\n\n`).run();
@@ -199,7 +315,7 @@ export function TipTapEditor() {
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div ref={editorContainerRef} className="relative h-full w-full">
       {isAutoExtracting && (
         <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-full border border-primary/20 bg-white px-3 py-1.5 shadow-sm">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -247,6 +363,14 @@ export function TipTapEditor() {
           </div>
         </BubbleMenu>
       )}
+
+      <InlineSuggestion
+        suggestion={inlineSuggestion}
+        loading={isInlineThinking}
+        position={inlinePosition}
+        onAccept={acceptInlineSuggestion}
+        onDismiss={dismissInlineSuggestion}
+      />
 
       <EditorContent editor={editor} className="h-full w-full" />
     </div>

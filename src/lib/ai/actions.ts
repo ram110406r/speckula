@@ -37,6 +37,12 @@ export interface StrategicGuidance {
   recommendation: string;
 }
 
+export interface InlineSuggestionPayload {
+  insight: string;
+  gap: string;
+  action: string;
+}
+
 interface TipTapNode {
   type?: string;
   text?: string;
@@ -206,6 +212,38 @@ function parseJsonPayload(raw: string): unknown {
   const preview = trimmed.slice(0, 160).replace(/\s+/g, " ");
   throw new Error(`AI did not return valid JSON. Preview: ${preview}`);
 }
+
+export const generateInlineSuggestion = async (context: string): Promise<InlineSuggestionPayload> => {
+  const prompt = `You are a product thinking copilot writing concise inline guidance.
+
+Analyze the context and return exactly this JSON object:
+{
+  "insight": "One sharp observation from the current writing",
+  "gap": "One missing element or ambiguity",
+  "action": "One specific next sentence or next step"
+}
+
+Rules:
+- Keep each value under 140 characters
+- Be constructive and concrete
+- Do not add markdown
+- Return JSON only`;
+
+  const raw = await callAI(prompt, context);
+  const parsed = parseJsonPayload(raw) as Partial<InlineSuggestionPayload>;
+
+  return {
+    insight: typeof parsed.insight === "string" && parsed.insight.trim().length > 0
+      ? parsed.insight.trim()
+      : "Your point is directionally strong but can be sharper.",
+    gap: typeof parsed.gap === "string" && parsed.gap.trim().length > 0
+      ? parsed.gap.trim()
+      : "The user segment or measurable outcome is not explicit yet.",
+    action: typeof parsed.action === "string" && parsed.action.trim().length > 0
+      ? parsed.action.trim()
+      : "Add one sentence naming the target user and success metric.",
+  };
+};
 
 export const extractInsightsAction = async (userId: string, docContent: unknown) => {
   const context = tipTapToText(docContent);
