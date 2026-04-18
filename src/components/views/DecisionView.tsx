@@ -22,12 +22,21 @@ import {
   type DecisionSuggestion,
   type StrategicGuidance,
 } from "@/lib/ai/actions";
+import { generateLearningInsight } from "@/lib/ai/learningEngine";
 import { calculateScore, type OpportunityScoreData } from "@/lib/ai/scoreEngine";
 import { updateScore } from "@/lib/ai/scoreEvolution";
 import { getScoreHistory, recordScoreHistory, type OpportunityScoreHistoryEntry } from "@/lib/ai/scoreHistory";
 import { ScoreCard } from "@/components/decision/ScoreCard";
 import { BreakdownChart } from "@/components/decision/BreakdownChart";
 import { ScoreHistoryGraph } from "@/components/decision/ScoreHistoryGraph";
+import { Input } from "@/components/ui/input";
+import { OutcomeCard } from "@/components/outcome/OutcomeCard";
+import { LearningInsight } from "@/components/outcome/LearningInsight";
+import { ScoreAdjustment } from "@/components/outcome/ScoreAdjustment";
+import { compareOutcomes, type OutcomeComparison } from "@/lib/ai/comparisonEngine";
+import { getExpectedOutcome, setExpectedOutcome, type ExpectedOutcomeRecord } from "@/lib/ai/expectedOutcome";
+import { getActualOutcome, recordActualOutcome, type ActualOutcomeRecord } from "@/lib/ai/actualOutcome";
+import { updateConfidenceScore } from "@/lib/ai/scoreFeedback";
 
 const priorityColors = {
   high: "text-primary border-primary/20 bg-primary/5",
@@ -42,19 +51,32 @@ interface ScoredDecision extends DecisionSuggestion {
 
 export function DecisionView() {
   const { user } = useAuth();
-  const { currentDocId, setPendingInsertion, setActiveView, setPendingDecisionForPRD } = useAppStore();
+  const { currentDocId, setPendingInsertion, setActiveView, setPendingDecisionForPRD, setOutcomeLoop } = useAppStore();
   const [suggestions, setSuggestions] = React.useState<DecisionSuggestion[]>([]);
   const [scoredSuggestions, setScoredSuggestions] = React.useState<ScoredDecision[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [strategicGuidance, setStrategicGuidance] = React.useState<StrategicGuidance | null>(null);
   const [scoreSummary, setScoreSummary] = React.useState<OpportunityScoreData & { score: number } | null>(null);
   const [scoreHistory, setScoreHistory] = React.useState<OpportunityScoreHistoryEntry[]>([]);
+  const [expectedOutcome, setExpectedOutcomeState] = React.useState<ExpectedOutcomeRecord | null>(null);
+  const [actualOutcome, setActualOutcomeState] = React.useState<ActualOutcomeRecord | null>(null);
+  const [comparison, setComparison] = React.useState<OutcomeComparison | null>(null);
+  const [learningInsight, setLearningInsight] = React.useState<string | null>(null);
+  const [confidenceBefore, setConfidenceBefore] = React.useState(0);
+  const [confidenceAfter, setConfidenceAfter] = React.useState(0);
+  const [expectedMetric, setExpectedMetric] = React.useState("");
+  const [expectedTarget, setExpectedTarget] = React.useState("");
+  const [expectedTimeframe, setExpectedTimeframe] = React.useState("");
+  const [actualMetric, setActualMetric] = React.useState("");
+  const [actualValue, setActualValue] = React.useState("");
   const [isGeneratingPRDFor, setIsGeneratingPRDFor] = React.useState<string | null>(null);
   const [prdPreview, setPrdPreview] = React.useState<{ title: string; content: string; decision: DecisionSuggestion } | null>(null);
 
   React.useEffect(() => {
     if (currentDocId) {
       setScoreHistory(getScoreHistory(currentDocId));
+      setExpectedOutcomeState(getExpectedOutcome(currentDocId));
+      setActualOutcomeState(getActualOutcome(currentDocId));
     }
   }, [currentDocId]);
 
@@ -146,6 +168,11 @@ export function DecisionView() {
       });
       setScoreHistory(getScoreHistory(currentDocId));
 
+      setConfidenceBefore(opportunityScore.confidence);
+      setConfidenceAfter(opportunityScore.confidence);
+      setLearningInsight(null);
+      setComparison(null);
+
       const scored = await Promise.all(
         data.map(async (decision) => {
           const breakdown = await generateOpportunityScore(`${decision.title}\n${decision.justification}\n${doc.content ? JSON.stringify(doc.content) : ""}`);
@@ -183,6 +210,79 @@ export function DecisionView() {
       alert("AI decision engine failed to generate suggestions.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveExpectedOutcome = () => {
+    if (!currentDocId || !expectedMetric.trim() || !expectedTarget.trim() || !expectedTimeframe.trim()) return;
+
+    const target = Number(expectedTarget);
+    if (Number.isNaN(target)) return;
+
+    setExpectedOutcome(currentDocId, expectedMetric.trim(), target, expectedTimeframe.trim());
+    const next = getExpectedOutcome(currentDocId);
+    setExpectedOutcomeState(next);
+  };
+
+  const handleRecordActualOutcome = async () => {
+    if (!currentDocId || !actualMetric.trim() || !actualValue.trim()) return;
+
+    const value = Number(actualValue);
+    if (Number.isNaN(value)) return;
+
+    recordActualOutcome(currentDocId, actualMetric.trim(), value);
+    const actual = getActualOutcome(currentDocId);
+    setActualOutcomeState(actual);
+
+    const expected = expectedOutcome;
+    if (!expected || !actual) return;
+
+    const nextComparison = compareOutcomes(expected.expected, actual.actual);
+    setComparison(nextComparison);
+
+    let confidenceBeforeSnapshot = confidenceBefore;
+    let confidenceAfterSnapshot = confidenceAfter;
+
+    if (scoreSummary) {
+      const previousConfidence = scoreSummary.confidence;
+      const adjusted = updateConfidenceScore({ ...scoreSummary, score: scoreSummary.score }, nextComparison.success);
+      const recalculated = calculateScore(adjusted);
+      const nextScore = { ...adjusted, score: recalculated };
+      setScoreSummary(nextScore);
+      setConfidenceBefore(previousConfidence);
+      setConfidenceAfter(nextScore.confidence);
+      confidenceBeforeSnapshot = previousConfidence;
+      confidenceAfterSnapshot = nextScore.confidence;
+
+      recordScoreHistory(currentDocId, {
+        timestamp: Date.now(),
+        score: recalculated,
+        breakdown: {
+          impact: nextScore.impact,
+          effort: nextScore.effort,
+          confidence: nextScore.confidence,
+          demand: nextScore.demand,
+        },
+      });
+      setScoreHistory(getScoreHistory(currentDocId));
+    }
+
+    try {
+      const insight = await generateLearningInsight(
+        JSON.stringify({ expected: expected.expected, actual: actual.actual, comparison: nextComparison }),
+        expected.expected,
+        actual.actual
+      );
+      setLearningInsight(insight);
+      setOutcomeLoop({
+        expectedOutcome: expected.expected,
+        actualOutcome: actual.actual,
+        learningInsight: insight,
+        confidenceBefore: confidenceBeforeSnapshot,
+        confidenceAfter: confidenceAfterSnapshot,
+      });
+    } catch (error) {
+      console.error("Failed to generate learning insight:", error);
     }
   };
 
@@ -263,6 +363,36 @@ export function DecisionView() {
             </div>
           </div>
         )}
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="md:col-span-1 rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+            <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Expected Outcome</p>
+            <div className="mt-4 space-y-3">
+              <Input value={expectedMetric} onChange={(e) => setExpectedMetric(e.target.value)} placeholder="Metric (e.g. retention)" />
+              <Input value={expectedTarget} onChange={(e) => setExpectedTarget(e.target.value)} placeholder="Target value" />
+              <Input value={expectedTimeframe} onChange={(e) => setExpectedTimeframe(e.target.value)} placeholder="Timeframe" />
+              <Button onClick={handleSaveExpectedOutcome} className="w-full" variant="outline">Save Expected Outcome</Button>
+            </div>
+          </div>
+
+          <div className="md:col-span-1 rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+            <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Actual Outcome</p>
+            <div className="mt-4 space-y-3">
+              <Input value={actualMetric} onChange={(e) => setActualMetric(e.target.value)} placeholder="Metric" />
+              <Input value={actualValue} onChange={(e) => setActualValue(e.target.value)} placeholder="Actual value" />
+              <Button onClick={handleRecordActualOutcome} className="w-full">Record Actual Outcome</Button>
+            </div>
+          </div>
+
+          <div className="md:col-span-1">
+            <OutcomeCard expected={expectedOutcome} actual={actualOutcome} comparison={comparison} />
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <LearningInsight insight={learningInsight} />
+          <ScoreAdjustment oldConfidence={confidenceBefore} newConfidence={confidenceAfter} />
+        </div>
 
         {strategicGuidance && (
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">

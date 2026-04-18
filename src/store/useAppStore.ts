@@ -32,6 +32,26 @@ interface TaskDependencyRecord {
   reason: string;
 }
 
+interface ExpectedOutcomeState {
+  metric: string;
+  target_value: number;
+  timeframe: string;
+}
+
+interface ActualOutcomeState {
+  metric: string;
+  value: number;
+  timestamp: number;
+}
+
+interface OutcomeLoopState {
+  expectedOutcome: ExpectedOutcomeState | null;
+  actualOutcome: ActualOutcomeState | null;
+  learningInsight: string | null;
+  confidenceBefore: number;
+  confidenceAfter: number;
+}
+
 interface AppState {
   aiPanelOpen: boolean;
   toggleAiPanel: () => void;
@@ -58,6 +78,8 @@ interface AppState {
   setSelectedPRDForTasks: (prd: PRDForTasks | null) => void;
   taskDependencies: TaskDependencyRecord[] | null;
   setTaskDependencies: (deps: TaskDependencyRecord[] | null) => void;
+  outcomeLoop: OutcomeLoopState;
+  setOutcomeLoop: (state: Partial<OutcomeLoopState>) => void;
   resetState: () => void;
 }
 
@@ -74,6 +96,13 @@ const initialState = {
   pendingDecisionForPRD: null,
   selectedPRDForTasks: null,
   taskDependencies: null,
+  outcomeLoop: {
+    expectedOutcome: null,
+    actualOutcome: null,
+    learningInsight: null,
+    confidenceBefore: 0,
+    confidenceAfter: 0,
+  },
 };
 
 export const useAppStore = create<AppState>((set) => ({
@@ -89,6 +118,13 @@ export const useAppStore = create<AppState>((set) => ({
   setPendingDecisionForPRD: (decision) => set({ pendingDecisionForPRD: decision }),
   setSelectedPRDForTasks: (prd) => set({ selectedPRDForTasks: prd }),
   setTaskDependencies: (deps) => set({ taskDependencies: deps }),
+  setOutcomeLoop: (state) =>
+    set((current) => ({
+      outcomeLoop: {
+        ...current.outcomeLoop,
+        ...state,
+      },
+    })),
   dismissHintForDoc: (docId, hintId) =>
     set((state) => {
       const existing = state.dismissedHintsByDoc[docId] ?? [];
