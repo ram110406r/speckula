@@ -1,6 +1,7 @@
 import { auth } from "../firebase/config";
 import { saveInsight, savePRD, saveTask } from "../firebase/db";
-import type { SmartContextWindow } from "./aiContext";
+import type { HierarchicalContext } from "./aiContext";
+import type { ProgressState } from "./progressTracker";
 
 export interface ProactiveInsight {
   title: string;
@@ -39,8 +40,8 @@ export interface StrategicGuidance {
 }
 
 export interface InlineSuggestionPayload {
-  type: "problem" | "solution" | "metrics" | "unclear";
-  suggestions: string[];
+  stage: "problem" | "solution" | "metrics" | "exploration";
+  next_steps: string[];
 }
 
 export interface InlineLearningProfile {
@@ -218,69 +219,131 @@ function parseJsonPayload(raw: string): unknown {
   throw new Error(`AI did not return valid JSON. Preview: ${preview}`);
 }
 
+export function detectThinkingStage(context: string) {
+  if (context.match(/drop|problem|issue|pain/i)) return "problem";
+  if (context.match(/we will|build|solution|feature/i)) return "solution";
+  if (context.match(/metric|conversion|rate|kpi/i)) return "metrics";
+  return "exploration";
+}
+
 export const generateInlineSuggestion = async (
-  context: SmartContextWindow,
+  context: HierarchicalContext,
   learning?: InlineLearningProfile
 ): Promise<InlineSuggestionPayload> => {
   const acceptedExamples = (learning?.accepted ?? []).slice(-3).join(" | ") || "none";
   const dismissedExamples = (learning?.dismissed ?? []).slice(-3).join(" | ") || "none";
+  const stage = detectThinkingStage([context.documentIntent, context.section, context.block, context.sentence].filter(Boolean).join(" "));
 
-  const prompt = `You are a senior product manager co-thinking inline while someone writes.
+  const prompt = `You are a senior product manager.
 
-Classify current intent as one of:
-- problem
-- solution
-- metrics
-- unclear
+Rules:
+* Do NOT give generic advice
+* Challenge assumptions
+* Identify missing thinking
+* Be sharp and concise
 
-Based on the active sentence and active block, return concise adaptive suggestions.
+User is currently in: ${stage} stage.
+
+Progress state:
+- hasProblem: ${context.documentIntent === "retention" ? "true" : "false"}
+- hasSolution: ${context.documentIntent === "onboarding" ? "true" : "false"}
+- hasMetrics: ${context.documentIntent === "metrics" ? "true" : "false"}
 
 Preference signals:
-- Previously accepted suggestion styles: ${acceptedExamples}
-- Previously dismissed suggestion styles: ${dismissedExamples}
+- Previously accepted: ${acceptedExamples}
+- Previously dismissed: ${dismissedExamples}
 
-Return JSON only:
+Based on this, provide the next logical steps.
+
+Return JSON:
 {
-  "type": "problem | solution | metrics | unclear",
-  "suggestions": [
-    "short suggestion 1",
-    "short suggestion 2",
-    "short suggestion 3"
-  ]
+  "stage": "${stage}",
+  "next_steps": ["...", "..."]
 }
 
 Rules:
-- suggestions should be actionable and under 120 chars each
-- avoid repeating dismissed styles
-- no markdown
-- max 3 suggestions`;
+* Be concise
+* Avoid generic advice
+* Focus on progression
+* Return 2-3 steps max
+* Do not include markdown`;
 
-  const raw = await callAI(prompt, `Active sentence:\n${context.sentence}\n\nActive block:\n${context.block}`);
+  const raw = await callAI(
+    prompt,
+    [
+      `Document intent: ${context.documentIntent}`,
+      `Section: ${context.section || "none"}`,
+      `Active sentence: ${context.sentence || "none"}`,
+      `Active block: ${context.block || "none"}`,
+    ].join("\n")
+  );
   const parsed = parseJsonPayload(raw) as Partial<InlineSuggestionPayload>;
-  const allowedTypes: InlineSuggestionPayload["type"][] = ["problem", "solution", "metrics", "unclear"];
-  const type = allowedTypes.includes(parsed.type as InlineSuggestionPayload["type"]) ? parsed.type as InlineSuggestionPayload["type"] : "unclear";
+  const allowedStages: InlineSuggestionPayload["stage"][] = ["problem", "solution", "metrics", "exploration"];
+  const parsedStage = allowedStages.includes(parsed.stage as InlineSuggestionPayload["stage"]) ? parsed.stage as InlineSuggestionPayload["stage"] : stage;
 
-  const suggestions = Array.isArray(parsed.suggestions)
-    ? parsed.suggestions
+  const nextSteps = Array.isArray(parsed.next_steps)
+    ? parsed.next_steps
         .filter((item): item is string => typeof item === "string")
         .map((item) => item.trim())
         .filter((item) => item.length > 0)
         .slice(0, 3)
     : [];
 
-  if (suggestions.length > 0) {
-    return { type, suggestions };
+  if (nextSteps.length > 0) {
+    return { stage: parsedStage, next_steps: nextSteps };
   }
 
   return {
-    type: "unclear",
-    suggestions: [
-      "Clarify who this is for and what changes for them.",
-      "Add one measurable outcome to anchor the idea.",
-      "State the next concrete product decision.",
+    stage: parsedStage,
+    next_steps: [
+      parsedStage === "problem" ? "What problem are you solving?" : "What is the user decision you are guiding?",
+      parsedStage === "metrics" ? "Do you have a baseline and target metric?" : "How will you know this matters?",
+      parsedStage === "solution" ? "What assumption needs validation first?" : "What is the next concrete product decision?",
     ],
   };
 };
+
+export const generateNextSteps = async (context: string, progress?: ProgressState): Promise<InlineSuggestionPayload> => {
+  const stage = detectThinkingStage(context);
+  const progressHint = progress
+    ? `\nProgress history:\n- hasProblem: ${progress.hasProblem}\n- hasSolution: ${progress.hasSolution}\n- hasMetrics: ${progress.hasMetrics}\n`
+    : "";
+
+  const prompt = `
+You are a senior product manager guiding structured thinking.
+
+User is currently in: ${stage} stage.
+${progressHint}
+Based on this, provide the next logical steps.
+
+Rules:
+* Be concise
+* Avoid generic advice
+* Focus on progression
+
+Return JSON:
+{
+  "stage": "${stage}",
+  "next_steps": ["...", "..."]
+}
+`;
+
+  const res = await callAI(prompt, context);
+  const parsed = parseJsonPayload(res) as Partial<InlineSuggestionPayload>;
+  const next_steps = Array.isArray(parsed.next_steps)
+    ? parsed.next_steps.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean).slice(0, 3)
+    : [];
+
+  return {
+    stage: parsed.stage && ["problem", "solution", "metrics", "exploration"].includes(parsed.stage) ? parsed.stage as InlineSuggestionPayload["stage"] : stage,
+    next_steps: next_steps.length > 0 ? next_steps : [
+      stage === "problem" ? "What problem are you solving?" : "What is the next logical product question?",
+      stage === "metrics" ? "What metric should change first?" : "How will you measure success?",
+    ],
+  };
+};
+
+export const generateInlineSuggestionForAnticipation = generateNextSteps;
 
 export const extractInsightsAction = async (userId: string, docContent: unknown) => {
   const context = tipTapToText(docContent);

@@ -24,20 +24,20 @@ export function InlineSuggestion({
   }
 
   const typeConfig = {
-    problem: { label: "Problem Insight", icon: Target },
-    solution: { label: "Solution Risk", icon: AlertTriangle },
-    metrics: { label: "Metric Suggestion", icon: LineChart },
-    unclear: { label: "Clarify Thought", icon: HelpCircle },
+    problem: { label: "Problem Stage", icon: Target },
+    solution: { label: "Solution Stage", icon: AlertTriangle },
+    metrics: { label: "Metrics Stage", icon: LineChart },
+    exploration: { label: "Exploration Stage", icon: HelpCircle },
   } as const;
 
-  const suggestionType = suggestion?.type ?? "unclear";
+  const suggestionType = suggestion?.stage ?? "exploration";
   const TypeIcon = typeConfig[suggestionType].icon;
-  const rows = suggestion?.suggestions ?? [];
+  const rows = suggestion?.next_steps ?? [];
   const visibleRows = isExpanded ? rows : rows.slice(0, 1);
 
   return (
     <div
-      className="pointer-events-auto absolute z-30 w-[min(420px,calc(100%-2rem))] rounded-xl border border-border/80 bg-background/95 p-3 shadow-lg backdrop-blur-sm"
+      className="pointer-events-auto absolute z-30 w-[min(420px,calc(100%-2rem))] rounded-xl border border-border/80 bg-background/95 p-3 shadow-lg backdrop-blur-sm animate-in fade-in slide-in-from-bottom-1 duration-150 opacity-90 hover:opacity-100"
       style={{ left: `${position.x}px`, top: `${position.y}px` }}
       role="status"
       aria-live="polite"
@@ -51,10 +51,10 @@ export function InlineSuggestion({
         </div>
       ) : suggestion ? (
         <>
-          <div className="space-y-2 text-[12px] leading-relaxed text-muted-foreground">
+          <div className="space-y-2 border-l-2 border-primary/15 pl-2 text-[12px] leading-relaxed text-muted-foreground">
             <p className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground/80">
               <TypeIcon className="h-3.5 w-3.5 text-primary/80" />
-              {typeConfig[suggestionType].label}
+              → You are in {typeConfig[suggestionType].label.toLowerCase()}
             </p>
             <ul className="space-y-1.5">
               {visibleRows.map((row, index) => (

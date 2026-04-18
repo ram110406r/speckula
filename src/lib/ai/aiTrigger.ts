@@ -1,25 +1,31 @@
-import { extractSmartContext, type SmartContextWindow } from "./aiContext";
+import { extractHierarchicalContext, type HierarchicalContext } from "./aiContext";
 import {
-  generateInlineSuggestion,
+  generateNextSteps,
   type InlineLearningProfile,
   type InlineSuggestionPayload,
 } from "./actions";
+import { shouldShowNextSteps } from "./aiFilter";
+import { getProgress, updateProgress } from "./progressTracker";
+import { prioritizeSteps } from "./priorityEngine";
 
 interface TriggerParams {
   text: string;
   cursorPos: number;
   learning?: InlineLearningProfile;
-  onSuggestion: (result: { suggestion: InlineSuggestionPayload; context: SmartContextWindow; contextHash: string } | null) => void;
+  onSuggestion: (result: { suggestion: InlineSuggestionPayload; context: HierarchicalContext; contextHash: string } | null) => void;
   onStart?: () => void;
   onError?: (error: unknown) => void;
 }
 
 const INLINE_AI_DEBOUNCE_MS = 800;
+const THINKING_PAUSE_MS = 1200;
 const MIN_CONTEXT_LENGTH = 40;
 
 let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 let requestId = 0;
 let lastHash = "";
+let lastEditAt = 0;
+let lastTextSnapshot = "";
 
 function stableHash(value: string): string {
   let hash = 5381;
@@ -37,35 +43,66 @@ export function cancelAISuggestionTrigger() {
   requestId++;
 }
 
+function isEndOfThought(text: string, pauseTime: number) {
+  return text.endsWith(".") || text.endsWith("?") || text.endsWith("!") || text.endsWith("\n") || pauseTime > THINKING_PAUSE_MS;
+}
+
 export function triggerAISuggestion({ text, cursorPos, learning, onSuggestion, onStart, onError }: TriggerParams) {
+  lastEditAt = Date.now();
+  lastTextSnapshot = text;
+
   if (timeoutHandle) {
     clearTimeout(timeoutHandle);
   }
 
-  const context = extractSmartContext(text, cursorPos);
+  const context = extractHierarchicalContext(text, cursorPos);
   if ((context.block || context.sentence).length < MIN_CONTEXT_LENGTH) {
     onSuggestion(null);
     return;
   }
 
   const currentHash = stableHash(context.contextKey);
-  if (currentHash === lastHash) {
-    return;
-  }
 
-  timeoutHandle = setTimeout(async () => {
+  const run = async () => {
+    const pauseTime = Date.now() - lastEditAt;
+    if (!isEndOfThought(lastTextSnapshot, pauseTime)) {
+      const remainingDelay = Math.max(0, THINKING_PAUSE_MS - pauseTime);
+      timeoutHandle = setTimeout(run, remainingDelay || INLINE_AI_DEBOUNCE_MS);
+      return;
+    }
+
+    if (currentHash === lastHash) {
+      return;
+    }
+
     const activeRequest = ++requestId;
     onStart?.();
 
     try {
-      const suggestion = await generateInlineSuggestion(context, learning);
+      const progress = updateProgress(context.block || context.sentence || text);
+      const suggestion = await generateNextSteps(context.block || context.sentence || text, progress);
       if (activeRequest !== requestId) return;
+      if (!shouldShowNextSteps(suggestion)) {
+        onSuggestion(null);
+        return;
+      }
+
       lastHash = currentHash;
-      onSuggestion({ suggestion, context, contextHash: currentHash });
+      const prioritized = prioritizeSteps(suggestion.next_steps);
+      onSuggestion({
+        suggestion: {
+          stage: suggestion.stage,
+          next_steps: [...prioritized.high_priority, ...prioritized.medium].filter(Boolean),
+        },
+        context,
+        contextHash: currentHash,
+      });
     } catch (error) {
       if (activeRequest !== requestId) return;
       onError?.(error);
       onSuggestion(null);
     }
-  }, INLINE_AI_DEBOUNCE_MS);
+  };
+
+  timeoutHandle = setTimeout(run, INLINE_AI_DEBOUNCE_MS);
 }

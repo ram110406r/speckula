@@ -19,6 +19,7 @@ import {
   type InlineSuggestionPayload,
 } from '@/lib/ai/actions';
 import { triggerAISuggestion, cancelAISuggestionTrigger } from '@/lib/ai/aiTrigger';
+import { prioritizeSteps } from '@/lib/ai/priorityEngine';
 import { InlineSuggestion } from './InlineSuggestion';
 
 const INLINE_AI_LEARNING_KEY = "buildcase-inline-ai-learning-v1";
@@ -136,8 +137,18 @@ export function TipTapEditor() {
     const suggestionText = inlineSuggestion.suggestions[0];
     if (!suggestionText) return;
 
-    const insertion = `\n\n${suggestionText}\n`;
-    editor.chain().focus().insertContent(insertion).run();
+    const replacement = inlineSuggestion.stage === "problem" || inlineSuggestion.stage === "metrics"
+      ? `${suggestionText}.`
+      : suggestionText;
+
+    const { from, to } = editor.state.selection;
+    const hasSelection = from !== to;
+
+    if (hasSelection) {
+      editor.chain().focus().insertContentAt({ from, to }, replacement).run();
+    } else {
+      editor.chain().focus().insertContentAt(from, `${replacement} `).run();
+    }
 
     const current = learningRef.current;
     persistLearningState({
@@ -264,7 +275,10 @@ export function TipTapEditor() {
 
           setIsInlineThinking(false);
           activeInlineHashRef.current = result.contextHash;
-          setInlineSuggestion(result.suggestion);
+          setInlineSuggestion({
+            stage: result.suggestion.stage,
+            next_steps: [...prioritizeSteps(result.suggestion.next_steps).high_priority, ...prioritizeSteps(result.suggestion.next_steps).medium],
+          });
         },
         onError: (error) => {
           console.error("Inline suggestion failed:", error);
