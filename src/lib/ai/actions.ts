@@ -67,42 +67,67 @@ function tipTapToText(json: unknown): string {
   return text;
 }
 
-async function getAuthToken() {
+async function getAuthToken(forceRefresh = false) {
   const currentUser = auth.currentUser;
   if (!currentUser) {
     throw new Error("Authentication required.");
   }
 
-  return currentUser.getIdToken();
+  return currentUser.getIdToken(forceRefresh);
 }
 
 async function callAI(prompt: string, context: string) {
-  const token = await getAuthToken();
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      messages: [
-        { 
-          role: "system", 
-          content: "You are an expert Product Manager. Use the provided product notes to fulfill the user request. Respond ONLY with the requested data in the specified format." 
-        },
-        { 
-          role: "user", 
-          content: `Product Notes:\n${context}\n\nTask: ${prompt}` 
-        }
-      ]
-    }),
-  });
+  const maxAttempts = 2;
 
-  if (!response.ok) throw new Error("AI call failed");
-  
-  // We handle non-streaming for actions to get a clean structured result
-  const raw = await response.text();
-  return raw;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const token = await getAuthToken(attempt > 0);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "system",
+              content: "You are an expert Product Manager. Use the provided product notes to fulfill the user request. Respond ONLY with the requested data in the specified format."
+            },
+            {
+              role: "user",
+              content: `Product Notes:\n${context}\n\nTask: ${prompt}`
+            }
+          ]
+        }),
+        signal: controller.signal,
+      });
+
+      if (response.status === 401 && attempt === 0) {
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => "");
+        throw new Error(`AI call failed (${response.status}): ${errorBody || response.statusText}`);
+      }
+
+      // We handle non-streaming for actions to get a clean structured result
+      return await response.text();
+    } catch (error) {
+      const isAbortError = error instanceof DOMException && error.name === "AbortError";
+      if (attempt === maxAttempts - 1 || isAbortError) {
+        throw error;
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  throw new Error("AI call failed.");
 }
 
 function tryParseJson(candidate: string): unknown | null {

@@ -39,8 +39,20 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    if (!process.env.GROQ_API_KEY) {
+      throw new Error("Missing Groq configuration.");
+    }
+
     await verifyFirebaseToken(req.headers.get("authorization"));
-    const { messages } = await req.json();
+    const body = await req.json().catch(() => null);
+    const messages = body && typeof body === "object" ? (body as { messages?: unknown }).messages : null;
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return new Response(JSON.stringify({ error: "Invalid request payload." }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     const result = streamText({
       model: groq('llama-3.3-70b-versatile'),
@@ -58,9 +70,13 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
-    console.error('AI Error:', error);
-    return new Response(JSON.stringify({ error: "Intelligence Engine encountered an error." }), {
-      status: 500,
+    const message = error instanceof Error ? error.message : String(error);
+    const status = message.includes("Missing authorization") || message.includes("Invalid Firebase token") ? 401 :
+      message.includes("Invalid request payload") ? 400 : 500;
+
+    console.error('AI Error:', message);
+    return new Response(JSON.stringify({ error: message }), {
+      status,
       headers: { 'Content-Type': 'application/json' },
     });
   }

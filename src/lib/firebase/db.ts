@@ -99,34 +99,54 @@ const userDocRef = (userId: string, docId: string) => doc(db, "users", userId, "
 // --- DOCUMENT ACTIONS ---
 
 export const createDocument = async (userId: string, title: string = "Untitled Document") => {
-  const ref = userDocsCollection(userId);
-  const docRef = await addDoc(ref, {
-    title,
-    content: {
-      type: "doc",
-      content: [{ type: "paragraph" }],
-    },
-    userId,
-    lastInsightExtractionHash: null,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  return docRef.id;
+  try {
+    const ref = userDocsCollection(userId);
+    const docRef = await addDoc(ref, {
+      title,
+      content: {
+        type: "doc",
+        content: [{ type: "paragraph" }],
+      },
+      userId,
+      lastInsightExtractionHash: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (error) {
+    logFirestorePermissionHint("createDocument", error);
+    throw error;
+  }
 };
 
 export const saveDocument = async (userId: string, docId: string, data: Partial<BuildcaseDocument>) => {
-  const ref = userDocRef(userId, docId);
-  await setDoc(ref, { ...data, userId, updatedAt: serverTimestamp() }, { merge: true });
+  try {
+    const ref = userDocRef(userId, docId);
+    await setDoc(ref, { ...data, userId, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("saveDocument", error);
+    throw error;
+  }
 };
 
 export const getDocument = async (userId: string, docId: string) => {
-  const ref = userDocRef(userId, docId);
-  const snap = await getDoc(ref);
-  return snap.exists() ? ({ id: snap.id, ...snap.data() } as BuildcaseDocument) : null;
+  try {
+    const ref = userDocRef(userId, docId);
+    const snap = await getDoc(ref);
+    return snap.exists() ? ({ id: snap.id, ...snap.data() } as BuildcaseDocument) : null;
+  } catch (error) {
+    logFirestorePermissionHint("getDocument", error);
+    throw error;
+  }
 };
 
 export const deleteDocument = async (userId: string, docId: string) => {
-  await deleteDoc(userDocRef(userId, docId));
+  try {
+    await deleteDoc(userDocRef(userId, docId));
+  } catch (error) {
+    logFirestorePermissionHint("deleteDocument", error);
+    throw error;
+  }
 };
 
 export const getUserDocuments = async (userId: string) => {
@@ -180,9 +200,14 @@ export const saveDecision = async (userId: string, data: Omit<DecisionRecord, "u
 };
 
 export const getDecisions = async (userId: string) => {
-  const q = query(userDecisionsCollection(userId), orderBy("createdAt", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as DecisionRecord[];
+  try {
+    const q = query(userDecisionsCollection(userId), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as DecisionRecord[];
+  } catch (error) {
+    logFirestorePermissionHint("getDecisions", error);
+    throw error;
+  }
 };
 
 // --- PRD ACTIONS ---
@@ -241,20 +266,39 @@ export const getTasks = async (userId: string) => {
 };
 
 export const getTaskById = async (userId: string, taskId: string): Promise<ExecutionTask | null> => {
-  const ref = doc(db, "users", userId, "tasks", taskId);
-  const snap = await getDoc(ref);
-  return snap.exists() ? ({ id: snap.id, ...snap.data() } as ExecutionTask) : null;
+  try {
+    const ref = doc(db, "users", userId, "tasks", taskId);
+    const snap = await getDoc(ref);
+    return snap.exists() ? ({ id: snap.id, ...snap.data() } as ExecutionTask) : null;
+  } catch (error) {
+    logFirestorePermissionHint("getTaskById", error);
+    throw error;
+  }
 };
 
 export const getTasksByPRD = async (userId: string, prdId: string): Promise<ExecutionTask[]> => {
-  const q = query(
-    userTasksCollection(userId),
-    orderBy("priority", "desc"),
-    orderBy("updatedAt", "desc")
-  );
-  const snap = await getDocs(q);
-  const tasks = snap.docs.map(d => ({ id: d.id, ...d.data() } as ExecutionTask));
-  return tasks.filter(t => t.prdId === prdId);
+  try {
+    const tasks = await getTasks(userId);
+    const priorityRank: Record<NonNullable<ExecutionTask["priority"]>, number> = {
+      high: 0,
+      medium: 1,
+      low: 2,
+    };
+
+    return tasks
+      .filter((task) => task.prdId === prdId)
+      .sort((left, right) => {
+        const priorityDelta = priorityRank[left.priority] - priorityRank[right.priority];
+        if (priorityDelta !== 0) return priorityDelta;
+
+        const leftUpdated = left.updatedAt?.toMillis?.() ?? 0;
+        const rightUpdated = right.updatedAt?.toMillis?.() ?? 0;
+        return rightUpdated - leftUpdated;
+      });
+  } catch (error) {
+    logFirestorePermissionHint("getTasksByPRD", error);
+    throw error;
+  }
 };
 
 // --- USER INITIALIZATION ---
@@ -262,16 +306,24 @@ export const getTasksByPRD = async (userId: string, prdId: string): Promise<Exec
 export const initializeUser = async (userId: string) => {
   try {
     const userRef = doc(db, "users", userId);
-    
-    // Use merge to create or update, avoiding permission issues with checking existence first
-    await setDoc(userRef, {
-      userId,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      await setDoc(userRef, {
+        userId,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } else {
+      await setDoc(userRef, {
+        userId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
     
     console.log(`[initializeUser] Initialized user document for ${userId}`);
   } catch (error) {
+    logFirestorePermissionHint("initializeUser", error);
     console.error(`[initializeUser] Failed to initialize user ${userId}:`, error);
     throw error;
   }
