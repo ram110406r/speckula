@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore, type AppView } from "@/store/useAppStore";
 import { getUserDocuments, createDocument, deleteDocument } from "@/lib/firebase/db";
+import { Moon, SunMedium } from "lucide-react";
 
 const navItems: { icon: React.ElementType; label: string; view: AppView }[] = [
   { icon: FileText, label: "Editor", view: "editor" },
@@ -32,6 +33,22 @@ export function SidebarNav() {
   const { user, loginWithGoogle, logout, loading } = useAuth();
   const { activeView, setActiveView, documents, setDocuments, currentDocId, setCurrentDocId } = useAppStore();
   const [isCreating, setIsCreating] = React.useState(false);
+  const [isDarkMode, setIsDarkMode] = React.useState(false);
+
+  React.useEffect(() => {
+    const stored = window.localStorage.getItem("buildcase-theme");
+    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const nextIsDark = stored ? stored === "dark" : systemDark;
+    setIsDarkMode(nextIsDark);
+    document.documentElement.classList.toggle("dark", nextIsDark);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextIsDark = !isDarkMode;
+    setIsDarkMode(nextIsDark);
+    document.documentElement.classList.toggle("dark", nextIsDark);
+    window.localStorage.setItem("buildcase-theme", nextIsDark ? "dark" : "light");
+  };
 
   // Sync Documents from Firestore
   useEffect(() => {
@@ -217,7 +234,17 @@ export function SidebarNav() {
               <Button
                 variant="ghost"
                 className="h-8 flex-1 justify-start label-system text-[12px] hover:text-primary hover:bg-transparent px-0"
+                onClick={toggleTheme}
+                type="button"
+              >
+                {isDarkMode ? <SunMedium className="mr-2 h-3.5 w-3.5" /> : <Moon className="mr-2 h-3.5 w-3.5" />}
+                {isDarkMode ? "Light Mode" : "Dark Mode"}
+              </Button>
+              <Button
+                variant="ghost"
+                className="h-8 flex-1 justify-start label-system text-[12px] hover:text-primary hover:bg-transparent px-0"
                 onClick={logout}
+                type="button"
               >
                 <LogOut className="mr-2 h-3.5 w-3.5" />
                 Sign Out

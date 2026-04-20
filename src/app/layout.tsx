@@ -26,8 +26,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning className={`${inter.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+              try {
+                const stored = localStorage.getItem('buildcase-theme');
+                const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const isDark = stored ? stored === 'dark' : systemDark;
+                document.documentElement.classList.toggle('dark', isDark);
+              } catch (error) {}
+            })();`,
+          }}
+        />
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </AuthProvider>

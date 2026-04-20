@@ -130,6 +130,10 @@
     @apply font-mono text-[12px] uppercase tracking-[0.04em] tabular-nums;
     color: rgba(35, 38, 43, 0.7);
   }
+
+  .dark .label-system {
+    color: rgba(227, 226, 230, 0.72);
+  }
   
   .body-large { @apply text-[16px] leading-[1.6]; }
   .body-small { @apply text-[14px] leading-[1.6]; }
