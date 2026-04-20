@@ -129,7 +129,7 @@ export function InsightsView() {
             <Lightbulb className="h-8 w-8 text-muted-foreground/20 mb-4" />
             <p className="label-system text-[12px] mb-2">System Idle</p>
             <p className="text-xs text-muted-foreground/60 max-w-sm">
-              Use the **Extract with AI** tool in the editor to populate this feed with structured product notes.
+              Use the <span className="font-semibold text-foreground">Extract with AI</span> tool in the editor to populate this feed with structured product notes.
             </p>
           </div>
         ) : (
@@ -140,7 +140,7 @@ export function InsightsView() {
               return (
                 <div
                   key={insight.id}
-                  className={`rounded-xl border p-6 space-y-4 cursor-pointer transition-all duration-300 shadow-sm hover:shadow-md ${cfg.bg}`}
+                  className={`group rounded-xl border p-6 space-y-4 cursor-default transition-all duration-300 shadow-sm hover:shadow-md ${cfg.bg}`}
                 >
                   <div className="flex items-center gap-2">
                     <Icon className={`h-3.5 w-3.5 shrink-0 ${cfg.color}`} />

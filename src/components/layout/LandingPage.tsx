@@ -9,6 +9,10 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 export function LandingPage() {
   const { loginWithGoogle, loading } = useAuth();
 
+  const scrollToSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <div className="min-h-screen w-full bg-background text-foreground flex flex-col items-center p-6 selection:bg-primary/10">
       {/* Navigation */}
@@ -26,7 +30,7 @@ export function LandingPage() {
           <span className="font-semibold text-lg tracking-tight text-foreground">Buildcase</span>
         </div>
         <div className="flex items-center gap-6">
-          <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden md:block">
+          <button type="button" onClick={() => scrollToSection("philosophy")} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden md:block">
             Methodology
           </button>
           <Button 
@@ -71,6 +75,8 @@ export function LandingPage() {
             size="lg" 
             variant="secondary"
             className="h-11 px-8 label-system text-[12px] bg-white border border-border shadow-sm hover:bg-secondary/20 transition-all"
+            type="button"
+            onClick={() => scrollToSection("features")}
           >
             View Demo
           </Button>
@@ -78,7 +84,7 @@ export function LandingPage() {
       </header>
 
       {/* Feature Section */}
-      <section className="relative z-10 w-full max-w-6xl pb-32">
+      <section id="features" className="relative z-10 w-full max-w-6xl pb-32">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <FeatureCard 
             icon={<Lightbulb className="h-6 w-6" />}
@@ -99,7 +105,7 @@ export function LandingPage() {
       </section>
 
       {/* Philosophy Section */}
-      <section className="w-full bg-white border-y border-border py-24 flex flex-col items-center">
+      <section id="philosophy" className="w-full bg-white border-y border-border py-24 flex flex-col items-center">
         <div className="max-w-4xl text-center space-y-8 px-6">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">The Decision Instrument Philosophy</h2>
           <p className="text-lg text-muted-foreground leading-relaxed">
@@ -120,10 +126,10 @@ export function LandingPage() {
           <ShieldCheck className="h-4 w-4 text-primary/60" />
           <span>Secure with Google Cloud Identity & Private Workspaces</span>
         </div>
-        <div className="flex items-center gap-8 label-system text-[12px]">
-          <a href="#" className="hover:text-primary transition-colors">Privacy</a>
-          <a href="#" className="hover:text-primary transition-colors">Terms</a>
-          <a href="#" className="hover:text-primary transition-colors">Twitter</a>
+        <div className="flex items-center gap-8 label-system text-[12px] text-muted-foreground">
+          <span>Privacy by design</span>
+          <span>Terms coming soon</span>
+          <span>Social links in progress</span>
         </div>
         <p className="label-system text-[12px] lowercase opacity-40">
           © 2026 Buildcase. Minimal. Calm. Precise.
