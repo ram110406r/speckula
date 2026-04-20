@@ -4,7 +4,6 @@ import React from "react";
 import Link from "next/link";
 import { ArrowLeft, Copy, MessageSquare, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { addCaseComment, getCaseComments, getPublicCase, updatePublicCase, type CaseComment, type PublicCase } from "@/lib/firebase/db";

@@ -58,7 +58,6 @@ export function PlatformView() {
   const { user } = useAuth();
   const { setActiveView } = useAppStore();
   const [activeTab, setActiveTab] = React.useState<PlatformTab>("portfolio");
-  const [profile, setProfile] = React.useState<PublicProfile | null>(null);
   const [ownCases, setOwnCases] = React.useState<(PublicCase & { id: string })[]>([]);
   const [publicCases, setPublicCases] = React.useState<(PublicCase & { id: string })[]>([]);
   const [profiles, setProfiles] = React.useState<(PublicProfile & { id: string })[]>([]);
@@ -92,7 +91,6 @@ export function PlatformView() {
         getDecisions(user.uid),
       ]);
 
-      setProfile(profileData);
       setOwnCases(ownCaseData);
       setPublicCases(publicCaseData);
       setProfiles(publicProfileData);

@@ -5,7 +5,7 @@ import {
   type InlineSuggestionPayload,
 } from "./actions";
 import { shouldShowNextSteps } from "./aiFilter";
-import { getProgress, updateProgress } from "./progressTracker";
+import { updateProgress } from "./progressTracker";
 import { prioritizeSteps } from "./priorityEngine";
 import { extractEntities, detectGaps } from "./aiContext";
 
@@ -48,7 +48,7 @@ function isEndOfThought(text: string, pauseTime: number) {
   return text.endsWith(".") || text.endsWith("?") || text.endsWith("!") || text.endsWith("\n") || pauseTime > THINKING_PAUSE_MS;
 }
 
-export function triggerAISuggestion({ text, cursorPos, learning, onSuggestion, onStart, onError }: TriggerParams) {
+export function triggerAISuggestion({ text, cursorPos, onSuggestion, onStart, onError }: TriggerParams) {
   lastEditAt = Date.now();
   lastTextSnapshot = text;
 

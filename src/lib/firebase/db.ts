@@ -6,6 +6,7 @@ import {
   getDocs, 
   deleteDoc,
   query,
+  where,
   orderBy, 
   serverTimestamp,
   addDoc,
@@ -364,33 +365,17 @@ export const initializeUser = async (userId: string) => {
     const userRef = doc(db, "users", userId);
     const profileRef = publicProfileRef(userId);
 
-    const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      await setDoc(userRef, {
-        userId,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-    } else {
-      await setDoc(userRef, {
-        userId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    }
+    // Avoid read-before-write during initial sign-in because auth propagation can be briefly delayed.
+    // A merge upsert minimizes first-load permission races and keeps existing fields untouched.
+    await setDoc(userRef, {
+      userId,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
 
-    const profileSnap = await getDoc(profileRef);
-    if (!profileSnap.exists()) {
-      await setDoc(profileRef, {
-        userId,
-        name: "",
-        bio: "",
-        skills: [],
-        publicCases: [],
-        scoreAverage: 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    }
+    await setDoc(profileRef, {
+      userId,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
     
     console.log(`[initializeUser] Initialized user document for ${userId}`);
   } catch (error) {
@@ -442,9 +427,9 @@ export const getPublicProfiles = async () => {
 
 export const getPublicCases = async () => {
   try {
-    const snap = await getDocs(publicCasesCollection());
-    const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (PublicCase & { id: string })[];
-    return entries.filter((entry) => entry.visibility === "public");
+    const q = query(publicCasesCollection(), where("visibility", "==", "public"));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (PublicCase & { id: string })[];
   } catch (error) {
     console.error("Error fetching public cases:", error);
     return [];
@@ -453,9 +438,11 @@ export const getPublicCases = async () => {
 
 export const getPublicCasesByUser = async (userId: string, includePrivate = false) => {
   try {
-    const snap = await getDocs(publicCasesCollection());
-    const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (PublicCase & { id: string })[];
-    return entries.filter((entry) => entry.userId === userId && (includePrivate || entry.visibility === "public"));
+    const q = includePrivate
+      ? query(publicCasesCollection(), where("userId", "==", userId))
+      : query(publicCasesCollection(), where("userId", "==", userId), where("visibility", "==", "public"));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (PublicCase & { id: string })[];
   } catch (error) {
     console.error("Error fetching user public cases:", error);
     return [];
@@ -558,9 +545,9 @@ export const saveWorkspace = async (userId: string, name: string, cases: string[
 
 export const getWorkspacesForUser = async (userId: string) => {
   try {
-    const snap = await getDocs(workspacesCollection());
-    const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (TeamWorkspace & { id: string })[];
-    return entries.filter((workspace) => Array.isArray(workspace.memberIds) && workspace.memberIds.includes(userId));
+    const q = query(workspacesCollection(), where("memberIds", "array-contains", userId));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (TeamWorkspace & { id: string })[];
   } catch (error) {
     console.error("Error fetching workspaces:", error);
     return [];
