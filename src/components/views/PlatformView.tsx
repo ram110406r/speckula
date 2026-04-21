@@ -126,7 +126,7 @@ export function PlatformView() {
   const recruiterMatches = profiles.filter((item) => {
     if (!recruiterQuery.trim()) return true;
     const query = recruiterQuery.toLowerCase();
-    return item.name.toLowerCase().includes(query) || item.skills.some((skill) => skill.toLowerCase().includes(query));
+    return (item.name || "").toLowerCase().includes(query) || (item.skills || []).some((skill) => skill.toLowerCase().includes(query));
   });
 
   const handleSaveProfile = async () => {
@@ -647,9 +647,9 @@ function WorkspaceSection({
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-semibold">{workspace.name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{workspace.members.length} members, {workspace.cases.length} cases</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{(workspace.members || []).length} members, {(workspace.cases || []).length} cases</p>
                   </div>
-                  <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{workspace.members.find((member) => member.userId === userId)?.role ?? "viewer"}</span>
+                  <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{(workspace.members || []).find((member) => member.userId === userId)?.role ?? "viewer"}</span>
                 </div>
                 <div className="mt-4 flex gap-2">
                   <Input value={inviteTarget} onChange={(event) => onInviteTargetChange(event.target.value)} placeholder="Invite by userId" />
@@ -710,7 +710,7 @@ function RecruiterSection({
                     <p className="text-sm font-semibold">{profile.name || profile.userId}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{profile.bio || "No bio yet."}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {profile.skills.slice(0, 4).map((skill) => (
+                      {(profile.skills || []).slice(0, 4).map((skill) => (
                         <span key={skill} className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{skill}</span>
                       ))}
                     </div>
