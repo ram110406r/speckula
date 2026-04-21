@@ -1,42 +1,48 @@
 # Buildcase — Product Intelligence Workspace
 
-Buildcase is an AI-native workspace designed for product managers and founders to transform raw ideas into actionable strategy. It bridges the gap between disorganized notes and formal product documentation.
+Buildcase is an AI-native workspace designed for product managers and founders. Rather than just being another documentation tool, it acts as the **"Cursor for Product Managers"** — bridging the gap between raw product discovery and structured execution in one continuous, intelligent workflow.
 
-## 🚀 Key Features
+## 🚀 Current Capabilities
 
-### 1. AI-Powered Workspace (The Editor)
-- **Fluid Writing Experience**: A sleek, distraction-free TipTap editor designed for product thinking.
-- **Auto-Save Persistence**: Real-time syncing to Firestore ensures you never lose a note.
-- **Multi-Doc Support**: Manage multiple documents for different projects, features, or user research sessions.
+Buildcase is currently built as a Minimum Viable Product (MVP) focusing on speed, clarity, and AI-driven workflows. It can currently perform the following:
 
-### 2. Structured Intelligence Views
-- **💡 Insights Engine**: Extracts user pain points, market patterns, and user segments from your raw notes. Categorizes them automatically for easy filtering.
-- **📄 PRD Generator**: One-click transformation of brainstorming notes into a professional Product Requirement Document (Markdown-ready).
-- **✅ Execution Tasks**: Suggests prioritized 90-day task lists and milestones based on the context of your current document.
+### 1. Intelligent AI-Powered Workspace
+- **Distraction-Free Editor**: A sleek TipTap-based rich text workspace built for product thinking.
+- **Inline AI Suggestions**: Context-aware AI suggestions directly alongside your writing to refine text, challenge assumptions, and expand on ideas.
+- **Auto-Sync Persistence**: Firebase-backed real-time syncing for seamless multi-document organization.
 
-### 3. AI Copilot (The Panel)
-- **Context-Aware Assistance**: Chat with the Groq-powered AI model about your document.
-- **Action Triggers**: Quickly generate content or get feedback on your ideas in real-time.
+### 2. Structured Intelligence Engines
+Instead of manually synthesizing data, Buildcase's engines do the heavy lifting automatically:
+- **💡 Insights Engine**: Extracts structured insights—such as user pain points, behavioral patterns, and user segments—from raw braindumps or user interviews.
+- **🧭 Decision Engine**: Analyzes your context to suggest exactly what to build next. It provides data-backed feature suggestions, justification, priority levels, and expected impact.
+- **📄 PRD Generator**: Transforms scattered product notes into a professional, structured Product Requirements Document (PRD) in seconds.
+- **✅ Execution Tasks**: Breaks down complex PRDs and product decisions into manageable, prioritized 90-day task lists to streamline execution.
 
-### 4. Seamless Onboarding & Security
-- **Premium Landing Page**: A sleek entry point for new users highlighting key value propositions.
-- **Secure Authentication**: Integrated Google Sign-In via Firebase Auth.
-- **User-Scoped Data**: Strict Firestore Security Rules ensure your product strategy remains private and secure.
-
-## 🛠️ Technical Stack
-- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS v4.
-- **Editor**: TipTap (Headless Framework).
-- **Database**: Firebase Firestore (Real-time).
-- **Inference**: Groq API (Llama 3 / Mixtral) for ultra-fast structured extractions.
-- **State Management**: Zustand (Lightweight Global Store).
-
-## 📂 Project Structure
-- `src/components/editor`: Core writing components.
-- `src/components/views`: The structured intelligence views (Insights, PRDs, Tasks).
-- `src/components/layout`: Shell, Sidebar, and Landing Page.
-- `src/lib/ai`: Centralized AI action services and prompt engineering.
-- `src/store`: Application state for documents and UI navigation.
+### 3. AI Copilot Panel
+- **Context-Aware Chat**: A dedicated Groq-powered chat assistant that understands the document you are working on, ready to answer questions, generate content, or provide feedback on your strategy.
 
 ---
-> [!TIP]
-> **Getting Started**: Open the sidebar, create a new document, and start typing your product ideas. Then, switch to the "Insights" view and click **Extract with AI** to see the magic happen!
+
+## 🔮 Potential & Future Vision
+
+While Buildcase currently excels as a single-player product thinking environment, its potential goes far beyond individual use. The long-term vision positions Buildcase to completely replace fragmented product workflows (e.g., Jira, Notion, traditional analytics).
+
+### Phase 2: Team Collaboration & Connectivity
+- **Multiplayer Mode**: Real-time collaborative decision-making and co-authoring for product squads.
+- **Workflow Integrations**: Seamless bi-directional syncing with upstream inputs (Slack, Zendesk, Gong) and downstream execution tools (Linear, Jira, GitHub).
+
+### Phase 3: The Autonomous Product Assistant
+- **AI-Driven Iteration Loops**: Automatically tracking product performance post-launch and suggesting continuous iterations.
+- **Deep Synthesis at Scale**: Processing thousands of user feedback points or support tickets across external platforms and synthesizing them into a single coherent product strategy.
+- **Data-Driven Impact Analysis**: Connecting with tools like Mixpanel or Amplitude to validate if the PRD generated actually hit its target success metrics.
+
+---
+
+## 🛠️ Technical Stack
+
+- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS v4.
+- **Editor**: TipTap (Headless Framework).
+- **Database / Auth**: Firebase Firestore & Firebase Auth.
+- **Inference**: Groq API (Llama-3.3-70b-versatile) for lightning-fast structured extractions and reasoning.
+- **State Management**: Zustand.
+- **Design System**: Calm, minimal, professional aesthetic powered by a structured typography architecture (Inter for content, IBM Plex Mono for engineered data).
