@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 import { TipTapEditor } from "./TipTapEditor";
 import { useAppStore } from "@/store/useAppStore";
-import { Sparkles, PanelRightOpen, PanelRightClose, CircleDashed, ShieldAlert, FlaskConical, HelpCircle, Target } from "lucide-react";
+import { PanelRightOpen, PanelRightClose, CircleDashed, ShieldAlert, FlaskConical, HelpCircle, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { saveDocument } from "@/lib/firebase/db";
@@ -106,18 +106,10 @@ export function Editor() {
               {aiPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
               {aiPanelOpen ? "Hide Assistant" : "Show Assistant"}
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 text-primary hover:bg-primary/8 p-0"
-              onClick={toggleAiPanel}
-            >
-              <Sparkles className="h-4 w-4" />
-            </Button>
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
           {STRUCTURE_BLOCKS.map((block) => {
             const isActive = activeSectionId === block.id;
             const Icon = block.icon;
@@ -126,7 +118,7 @@ export function Editor() {
                 key={block.id}
                 type="button"
                 onClick={() => insertStructuredStarter(block.starter)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-all ${isActive ? "border-primary/40 bg-primary/8 text-primary shadow-sm" : "border-border/70 bg-white text-muted-foreground hover:border-primary/30 hover:text-foreground"}`}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-all ${isActive ? "border-primary/40 bg-primary/8 text-primary shadow-sm" : "border-border/70 bg-white text-muted-foreground hover:border-primary/30 hover:text-foreground"}`}
               >
                 <Icon className="h-3.5 w-3.5" />
                 {block.label}

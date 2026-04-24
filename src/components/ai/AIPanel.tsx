@@ -34,6 +34,7 @@ export function AIPanel() {
   const [input, setInput] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [showDetailedSignals, setShowDetailedSignals] = React.useState(false);
   const [signals, setSignals] = React.useState<ProactiveThinkingSignals>({ insights: [], suggestions: [], challenges: [] });
   const [featureDrafts, setFeatureDrafts] = React.useState<Record<string, string>>({});
   const [isGeneratingFeatureId, setIsGeneratingFeatureId] = React.useState<string | null>(null);
@@ -84,10 +85,13 @@ export function AIPanel() {
     return "Weak problem definition detected. Ask: Who? What behavior? What metric?";
   }, [activeContext]);
 
+  const signalCount = signals.insights.length + signals.suggestions.length + signals.challenges.length + (signals.decisions?.length ?? 0);
+
   React.useEffect(() => {
     setMessages([]);
     setInput("");
     setSignals({ insights: [], suggestions: [], challenges: [] });
+    setShowDetailedSignals(false);
     setFeatureDrafts({});
     setIsLoading(false);
     setIsAnalyzing(false);
@@ -346,15 +350,28 @@ export function AIPanel() {
         </div>
 
         <div className="rounded-lg border border-primary/20 bg-white/80 p-3 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
               <span className="label-system text-[11px] text-primary">Proactive Intelligence</span>
             </div>
-            {isAnalyzing && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/60" />}
+            <div className="flex items-center gap-2">
+              {isAnalyzing && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/60" />}
+              <button
+                type="button"
+                onClick={() => setShowDetailedSignals((prev) => !prev)}
+                className="label-system text-[10px] text-primary hover:opacity-80"
+              >
+                {showDetailedSignals ? "Hide details" : `View ${signalCount} items`}
+              </button>
+            </div>
           </div>
 
-          {signals.insights
+          {!showDetailedSignals && (
+            <p className="text-xs text-muted-foreground">AI is watching your flow and summarizing opportunities as you pause typing.</p>
+          )}
+
+          {showDetailedSignals && signals.insights
             .map((insight, idx) => ({ insight, idx, id: `insight-${idx}` }))
             .filter(({ id }) => !dismissed.has(id))
             .map(({ insight, idx, id }) => (
@@ -397,7 +414,7 @@ export function AIPanel() {
               </div>
             ))}
 
-          {signals.suggestions
+          {showDetailedSignals && signals.suggestions
             .map((s, idx) => ({ s, id: `suggestion-${idx}` }))
             .filter(({ id }) => !dismissed.has(id))
             .map(({ s, id }) => (
@@ -424,7 +441,7 @@ export function AIPanel() {
               </div>
             ))}
 
-          {signals.challenges
+          {showDetailedSignals && signals.challenges
             .map((c, idx) => ({ c, id: `challenge-${idx}` }))
             .filter(({ id }) => !dismissed.has(id))
             .map(({ c, id }) => (
@@ -451,7 +468,7 @@ export function AIPanel() {
               </div>
             ))}
 
-          {signals.decisions
+          {showDetailedSignals && signals.decisions
             ?.map((d, idx) => ({ d, id: `decision-${idx}` }))
             .filter(({ id }) => !dismissed.has(id))
             .map(({ d, id }, idx) => (
@@ -488,7 +505,7 @@ export function AIPanel() {
               </div>
             ))}
 
-          {!isAnalyzing &&
+          {showDetailedSignals && !isAnalyzing &&
             signals.insights.length === 0 &&
             signals.suggestions.length === 0 &&
             signals.challenges.length === 0 &&
@@ -497,7 +514,7 @@ export function AIPanel() {
             )}
         </div>
 
-        {signals.decisions && signals.decisions.length > 0 && (
+        {showDetailedSignals && signals.decisions && signals.decisions.length > 0 && (
           <div className="rounded-2xl border border-border/70 bg-white p-3 shadow-sm">
             <p className="label-system text-[11px] text-primary">Decision Timeline</p>
             <div className="mt-2 space-y-2">
