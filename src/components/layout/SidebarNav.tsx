@@ -1,18 +1,18 @@
 import React, { useEffect } from "react";
 import Image from "next/image";
-import { 
-  FileText, 
-  Lightbulb, 
-  CheckSquare, 
-  LayoutDashboard, 
-  LogOut, 
-  User as UserIcon, 
-  Plus, 
+import {
+  FileText,
+  Lightbulb,
+  CheckSquare,
+  LayoutDashboard,
+  LogOut,
+  User as UserIcon,
+  Plus,
   File,
   Trash2,
   Loader2,
   Compass,
-  Users
+  Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -24,36 +24,33 @@ interface GroupedNavItem {
   icon: React.ElementType;
   label: string;
   view: AppView;
-  secondary?: boolean;
 }
 
 const navGroups: { label: string; items: GroupedNavItem[] }[] = [
   {
-    label: "THINK",
+    label: "Think",
     items: [
       { icon: FileText, label: "Notes", view: "editor" },
       { icon: Lightbulb, label: "Insights", view: "insights" },
     ],
   },
   {
-    label: "DECIDE",
+    label: "Decide",
     items: [
-      { icon: Compass, label: "Decision Log", view: "decisions" },
-      { icon: Compass, label: "Tradeoffs", view: "decisions", secondary: true },
+      { icon: Compass, label: "Decisions", view: "decisions" },
     ],
   },
   {
-    label: "BUILD",
+    label: "Build",
     items: [
       { icon: LayoutDashboard, label: "PRDs", view: "prds" },
       { icon: CheckSquare, label: "Tasks", view: "tasks" },
     ],
   },
   {
-    label: "SYSTEM",
+    label: "Share",
     items: [
-      { icon: Users, label: "Integrations", view: "platform", secondary: true },
-      { icon: Users, label: "Platform", view: "platform" },
+      { icon: Share2, label: "Public Cases", view: "platform" },
     ],
   },
 ];
@@ -145,37 +142,33 @@ export function SidebarNav() {
       <div className="px-6 py-4 border-b border-sidebar-border/80">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 flex items-center justify-center">
-            <Image 
-              src="/logo.png" 
-              alt="Buildcase Logo" 
-              width={24} 
-              height={24} 
+            <Image
+              src="/logo.png"
+              alt="Buildcase Logo"
+              width={24}
+              height={24}
               className="object-contain"
             />
           </div>
-          <div className="flex flex-col">
-            <span className="font-semibold text-lg tracking-tight">Buildcase</span>
-            <span className="label-system text-[11px] normal-case">Product Intelligence Workspace</span>
-          </div>
+          <span className="font-semibold text-lg tracking-tight">Buildcase</span>
         </div>
       </div>
 
       {/* Main Navigation */}
-      <nav className="mt-2 space-y-3 px-3">
+      <nav className="mt-3 space-y-4 px-3">
         {navGroups.map((group) => (
-          <div key={group.label} className="space-y-1.5">
-            <p className="label-system px-3 text-[10px] tracking-[0.14em]">{group.label}</p>
+          <div key={group.label} className="space-y-1">
+            <p className="px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">{group.label}</p>
             {group.items.map((item) => {
               const isActive = activeView === item.view;
               return (
                 <button
                   key={`${group.label}-${item.label}`}
-                  className={`relative flex h-10 w-full items-center gap-2.5 rounded-xl px-3 text-left text-sm transition-all ${isActive ? "bg-white text-primary shadow-sm" : "text-[#5c5a52] hover:bg-white/70 hover:text-foreground"}`}
+                  className={`relative flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors ${isActive ? "bg-card text-primary" : "text-foreground/70 hover:bg-card/60 hover:text-foreground"}`}
                   onClick={() => setActiveView(item.view)}
                 >
-                  {isActive && <div className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-primary" />}
-                  <item.icon className={`h-4 w-4 shrink-0 ${item.secondary ? "opacity-75" : ""}`} />
-                  <span className={`${item.secondary ? "opacity-80" : ""}`}>{item.label}</span>
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span>{item.label}</span>
                 </button>
               );
             })}
@@ -183,11 +176,9 @@ export function SidebarNav() {
         ))}
       </nav>
 
-      <div className="flex-1 flex flex-col min-h-0 mt-3">
-        <div className="px-6 py-2.5 flex items-center justify-between group">
-          <span className="label-system text-[12px]">
-            Workspaces
-          </span>
+      <div className="flex-1 flex flex-col min-h-0 mt-4">
+        <div className="px-6 py-2 flex items-center justify-between">
+          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">Documents</span>
           <button 
             onClick={handleNewDoc}
             disabled={isCreating || !user}
@@ -197,100 +188,98 @@ export function SidebarNav() {
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar px-3">
+        <div className="flex-1 overflow-y-auto space-y-0.5 custom-scrollbar px-3 pb-2">
           {documents.map((doc) => {
             const isActive = currentDocId === doc.id;
             return (
-              <div 
+              <div
                 key={doc.id}
-                className={`group flex items-center gap-2.5 px-3 h-9 cursor-pointer transition-all relative rounded-lg ${
-                  isActive ? "bg-white text-primary font-semibold shadow-sm" : "text-[#5c5a52] hover:bg-white/70 hover:text-foreground"
+                className={`group flex items-center gap-2 px-3 h-8 cursor-pointer rounded-md transition-colors ${
+                  isActive ? "bg-card text-foreground" : "text-foreground/70 hover:bg-card/60 hover:text-foreground"
                 }`}
                 onClick={() => {
                   setCurrentDocId(doc.id);
                   setActiveView("editor");
                 }}
               >
-                {isActive && (
-                  <div className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-primary/60" />
-                )}
-                <File className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-primary/70" : "text-muted-foreground/40"}`} />
+                <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
                 <span className="text-xs truncate flex-1">{doc.title}</span>
                 <button
                   onClick={(e) => handleDeleteDoc(e, doc.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-primary transition-all"
+                  className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive transition-opacity"
+                  aria-label={`Delete ${doc.title}`}
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>
             );
           })}
-          
+
           {user && documents.length === 0 && !isCreating && (
-            <div className="px-6 py-4">
-              <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed">No active documents for this workspace.</p>
-            </div>
+            <p className="px-3 py-3 text-xs text-muted-foreground">No documents yet.</p>
           )}
         </div>
       </div>
 
       {/* User Section */}
-      <div className="mt-auto border-t border-sidebar-border/80 bg-white/45 backdrop-blur-sm">
+      <div className="mt-auto border-t border-sidebar-border/80">
         {loading ? (
-          <div className="px-6 py-6 h-16 animate-pulse bg-muted/10" />
+          <div className="px-4 py-4 h-16" />
         ) : user ? (
-          <div className="px-6 py-6 flex flex-col gap-4">
-            <div className="flex items-center gap-3">
+          <div className="px-4 py-3 flex flex-col gap-3">
+            <div className="flex items-center gap-2.5">
               {user.photoURL ? (
                 <Image
                   src={user.photoURL}
-                  alt={user.displayName || "User"}
+                  alt=""
                   width={28}
                   height={28}
-                  className="rounded-full shrink-0 ring-1 ring-border/50 shadow-sm"
+                  className="rounded-full shrink-0"
                 />
               ) : (
-                <div className="h-7 w-7 rounded-sm bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">
-                  <UserIcon className="h-4 w-4 text-primary" />
+                <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <UserIcon className="h-3.5 w-3.5 text-primary" />
                 </div>
               )}
               <div className="flex flex-col min-w-0">
-                <span className="label-system text-[12px] leading-none mb-1 normal-case font-semibold text-foreground">
+                <span className="text-xs font-medium text-foreground truncate">
                   {user.displayName || "User"}
                 </span>
-                <span className="label-system text-[12px] leading-none lowercase">
+                <span className="text-[11px] text-muted-foreground truncate">
                   {user.email}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
-                className="h-8 flex-1 justify-start label-system text-[12px] hover:text-primary hover:bg-transparent px-0"
+                size="sm"
+                className="h-7 flex-1 justify-start text-xs px-2 text-muted-foreground hover:text-foreground"
                 onClick={toggleTheme}
                 type="button"
               >
-                {isDarkMode ? <SunMedium className="mr-2 h-3.5 w-3.5" /> : <Moon className="mr-2 h-3.5 w-3.5" />}
-                {isDarkMode ? "Light Mode" : "Dark Mode"}
+                {isDarkMode ? <SunMedium className="mr-1.5 h-3.5 w-3.5" /> : <Moon className="mr-1.5 h-3.5 w-3.5" />}
+                {isDarkMode ? "Light" : "Dark"}
               </Button>
               <Button
                 variant="ghost"
-                className="h-8 flex-1 justify-start label-system text-[12px] hover:text-primary hover:bg-transparent px-0"
+                size="sm"
+                className="h-7 flex-1 justify-start text-xs px-2 text-muted-foreground hover:text-foreground"
                 onClick={logout}
                 type="button"
               >
-                <LogOut className="mr-2 h-3.5 w-3.5" />
-                Sign Out
+                <LogOut className="mr-1.5 h-3.5 w-3.5" />
+                Sign out
               </Button>
             </div>
           </div>
         ) : (
-          <div className="px-6 py-6">
+          <div className="px-4 py-4">
             <Button
-              className="w-full h-10 bg-primary text-white hover:bg-primary-hover shadow-sm"
+              className="w-full h-9"
               onClick={loginWithGoogle}
             >
-              Sign In
+              Sign in
             </Button>
           </div>
         )}

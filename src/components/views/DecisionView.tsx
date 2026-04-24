@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Compass, Sparkles, Loader2, Target, Zap, Users, Brain } from "lucide-react";
+import { Compass, Sparkles, Loader2, Target, Zap, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -351,20 +351,20 @@ export function DecisionView() {
   return (
     <div className="flex flex-col h-full bg-background transition-all duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0 bg-white/50">
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0">
+        <div className="flex items-center gap-2">
           <Compass className="h-4 w-4 text-primary" />
-          <span className="label-system text-[12px]">Decision Engine</span>
+          <span className="text-sm font-medium">Decisions</span>
         </div>
         <Button
           size="sm"
           variant="ghost"
-          className="h-8 label-system text-[12px] hover:text-primary hover:bg-transparent"
+          className="h-8 text-xs"
           onClick={handleGenerate}
           disabled={isLoading || !currentDocId}
         >
           {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-          {isLoading ? "Synthesizing Direction..." : "Ask: What to build next?"}
+          {isLoading ? "Thinking…" : "What should we build next?"}
         </Button>
       </div>
 
@@ -539,14 +539,14 @@ export function DecisionView() {
         )}
 
         {strategicGuidance && (
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
-            <p className="label-system text-[10px] uppercase tracking-widest text-primary mb-2">Strategic Focus</p>
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+            <p className="text-xs font-medium uppercase tracking-[0.06em] text-primary mb-2">Strategic focus</p>
             <h2 className="text-sm font-semibold text-foreground mb-2">{strategicGuidance.theme}</h2>
-            <p className="text-[13px] text-muted-foreground leading-relaxed mb-3">{strategicGuidance.rationale}</p>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-3">{strategicGuidance.rationale}</p>
             {strategicGuidance.gaps.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {strategicGuidance.gaps.map((gap) => (
-                  <span key={gap} className="label-system text-[10px] rounded-full border border-primary/20 bg-white px-2 py-1">
+                  <span key={gap} className="text-xs rounded-full border border-primary/20 bg-background px-2 py-0.5">
                     {gap}
                   </span>
                 ))}
@@ -556,106 +556,96 @@ export function DecisionView() {
         )}
 
         {suggestions.length === 0 && !isLoading ? (
-          <div className="flex flex-col items-center justify-center p-20 text-center border-2 border-dashed border-border/40 rounded-2xl max-w-2xl mx-auto">
-            <Target className="h-10 w-10 text-muted-foreground/20 mb-6" />
-            <p className="label-system text-[12px] mb-2 uppercase tracking-widest">Strategic Void</p>
-            <p className="text-xs text-muted-foreground/60 max-w-xs mx-auto leading-relaxed mb-8">
-              No product direction has been synthesized yet. Launch the Decision Engine to transform your research into a prioritized feature roadmap.
+          <div className="flex flex-col items-center justify-center p-16 text-center border border-dashed border-border/60 rounded-xl max-w-lg mx-auto">
+            <Target className="h-8 w-8 text-muted-foreground/40 mb-4" />
+            <p className="text-sm font-medium mb-1">No decisions yet</p>
+            <p className="text-xs text-muted-foreground max-w-xs leading-relaxed mb-6">
+              Ask the engine what to build next based on your current notes.
             </p>
-            <Button 
-              className="bg-primary text-white hover:bg-primary-hover shadow-lg shadow-primary/10 rounded-lg px-8 label-system text-[12px]"
+            <Button
               onClick={handleGenerate}
               disabled={!currentDocId}
             >
               <Zap className="mr-2 h-3.5 w-3.5" />
-              Analyze Product Context
+              Analyze
             </Button>
           </div>
         ) : isLoading ? (
-          <div className="flex flex-col items-center justify-center p-20 gap-4">
-            <Brain className="h-8 w-8 animate-pulse text-primary/40" />
-            <span className="label-system text-[12px] animate-pulse">Running Competitive & Contextual Analysis</span>
+          <div className="flex flex-col items-center justify-center p-20 gap-3">
+            <Brain className="h-6 w-6 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Analyzing context…</span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {scoredSuggestions.map((s, i) => (
-              <div key={i} className="flex flex-col bg-white border border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md transition-all hover:border-primary/20 group">
+              <div key={i} className="flex flex-col bg-background border border-border rounded-xl overflow-hidden hover:border-primary/30 transition-colors">
                 <div className="p-5 flex-1">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className={`label-system text-[10px] px-2 py-0.5 rounded-sm border ${priorityColors[s.priority]}`}>
-                      {s.priority} priority
+                  <div className="flex items-center justify-between mb-3 text-xs">
+                    <span className={`px-2 py-0.5 rounded border ${priorityColors[s.priority]}`}>
+                      {s.priority}
                     </span>
-                    <span className="label-system text-[10px] rounded-sm border border-primary/20 bg-primary/5 px-2 py-0.5 text-primary">
+                    <span className="rounded border border-primary/20 bg-primary/5 px-2 py-0.5 text-primary font-medium">
                       Score {s.score}
                     </span>
-                    <div className="flex items-center gap-2">
-                       <Users className="h-3 w-3 text-muted-foreground/40" />
-                       <span className="label-system text-[10px] text-muted-foreground/60">Target Alpha</span>
-                    </div>
                   </div>
-                  <h3 className="text-sm font-semibold mb-3 group-hover:text-primary transition-colors leading-tight">
+                  <h3 className="text-sm font-semibold mb-3 leading-snug">
                     {s.title}
                   </h3>
-                  <p className="text-[13px] text-muted-foreground leading-relaxed mb-4 italic border-l-2 border-primary/10 pl-3">
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-4 border-l-2 border-primary/15 pl-3">
                     {s.justification}
                   </p>
-                  <p className="text-[12px] text-muted-foreground leading-relaxed mb-4">
-                    <span className="label-system text-[10px] block mb-1 opacity-60">Trade-offs</span>
+                  <div className="text-xs text-muted-foreground leading-relaxed mb-3">
+                    <span className="block text-[10px] uppercase tracking-[0.06em] mb-1 text-muted-foreground/70">Trade-offs</span>
                     {s.tradeoffs}
-                  </p>
-                  <p className="text-[12px] text-foreground font-medium leading-relaxed bg-muted/20 p-2.5 rounded-lg border border-border/40">
-                    <span className="label-system text-[10px] block mb-1 opacity-60">User Story</span>
+                  </div>
+                  <div className="text-xs text-foreground leading-relaxed bg-muted/40 p-2.5 rounded-md">
+                    <span className="block text-[10px] uppercase tracking-[0.06em] mb-1 text-muted-foreground">User story</span>
                     {s.userStory}
-                  </p>
+                  </div>
                 </div>
-                <div className="px-5 py-4 bg-muted/10 border-t border-border/40 flex items-center justify-between">
+                <div className="px-5 py-3 bg-muted/20 border-t border-border/60 flex items-center justify-between text-xs">
                   <div className="flex flex-col gap-1">
-                    <span className="label-system text-[9px] uppercase opacity-60">Estimated Impact</span>
+                    <span className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground">Impact</span>
                     <div className="flex items-center gap-1.5">
-                      <div className="flex-1 h-1.5 w-16 bg-border/40 rounded-full overflow-hidden">
-                        <div className="h-full bg-primary" style={{ width: `${s.impact * 10}%` }} />
-                      </div>
-                      <span className="label-system text-[11px] font-bold">{s.impact}/10</span>
+                      <span className="inline-block h-1.5 w-16 bg-border/60 rounded-full overflow-hidden">
+                        <span className="block h-full bg-primary" style={{ width: `${s.impact * 10}%` }} />
+                      </span>
+                      <span className="font-medium">{s.impact}/10</span>
                     </div>
                   </div>
                   <div className="flex flex-col gap-1 items-end">
-                    <span className="label-system text-[9px] uppercase opacity-60">Dev Effort</span>
+                    <span className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground">Effort</span>
                     <div className="flex items-center gap-1.5">
-                      <span className="label-system text-[11px] font-bold">{s.effort}/10</span>
-                      <div className="flex-1 h-1.5 w-16 bg-border/40 rounded-full overflow-hidden">
-                        <div className="h-full bg-muted-foreground/40" style={{ width: `${s.effort * 10}%` }} />
-                      </div>
+                      <span className="font-medium">{s.effort}/10</span>
+                      <span className="inline-block h-1.5 w-16 bg-border/60 rounded-full overflow-hidden">
+                        <span className="block h-full bg-muted-foreground/60" style={{ width: `${s.effort * 10}%` }} />
+                      </span>
                     </div>
                   </div>
                 </div>
-                <div className="px-5 pb-5">
-                  <div className="space-y-2">
+                <div className="px-5 pb-5 pt-3 space-y-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full text-xs"
+                    onClick={() => convertDecisionToPRD(s, i)}
+                    disabled={isGeneratingPRDFor === `${s.title}-${i}`}
+                  >
+                    {isGeneratingPRDFor === `${s.title}-${i}` ? "Generating PRD…" : "Convert to PRD"}
+                  </Button>
+
+                  {validatePublishReadiness(expectedOutcome?.expected) ? (
                     <Button
                       size="sm"
-                      variant="outline"
-                      className="w-full label-system text-[11px]"
-                      onClick={() => convertDecisionToPRD(s, i)}
-                      disabled={isGeneratingPRDFor === `${s.title}-${i}`}
+                      className="w-full text-xs"
+                      onClick={() => handleOpenPublishModal(s, i)}
+                      disabled={publishingKey === `${s.title}-${i}`}
                     >
-                      {isGeneratingPRDFor === `${s.title}-${i}` ? "Generating PRD..." : "Convert to PRD"}
+                      {publishingKey === `${s.title}-${i}` ? "Publishing…" : "Publish case"}
                     </Button>
-
-                    {validatePublishReadiness(expectedOutcome?.expected) ? (
-                      <>
-                        <p className="text-[11px] text-muted-foreground text-center">Ready to share this thinking as a public case.</p>
-                        <Button
-                          size="sm"
-                          className="w-full label-system text-[11px]"
-                          onClick={() => handleOpenPublishModal(s, i)}
-                          disabled={publishingKey === `${s.title}-${i}`}
-                        >
-                          {publishingKey === `${s.title}-${i}` ? "Publishing..." : "Publish Case"}
-                        </Button>
-                      </>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground text-center">Save Expected Outcome to unlock publishing.</p>
-                    )}
-                  </div>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground text-center">Save an expected outcome to publish.</p>
+                  )}
                 </div>
               </div>
             ))}
