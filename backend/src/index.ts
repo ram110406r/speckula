@@ -1,7 +1,5 @@
-import http from 'http';
 import dotenv from 'dotenv';
-import createApp from './app';
-import { RealtimeServer } from './lib/realtime';
+import createServer from './app';
 import { disconnectDb } from './lib/db';
 
 // Load environment variables
@@ -12,43 +10,16 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 async function startServer() {
   try {
-    // Create Express app
-    const app = createApp();
-
-    // Create HTTP server
-    const server = http.createServer(app);
-
-    // Setup WebSocket realtime server
-    const realtimeServer = new RealtimeServer(server);
+    // Create Fastify server
+    const fastify = await createServer();
 
     // Start server
-    server.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT}`);
-      console.log(`📡 WebSocket server on ws://localhost:${PORT}/ws`);
-      console.log(`🌍 Environment: ${NODE_ENV}`);
-    });
+    await fastify.listen({ port: PORT, host: '0.0.0.0' });
 
-    // Graceful shutdown
-    const gracefulShutdown = async (signal: string) => {
-      console.log(`\n${signal} received. Shutting down gracefully...`);
-
-      server.close(async () => {
-        console.log('HTTP server closed');
-        realtimeServer.close();
-        await disconnectDb();
-        console.log('Database disconnected');
-        process.exit(0);
-      });
-
-      // Force shutdown after 10 seconds
-      setTimeout(() => {
-        console.error('Forced shutdown after timeout');
-        process.exit(1);
-      }, 10000);
-    };
-
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    console.log(`✅ Server running on http://localhost:${PORT}`);
+    console.log(`🚀 AI Backend powered by Groq (mixtral-8x7b & llama3-70b)`);
+    console.log(`📡 WebSocket ready for realtime updates`);
+    console.log(`🌍 Environment: ${NODE_ENV}`);
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
@@ -56,3 +27,16 @@ async function startServer() {
 }
 
 startServer();
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('\nSIGTERM received. Shutting down gracefully...');
+  await disconnectDb();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('\nSIGINT received. Shutting down gracefully...');
+  await disconnectDb();
+  process.exit(0);
+});

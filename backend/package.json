@@ -1,7 +1,7 @@
 {
-  "name": "buildcase-backend",
+  "name": "buildcase-ai-backend",
   "version": "1.0.0",
-  "description": "Scalable backend for Product Intelligence Workspace",
+  "description": "Groq-powered AI service layer for BuildCase with Firebase integration",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -15,16 +15,16 @@
   },
   "dependencies": {
     "@prisma/client": "^5.8.0",
-    "@types/express": "^4.17.21",
     "@types/node": "^20.10.6",
-    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "express-async-errors": "^3.1.1",
-    "jsonwebtoken": "^9.1.2",
-    "pg": "^8.11.3",
-    "ws": "^8.16.0",
+    "fastify": "^4.25.2",
+    "fastify-cors": "^6.1.0",
+    "fastify-jwt": "^7.5.0",
+    "fastify-websocket": "^0.4.2",
+    "groq-sdk": "^0.4.0",
+    "pino": "^8.17.2",
+    "pino-pretty": "^10.3.1",
     "zod": "^3.22.4"
   },
   "devDependencies": {

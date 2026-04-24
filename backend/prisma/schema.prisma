@@ -1,5 +1,6 @@
-// This is your Prisma schema file.
-// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+// This is your Prisma schema file for the AI service layer.
+// This stores AI outputs, reasoning traces, and caches.
+// The source of truth for user data remains in Firestore.
 
 datasource db {
   provider = "postgresql"
@@ -11,245 +12,193 @@ generator client {
 }
 
 // ========================= 
-// USER & AUTH
+// AI CACHE & OUTPUTS
 // =========================
-model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  passwordHash String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  // Relations
-  ownedWorkspaces Workspace[]
-  workspaceMembers WorkspaceMember[]
-  notes Note[]
-  insights Insight[]
-  decisions Decision[]
-  prds PRD[]
-  tasks Task[]
-
-  @@index([email])
-}
-
-// ========================= 
-// WORKSPACE / PROJECT
-// =========================
-model Workspace {
-  id        String   @id @default(uuid())
-  name      String
-  ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  members WorkspaceMember[]
-  projects Project[]
-
-  @@index([ownerId])
-}
-
-model WorkspaceMember {
-  id          String   @id @default(uuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role        String   @default("member") // owner, editor, viewer
-  joinedAt    DateTime @default(now())
-
-  @@unique([workspaceId, userId])
-  @@index([workspaceId])
-  @@index([userId])
-}
-
-model Project {
-  id          String   @id @default(uuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name        String
-  stage       String   @default("Discovery") // Discovery | Validation | Build | Scale
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  notes Note[]
-  insights Insight[]
-  decisions Decision[]
-  prds PRD[]
-  tasks Task[]
-  integrations Integration[]
-
-  @@index([workspaceId])
-}
-
-// ========================= 
-// THINK (Notes + Insights)
-// =========================
-model Note {
-  id        String   @id @default(uuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  content   String   // JSON or rich text
-  lastInsightExtractionHash String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  insights Insight[] @relation("NoteInsights")
-
-  @@index([projectId])
-  @@index([userId])
-}
-
-model Insight {
-  id        String   @id @default(uuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  noteId    String?
-  note      Note?    @relation("NoteInsights", fields: [noteId], references: [id], onDelete: SetNull)
-  content   String
-  source    String   @default("AI") // AI | USER
-  confidenceScore Float @default(0.5)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+/**
+ * Stores AI-generated insights from Groq
+ * Referenced by: Frontend via Firestore
+ */
+model AIInsight {
+  id                String   @id @default(uuid())
+  projectId         String   // Firestore project ID
+  noteId            String   // Firestore note ID
+  userId            String   // Firestore user ID
+  content           String
+  source            String   @default("groq") // groq | user
+  confidenceScore   Float    @default(0.7)
+  modelUsed         String   // mixtral-8x7b | llama3-70b
+  tokensUsed        Int      @default(0)
+  generatedAt       DateTime @default(now())
+  expiresAt         DateTime? // Cache invalidation
+  
   @@index([projectId])
   @@index([userId])
   @@index([noteId])
+  @@index([generatedAt])
 }
 
-// ========================= 
-// DECIDE (Decision Log + Tradeoffs)
-// =========================
-model Decision {
-  id        String   @id @default(uuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  description String
-  status    String   @default("active") // active | completed | rejected
-  confidenceScore Float @default(0.5)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  tradeoffs Tradeoff[]
-  outcomes DecisionOutcome[]
-
-  @@index([projectId])
-  @@index([userId])
-}
-
-model Tradeoff {
-  id        String   @id @default(uuid())
-  decisionId String
-  decision  Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  optionA   String
-  optionB   String
-  reasoning String
-  winner    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([decisionId])
-}
-
-model DecisionOutcome {
+/**
+ * Stores AI-generated PRDs from Groq
+ * Referenced by: Frontend via Firestore
+ */
+model AIPRD {
   id              String   @id @default(uuid())
-  decisionId      String
-  decision        Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  expectedOutcome String?
-  actualOutcome   String?
-  comparison      String?
-  learningInsight String?
-  confidenceAdjustment Float @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  projectId       String   // Firestore project ID
+  userId          String   // Firestore user ID
+  title           String
+  content         String   // Full PRD markdown
+  version         Int      @default(1)
+  modelUsed       String   // llama3-70b
+  tokensUsed      Int      @default(0)
+  generatedAt     DateTime @default(now())
+  
+  @@index([projectId])
+  @@index([userId])
+}
 
+/**
+ * Stores reasoning traces for decisions
+ * Transparency: why did Groq give this confidence score?
+ */
+model DecisionReasoning {
+  id                    String   @id @default(uuid())
+  decisionId            String   // Firestore decision ID
+  projectId             String   // Firestore project ID
+  userId                String   // Firestore user ID
+  prompt                String   // What we asked Groq
+  reasoning             String   // Groq's reasoning
+  confidenceScore       Float
+  confidenceReasoning   String   // Why this confidence?
+  modelUsed             String   // mixtral-8x7b | llama3-70b
+  tokensUsed            Int      @default(0)
+  generatedAt           DateTime @default(now())
+  
   @@index([decisionId])
-}
-
-// ========================= 
-// BUILD (PRDs + Tasks)
-// =========================
-model PRD {
-  id        String   @id @default(uuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  content   String   // Full PRD document
-  version   Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  tasks Task[]
-
   @@index([projectId])
   @@index([userId])
 }
 
-model Task {
-  id                String   @id @default(uuid())
-  projectId         String
-  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  prdId             String?
-  prd               PRD?     @relation(fields: [prdId], references: [id], onDelete: SetNull)
-  title             String
-  description       String?
-  status            String   @default("todo") // todo | in_progress | done
-  priority          String   @default("medium") // low | medium | high | critical
-  linkedDecisionId  String?
-  dependsOnTaskId   String?
-  isBlockedBy       Task?    @relation("TaskDependencies", fields: [dependsOnTaskId], references: [id], onDelete: SetNull)
-  blocks            Task[]   @relation("TaskDependencies")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
+/**
+ * Pattern analysis results from real-time note updates
+ * Stores: repeated keywords, weak signals, suggestions
+ */
+model PatternAnalysis {
+  id              String   @id @default(uuid())
+  projectId       String   // Firestore project ID
+  noteId          String   // Firestore note ID
+  userId          String   // Firestore user ID
+  patterns        String   // JSON: { keywords: [], weak_signals: [], suggestions: [] }
+  modelUsed       String   // mixtral-8x7b
+  tokensUsed      Int      @default(0)
+  analyzedAt      DateTime @default(now())
+  expiresAt       DateTime? // Short-lived cache
+  
   @@index([projectId])
+  @@index([noteId])
+  @@index([analyzedAt])
+}
+
+/**
+ * Prompt history & results for cost tracking and optimization
+ * Helps identify repeated prompts to cache
+ */
+model PromptLog {
+  id              String   @id @default(uuid())
+  userId          String   // Firestore user ID
+  projectId       String   // Firestore project ID
+  promptHash      String   // Hash of prompt for deduplication
+  prompt          String   // The actual prompt
+  modelUsed       String
+  inputTokens     Int
+  outputTokens    Int
+  totalTokens     Int
+  executionMs     Int
+  cost            Float    // Estimated cost in USD
+  cachedResult    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  
   @@index([userId])
+  @@index([projectId])
+  @@index([promptHash])
+  @@index([createdAt])
+}
+
+/**
+ * Cached prompt results to avoid duplicate Groq calls
+ * TTL-based expiration
+ */
+model PromptCache {
+  id              String   @id @default(uuid())
+  promptHash      String   @unique
+  result          String   // Cached response
+  modelUsed       String
+  expiresAt       DateTime
+  hitCount        Int      @default(0)
+  createdAt       DateTime @default(now())
+  lastAccessedAt  DateTime @updatedAt
+  
+  @@index([expiresAt])
+}
+
+/**
+ * Task suggestions from Groq
+ * Referenced by: Frontend via Firestore
+ */
+model AISuggestedTask {
+  id              String   @id @default(uuid())
+  projectId       String   // Firestore project ID
+  prdId           String?  // Firestore PRD ID (optional)
+  userId          String   // Firestore user ID
+  title           String
+  description     String?
+  priority        String   @default("medium")
+  reasoning       String   // Why Groq suggested this
+  confidenceScore Float    @default(0.7)
+  modelUsed       String   // mixtral-8x7b
+  tokensUsed      Int      @default(0)
+  generatedAt     DateTime @default(now())
+  dismissed       Boolean  @default(false) // User feedback
+  
+  @@index([projectId])
   @@index([prdId])
-  @@index([dependsOnTaskId])
-}
-
-// ========================= 
-// SYSTEM (Integrations + Platform)
-// =========================
-model Integration {
-  id        String   @id @default(uuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type      String   // slack | jira | github | etc
-  config    String   // JSON stored as string
-  connectedAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([projectId])
-}
-
-// ========================= 
-// TOKENS & SESSIONS
-// =========================
-model RefreshToken {
-  id        String   @id @default(uuid())
-  userId    String
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
   @@index([userId])
+}
+
+/**
+ * API usage tracking
+ * Monitor costs and quota
+ */
+model APIUsage {
+  id              String   @id @default(uuid())
+  userId          String   // Firestore user ID
+  date            DateTime @default(now())
+  totalRequests   Int      @default(0)
+  totalTokens     Int      @default(0)
+  totalCost       Float    @default(0.0)
+  modelMix        String   // JSON: { "mixtral-8x7b": 5, "llama3-70b": 2 }
+  
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+// ========================= 
+// REALTIME CONNECTIONS
+// =========================
+
+/**
+ * WebSocket connection metadata
+ * Track active users for realtime features
+ */
+model ActiveConnection {
+  id              String   @id @default(uuid())
+  userId          String   // Firestore user ID
+  projectId       String   // Firestore project ID
+  connectionId    String   @unique // WebSocket connection ID
+  connectedAt     DateTime @default(now())
+  lastHeartbeat   DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([projectId])
 }

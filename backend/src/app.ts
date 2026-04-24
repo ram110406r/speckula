@@ -1,55 +1,49 @@
-import express, { Express } from 'express';
-import cors from 'cors';
-import 'express-async-errors';
-import { errorHandler, notFoundHandler, asyncHandler } from './lib/middleware';
-import { sendSuccess } from './lib/errors';
+import Fastify, { FastifyInstance } from 'fastify';
+import cors from 'fastify-cors';
+import fastifyJwt from 'fastify-jwt';
+import fastifyWebsocket from 'fastify-websocket';
+import pino from 'pino';
 
-// Routes
-import authRoutes from './routes/authRoutes';
-import workspaceRoutes from './routes/workspaceRoutes';
-import thinkingRoutes from './routes/thinkingRoutes';
-import decisionRoutes from './routes/decisionRoutes';
-import buildRoutes from './routes/buildRoutes';
-import aiRoutes from './routes/aiRoutes';
+const logger = pino(
+  process.env.NODE_ENV === 'development'
+    ? {
+        transport: {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+          },
+        },
+      }
+    : undefined
+);
 
-const createApp = (): Express => {
-  const app = express();
+export const createServer = async (): Promise<FastifyInstance> => {
+  const fastify = Fastify({ logger });
 
-  // Middleware
-  app.use(
-    cors({
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-      credentials: true,
-    })
-  );
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ limit: '10mb', extended: true }));
+  // Plugins
+  await fastify.register(cors, {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  });
+
+  await fastify.register(fastifyJwt, {
+    secret: process.env.FIREBASE_PRIVATE_KEY || 'your-secret-key',
+  });
+
+  await fastify.register(fastifyWebsocket);
 
   // Health check
-  app.get(
-    '/health',
-    asyncHandler(async (req, res) => {
-      sendSuccess(res, { status: 'ok' });
-    })
-  );
+  fastify.get('/health', async (request, reply) => {
+    return { status: 'ok' };
+  });
 
-  // API Routes
-  app.use('/auth', authRoutes);
-  app.use('/workspace', workspaceRoutes);
-  app.use('/notes', thinkingRoutes);
-  app.use('/insights', thinkingRoutes); // Insights use the same router
-  app.use('/decision', decisionRoutes);
-  app.use('/prd', buildRoutes);
-  app.use('/task', buildRoutes); // Tasks use the same router
-  app.use('/ai', aiRoutes);
+  // AI Routes
+  fastify.register(async (fastify) => {
+    const aiRoutes = (await import('./routes/aiRoutes.js')).default;
+    await aiRoutes(fastify);
+  }, { prefix: '/ai' });
 
-  // 404 Handler
-  app.use(notFoundHandler);
-
-  // Global Error Handler (must be last)
-  app.use(errorHandler);
-
-  return app;
+  return fastify;
 };
 
-export default createApp;
+export default createServer;
