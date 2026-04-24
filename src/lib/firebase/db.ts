@@ -552,7 +552,9 @@ export const getWorkspacesForUser = async (userId: string) => {
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (TeamWorkspace & { id: string })[];
   } catch (error) {
-    console.error("Error fetching workspaces:", error);
+    if (!isPermissionDenied(error)) {
+      console.error("Error fetching workspaces:", error);
+    }
     return [];
   }
 };

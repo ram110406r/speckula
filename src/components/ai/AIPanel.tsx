@@ -321,7 +321,7 @@ export function AIPanel() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 p-4 overflow-auto space-y-3 bg-[#f6f1e6]">
+      <div className="flex-1 p-3.5 overflow-auto space-y-3 bg-[#f6f1e6]">
         <div className="rounded-2xl border border-border/70 bg-white p-3 shadow-sm">
           <p className="label-system text-[11px] text-primary">Current Understanding</p>
           <p className="mt-2 text-sm leading-relaxed text-foreground">{currentUnderstanding}</p>
@@ -592,7 +592,7 @@ export function AIPanel() {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 min-h-[72px] max-h-[160px] text-sm resize-none rounded-lg border border-input bg-background px-3 py-2.5 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring leading-relaxed"
+            className="flex-1 min-h-[64px] max-h-[140px] text-sm resize-none rounded-lg border border-input bg-background px-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring leading-relaxed"
             placeholder="Ask Buildcase..."
             disabled={isLoading}
             onKeyDown={(e) => {

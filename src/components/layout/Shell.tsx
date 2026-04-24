@@ -125,17 +125,17 @@ export function Shell() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="hidden w-[20%] min-w-[230px] max-w-[320px] shrink-0 border-r border-border/70 bg-[#e8e2d3] md:block">
+      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[250px_minmax(0,1fr)_360px]">
+        <div className="hidden min-h-0 border-r border-border/70 bg-[#e8e2d3] md:block">
           <SidebarNav />
         </div>
 
-        <div className="min-w-0 flex-1 overflow-hidden bg-[#fffefb]">
+        <div className="min-h-0 min-w-0 overflow-hidden bg-[#fffefb]">
           {renderMainView()}
         </div>
 
         {showAIPanel && (
-          <div className="hidden w-[28%] min-w-[320px] max-w-[420px] shrink-0 border-l border-border/70 bg-[#f6f1e6] lg:block">
+          <div className="hidden min-h-0 border-l border-border/70 bg-[#f6f1e6] lg:block">
             <AIPanel />
           </div>
         )}

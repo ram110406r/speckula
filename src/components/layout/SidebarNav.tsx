@@ -140,9 +140,9 @@ export function SidebarNav() {
   };
 
   return (
-    <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-colors duration-300">
+    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground transition-colors duration-300">
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-sidebar-border/80">
+      <div className="px-6 py-4 border-b border-sidebar-border/80">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 flex items-center justify-center">
             <Image 
@@ -161,7 +161,7 @@ export function SidebarNav() {
       </div>
 
       {/* Main Navigation */}
-      <nav className="mt-3 space-y-4 px-3">
+      <nav className="mt-2 space-y-3 px-3">
         {navGroups.map((group) => (
           <div key={group.label} className="space-y-1.5">
             <p className="label-system px-3 text-[10px] tracking-[0.14em]">{group.label}</p>
@@ -183,7 +183,7 @@ export function SidebarNav() {
         ))}
       </nav>
 
-      <div className="flex-1 flex flex-col min-h-0 mt-5">
+      <div className="flex-1 flex flex-col min-h-0 mt-3">
         <div className="px-6 py-2.5 flex items-center justify-between group">
           <span className="label-system text-[12px]">
             Workspaces

@@ -79,6 +79,23 @@ export function Editor() {
             </div>
           </div>
 
+          <div className="flex min-w-[240px] flex-1 items-center gap-4 lg:max-w-[420px]">
+            <Input
+              value={currentDoc?.title ?? "Untitled Document"}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              className="h-9 w-full rounded-lg border border-border/70 bg-white px-3 text-sm font-semibold"
+              placeholder="Document Title..."
+            />
+            {isSaving && (
+              <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted/20 animate-pulse whitespace-nowrap">
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/40" />
+                <span className="label-system text-[11px] lowercase">
+                  Saving
+                </span>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -119,28 +136,8 @@ export function Editor() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-b border-border/60 h-14 px-8 shrink-0 bg-white/80">
-        <div className="flex items-center gap-4 flex-1">
-          <Input
-            value={currentDoc?.title ?? "Untitled Document"}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            className="h-8 w-72 bg-transparent border-none focus-visible:ring-0 font-semibold text-base px-0 -ml-0.5 placeholder:text-muted-foreground/30"
-            placeholder="Document Title..."
-          />
-          {isSaving && (
-            <div className="flex items-center gap-2 px-2 py-0.5 rounded-md bg-muted/20 animate-pulse">
-              <div className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-              <span className="label-system text-[12px] lowercase">
-                Saving to Cloud
-              </span>
-            </div>
-          )}
-        </div>
-        <p className="hidden text-xs text-muted-foreground md:block">What are you trying to solve today?</p>
-      </div>
-
       {/* Editor Body */}
-      <div className="relative flex-1 overflow-auto p-6 lg:p-10">
+      <div className="relative flex-1 overflow-auto p-5 lg:p-8">
         {isEmptyCanvas && (
           <div className="mx-auto mb-5 max-w-4xl rounded-3xl border border-primary/25 bg-[#fcf7ed] p-5 shadow-sm">
             <p className="text-base font-semibold">Start your first product decision.</p>
