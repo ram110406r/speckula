@@ -20,13 +20,42 @@ import { useAppStore, type AppView } from "@/store/useAppStore";
 import { getUserDocuments, createDocument, deleteDocument } from "@/lib/firebase/db";
 import { Moon, SunMedium } from "lucide-react";
 
-const navItems: { icon: React.ElementType; label: string; view: AppView }[] = [
-  { icon: FileText, label: "Editor", view: "editor" },
-  { icon: Lightbulb, label: "Insights", view: "insights" },
-  { icon: Compass, label: "Decisions", view: "decisions" },
-  { icon: LayoutDashboard, label: "PRDs", view: "prds" },
-  { icon: CheckSquare, label: "Tasks", view: "tasks" },
-  { icon: Users, label: "Platform", view: "platform" },
+interface GroupedNavItem {
+  icon: React.ElementType;
+  label: string;
+  view: AppView;
+  secondary?: boolean;
+}
+
+const navGroups: { label: string; items: GroupedNavItem[] }[] = [
+  {
+    label: "THINK",
+    items: [
+      { icon: FileText, label: "Notes", view: "editor" },
+      { icon: Lightbulb, label: "Insights", view: "insights" },
+    ],
+  },
+  {
+    label: "DECIDE",
+    items: [
+      { icon: Compass, label: "Decision Log", view: "decisions" },
+      { icon: Compass, label: "Tradeoffs", view: "decisions", secondary: true },
+    ],
+  },
+  {
+    label: "BUILD",
+    items: [
+      { icon: LayoutDashboard, label: "PRDs", view: "prds" },
+      { icon: CheckSquare, label: "Tasks", view: "tasks" },
+    ],
+  },
+  {
+    label: "SYSTEM",
+    items: [
+      { icon: Users, label: "Integrations", view: "platform", secondary: true },
+      { icon: Users, label: "Platform", view: "platform" },
+    ],
+  },
 ];
 
 export function SidebarNav() {
@@ -111,9 +140,9 @@ export function SidebarNav() {
   };
 
   return (
-    <div className="flex h-full flex-col border-r border-border bg-background transition-colors duration-300">
+    <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-colors duration-300">
       {/* Logo */}
-      <div className="px-6 py-6 border-b border-border/60 mb-2">
+      <div className="px-6 py-5 border-b border-sidebar-border/80">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 flex items-center justify-center">
             <Image 
@@ -124,36 +153,38 @@ export function SidebarNav() {
               className="object-contain"
             />
           </div>
-          <span className="font-semibold text-lg tracking-tight text-foreground">Buildcase</span>
+          <div className="flex flex-col">
+            <span className="font-semibold text-lg tracking-tight">Buildcase</span>
+            <span className="label-system text-[11px] normal-case">Product Intelligence Workspace</span>
+          </div>
         </div>
       </div>
 
       {/* Main Navigation */}
-      <nav className="space-y-1">
-        {navItems.map((item) => {
-          const isActive = activeView === item.view;
-          return (
-            <button
-              key={item.view}
-              className={`w-full flex items-center h-11 px-6 text-sm transition-all relative ${
-                isActive
-                   ? "text-primary font-semibold"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/10 font-medium"
-              }`}
-              onClick={() => setActiveView(item.view)}
-            >
-              {isActive && (
-                <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary animate-in fade-in slide-in-from-left-1 duration-300" />
-              )}
-              <item.icon className={`mr-3 h-4 w-4 shrink-0`} />
-              {item.label}
-            </button>
-          );
-        })}
+      <nav className="mt-3 space-y-4 px-3">
+        {navGroups.map((group) => (
+          <div key={group.label} className="space-y-1.5">
+            <p className="label-system px-3 text-[10px] tracking-[0.14em]">{group.label}</p>
+            {group.items.map((item) => {
+              const isActive = activeView === item.view;
+              return (
+                <button
+                  key={`${group.label}-${item.label}`}
+                  className={`relative flex h-10 w-full items-center gap-2.5 rounded-xl px-3 text-left text-sm transition-all ${isActive ? "bg-white text-primary shadow-sm" : "text-[#5c5a52] hover:bg-white/70 hover:text-foreground"}`}
+                  onClick={() => setActiveView(item.view)}
+                >
+                  {isActive && <div className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-primary" />}
+                  <item.icon className={`h-4 w-4 shrink-0 ${item.secondary ? "opacity-75" : ""}`} />
+                  <span className={`${item.secondary ? "opacity-80" : ""}`}>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
-      <div className="flex-1 flex flex-col min-h-0 mt-8">
-        <div className="px-6 py-3 flex items-center justify-between group">
+      <div className="flex-1 flex flex-col min-h-0 mt-5">
+        <div className="px-6 py-2.5 flex items-center justify-between group">
           <span className="label-system text-[12px]">
             Workspaces
           </span>
@@ -166,14 +197,14 @@ export function SidebarNav() {
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto space-y-0.5 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar px-3">
           {documents.map((doc) => {
             const isActive = currentDocId === doc.id;
             return (
               <div 
                 key={doc.id}
-                className={`group flex items-center gap-2.5 px-6 h-9 cursor-pointer transition-all relative ${
-                  isActive ? "text-primary font-semibold" : "text-muted-foreground/80 hover:bg-muted/10 hover:text-foreground"
+                className={`group flex items-center gap-2.5 px-3 h-9 cursor-pointer transition-all relative rounded-lg ${
+                  isActive ? "bg-white text-primary font-semibold shadow-sm" : "text-[#5c5a52] hover:bg-white/70 hover:text-foreground"
                 }`}
                 onClick={() => {
                   setCurrentDocId(doc.id);
@@ -181,7 +212,7 @@ export function SidebarNav() {
                 }}
               >
                 {isActive && (
-                  <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary/60" />
+                  <div className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r bg-primary/60" />
                 )}
                 <File className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-primary/70" : "text-muted-foreground/40"}`} />
                 <span className="text-xs truncate flex-1">{doc.title}</span>
@@ -204,7 +235,7 @@ export function SidebarNav() {
       </div>
 
       {/* User Section */}
-      <div className="mt-auto border-t border-border/60 bg-white/30 backdrop-blur-sm">
+      <div className="mt-auto border-t border-sidebar-border/80 bg-white/45 backdrop-blur-sm">
         {loading ? (
           <div className="px-6 py-6 h-16 animate-pulse bg-muted/10" />
         ) : user ? (

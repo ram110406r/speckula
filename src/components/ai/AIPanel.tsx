@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { X, Sparkles, Wand2, Lightbulb, Send, Loader2, CheckSquare, AlertTriangle, Plus } from "lucide-react";
+import { X, Sparkles, Wand2, Lightbulb, Send, Loader2, CheckSquare, AlertTriangle, Plus, Clock3 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import {
@@ -53,6 +53,36 @@ export function AIPanel() {
     if (!currentDocId) return new Set<string>();
     return new Set(dismissedHintsByDoc[currentDocId] ?? []);
   }, [currentDocId, dismissedHintsByDoc]);
+
+  const currentUnderstanding = React.useMemo(() => {
+    const trimmed = activeContext.trim();
+    if (!trimmed) return "Start your first product decision. Describe your idea in one sentence.";
+    if (trimmed.length <= 180) return trimmed;
+    return `${trimmed.slice(0, 180)}...`;
+  }, [activeContext]);
+
+  const repeatedPatternInsight = React.useMemo(() => {
+    const terms = activeContext
+      .toLowerCase()
+      .replace(/[^a-z\s]/g, " ")
+      .split(/\s+/)
+      .filter((word) => word.length > 4 && !["about", "there", "their", "which", "would", "could", "should", "while", "where", "after"].includes(word));
+
+    const counts = new Map<string, number>();
+    terms.forEach((word) => counts.set(word, (counts.get(word) ?? 0) + 1));
+    const repeated = [...counts.entries()].sort((left, right) => right[1] - left[1]).find((item) => item[1] >= 3);
+    if (!repeated) return null;
+
+    return `You mentioned \"${repeated[0]}\" multiple times. This may be your core problem.`;
+  }, [activeContext]);
+
+  const weakProblemSignal = React.useMemo(() => {
+    const normalized = activeContext.toLowerCase();
+    if (normalized.length < 80) return null;
+    const hasSpecificSignal = /(who|metric|drop|retention|conversion|churn|activation|behavior|cohort|timeframe)/.test(normalized);
+    if (hasSpecificSignal) return null;
+    return "Weak problem definition detected. Ask: Who? What behavior? What metric?";
+  }, [activeContext]);
 
   React.useEffect(() => {
     setMessages([]);
@@ -273,12 +303,12 @@ export function AIPanel() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-[#f6f1e6]">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border h-14 px-4 shrink-0 bg-sidebar">
+      <div className="flex items-center justify-between border-b border-border/70 h-14 px-4 shrink-0 bg-[#efe8d8]">
         <div className="flex items-center gap-2 label-system text-sm font-semibold tracking-[0.05em]">
           <Sparkles className="h-4 w-4 text-primary" />
-          AI Assistant
+          Live Assistant
         </div>
         <Button
           variant="ghost"
@@ -291,7 +321,30 @@ export function AIPanel() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 p-4 overflow-auto space-y-3 bg-background/30">
+      <div className="flex-1 p-4 overflow-auto space-y-3 bg-[#f6f1e6]">
+        <div className="rounded-2xl border border-border/70 bg-white p-3 shadow-sm">
+          <p className="label-system text-[11px] text-primary">Current Understanding</p>
+          <p className="mt-2 text-sm leading-relaxed text-foreground">{currentUnderstanding}</p>
+        </div>
+
+        <div className="rounded-2xl border border-border/70 bg-white p-3 shadow-sm">
+          <p className="label-system text-[11px] text-primary">Suggestions</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" className="h-7 rounded-full text-[11px]" onClick={() => triggerPrompt("Define the problem precisely: who is affected, what behavior is broken, and which metric is impacted?")}>Define Problem</Button>
+            <Button size="sm" variant="outline" className="h-7 rounded-full text-[11px]" onClick={() => triggerPrompt("Generate three testable product hypotheses from the current context.")}>Generate Hypothesis</Button>
+            <Button size="sm" variant="outline" className="h-7 rounded-full text-[11px]" onClick={() => triggerPrompt("Identify top execution and product risks in this idea, with mitigation options.")}>Identify Risks</Button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border/70 bg-white p-3 shadow-sm space-y-2">
+          <p className="label-system text-[11px] text-primary">Live Insights</p>
+          {weakProblemSignal && <p className="text-xs text-foreground">{weakProblemSignal}</p>}
+          {repeatedPatternInsight && <p className="text-xs text-foreground">{repeatedPatternInsight}</p>}
+          {!weakProblemSignal && !repeatedPatternInsight && (
+            <p className="text-xs text-muted-foreground">Keep typing. Live insights appear after a short pause.</p>
+          )}
+        </div>
+
         <div className="rounded-lg border border-primary/20 bg-white/80 p-3 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -444,6 +497,23 @@ export function AIPanel() {
             )}
         </div>
 
+        {signals.decisions && signals.decisions.length > 0 && (
+          <div className="rounded-2xl border border-border/70 bg-white p-3 shadow-sm">
+            <p className="label-system text-[11px] text-primary">Decision Timeline</p>
+            <div className="mt-2 space-y-2">
+              {signals.decisions.slice(0, 3).map((decision, idx) => (
+                <div key={`timeline-${idx}`} className="rounded-xl border border-border/60 bg-[#fcfaf4] px-3 py-2">
+                  <p className="text-xs font-semibold text-foreground">{decision.text}</p>
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />Just now</span>
+                    <span>Confidence {decision.confidence}/10</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {messages.length === 0 ? (
           <div className="space-y-3">
             <div className="rounded-lg bg-sidebar border border-border p-3 text-sm shadow-sm">
@@ -507,7 +577,7 @@ export function AIPanel() {
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-border shrink-0 bg-sidebar">
+      <div className="p-3 border-t border-border/70 shrink-0 bg-[#efe8d8]">
         {messages.length > 0 && (
           <Button
             variant="ghost"

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Inter, IBM_Plex_Mono } from "next/font/google";
+import { Sora, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/firebase/AuthProvider";
 
-const inter = Inter({ 
+const sora = Sora({
   subsets: ["latin"],
   variable: "--font-sans",
 });
@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning className={`${inter.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
+      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
         <script
           dangerouslySetInnerHTML={{
             __html: `(() => {

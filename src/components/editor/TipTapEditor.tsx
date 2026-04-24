@@ -58,7 +58,7 @@ export function TipTapEditor() {
           if (node.type.name === 'heading') {
             return 'Document Title...';
           }
-          return 'Start typing your product thoughts...';
+          return 'What are you trying to solve today?';
         },
       }),
       BubbleMenuExtension.configure({
