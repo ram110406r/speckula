@@ -1,5 +1,5 @@
-// This is your Prisma schema file for the AI service layer.
-// This stores AI outputs, reasoning traces, and caches.
+// Prisma schema for the AI service layer.
+// Stores AI outputs, reasoning traces, and caches.
 // The source of truth for user data remains in Firestore.
 
 datasource db {
@@ -11,194 +11,150 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// ========================= 
+// =========================
 // AI CACHE & OUTPUTS
 // =========================
 
-/**
- * Stores AI-generated insights from Groq
- * Referenced by: Frontend via Firestore
- */
+/// AI-generated insights from Groq. Referenced by the frontend via Firestore.
 model AIInsight {
-  id                String   @id @default(uuid())
-  projectId         String   // Firestore project ID
-  noteId            String   // Firestore note ID
-  userId            String   // Firestore user ID
-  content           String
-  source            String   @default("groq") // groq | user
-  confidenceScore   Float    @default(0.7)
-  modelUsed         String   // mixtral-8x7b | llama3-70b
-  tokensUsed        Int      @default(0)
-  generatedAt       DateTime @default(now())
-  expiresAt         DateTime? // Cache invalidation
-  
+  id              String    @id @default(uuid())
+  projectId       String
+  noteId          String
+  userId          String
+  content         String
+  source          String    @default("groq")
+  confidenceScore Float     @default(0.7)
+  modelUsed       String
+  tokensUsed      Int       @default(0)
+  generatedAt     DateTime  @default(now())
+  expiresAt       DateTime?
+
   @@index([projectId])
   @@index([userId])
   @@index([noteId])
   @@index([generatedAt])
 }
 
-/**
- * Stores AI-generated PRDs from Groq
- * Referenced by: Frontend via Firestore
- */
+/// AI-generated PRDs from Groq. Referenced by the frontend via Firestore.
 model AIPRD {
-  id              String   @id @default(uuid())
-  projectId       String   // Firestore project ID
-  userId          String   // Firestore user ID
-  title           String
-  content         String   // Full PRD markdown
-  version         Int      @default(1)
-  modelUsed       String   // llama3-70b
-  tokensUsed      Int      @default(0)
-  generatedAt     DateTime @default(now())
-  
+  id          String   @id @default(uuid())
+  projectId   String
+  userId      String
+  title       String
+  content     String
+  version     Int      @default(1)
+  modelUsed   String
+  tokensUsed  Int      @default(0)
+  generatedAt DateTime @default(now())
+
   @@index([projectId])
   @@index([userId])
 }
 
-/**
- * Stores reasoning traces for decisions
- * Transparency: why did Groq give this confidence score?
- */
+/// Reasoning traces for decisions (why Groq gave this confidence score).
 model DecisionReasoning {
-  id                    String   @id @default(uuid())
-  decisionId            String   // Firestore decision ID
-  projectId             String   // Firestore project ID
-  userId                String   // Firestore user ID
-  prompt                String   // What we asked Groq
-  reasoning             String   // Groq's reasoning
-  confidenceScore       Float
-  confidenceReasoning   String   // Why this confidence?
-  modelUsed             String   // mixtral-8x7b | llama3-70b
-  tokensUsed            Int      @default(0)
-  generatedAt           DateTime @default(now())
-  
+  id                  String   @id @default(uuid())
+  decisionId          String
+  projectId           String
+  userId              String
+  prompt              String
+  reasoning           String
+  confidenceScore     Float
+  confidenceReasoning String
+  modelUsed           String
+  tokensUsed          Int      @default(0)
+  generatedAt         DateTime @default(now())
+
   @@index([decisionId])
   @@index([projectId])
   @@index([userId])
 }
 
-/**
- * Pattern analysis results from real-time note updates
- * Stores: repeated keywords, weak signals, suggestions
- */
+/// Pattern analysis from real-time note updates: repeated keywords, weak signals, suggestions.
 model PatternAnalysis {
-  id              String   @id @default(uuid())
-  projectId       String   // Firestore project ID
-  noteId          String   // Firestore note ID
-  userId          String   // Firestore user ID
-  patterns        String   // JSON: { keywords: [], weak_signals: [], suggestions: [] }
-  modelUsed       String   // mixtral-8x7b
-  tokensUsed      Int      @default(0)
-  analyzedAt      DateTime @default(now())
-  expiresAt       DateTime? // Short-lived cache
-  
+  id         String    @id @default(uuid())
+  projectId  String
+  noteId     String
+  userId     String
+  patterns   String
+  modelUsed  String
+  tokensUsed Int       @default(0)
+  analyzedAt DateTime  @default(now())
+  expiresAt  DateTime?
+
   @@index([projectId])
   @@index([noteId])
   @@index([analyzedAt])
 }
 
-/**
- * Prompt history & results for cost tracking and optimization
- * Helps identify repeated prompts to cache
- */
+/// Prompt history and results for cost tracking and deduplication.
 model PromptLog {
-  id              String   @id @default(uuid())
-  userId          String   // Firestore user ID
-  projectId       String   // Firestore project ID
-  promptHash      String   // Hash of prompt for deduplication
-  prompt          String   // The actual prompt
-  modelUsed       String
-  inputTokens     Int
-  outputTokens    Int
-  totalTokens     Int
-  executionMs     Int
-  cost            Float    // Estimated cost in USD
-  cachedResult    Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  
+  id           String   @id @default(uuid())
+  userId       String
+  projectId    String
+  promptHash   String
+  prompt       String
+  modelUsed    String
+  inputTokens  Int
+  outputTokens Int
+  totalTokens  Int
+  executionMs  Int
+  cost         Float
+  cachedResult Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
   @@index([userId])
   @@index([projectId])
   @@index([promptHash])
   @@index([createdAt])
 }
 
-/**
- * Cached prompt results to avoid duplicate Groq calls
- * TTL-based expiration
- */
+/// TTL-based cache of prompt results to avoid duplicate Groq calls.
 model PromptCache {
-  id              String   @id @default(uuid())
-  promptHash      String   @unique
-  result          String   // Cached response
-  modelUsed       String
-  expiresAt       DateTime
-  hitCount        Int      @default(0)
-  createdAt       DateTime @default(now())
-  lastAccessedAt  DateTime @updatedAt
-  
+  id             String   @id @default(uuid())
+  promptHash     String   @unique
+  result         String
+  modelUsed      String
+  expiresAt      DateTime
+  hitCount       Int      @default(0)
+  createdAt      DateTime @default(now())
+  lastAccessedAt DateTime @updatedAt
+
   @@index([expiresAt])
 }
 
-/**
- * Task suggestions from Groq
- * Referenced by: Frontend via Firestore
- */
+/// Task suggestions from Groq. Referenced by the frontend via Firestore.
 model AISuggestedTask {
   id              String   @id @default(uuid())
-  projectId       String   // Firestore project ID
-  prdId           String?  // Firestore PRD ID (optional)
-  userId          String   // Firestore user ID
+  projectId       String
+  prdId           String?
+  userId          String
   title           String
   description     String?
   priority        String   @default("medium")
-  reasoning       String   // Why Groq suggested this
+  reasoning       String
   confidenceScore Float    @default(0.7)
-  modelUsed       String   // mixtral-8x7b
+  modelUsed       String
   tokensUsed      Int      @default(0)
   generatedAt     DateTime @default(now())
-  dismissed       Boolean  @default(false) // User feedback
-  
+  dismissed       Boolean  @default(false)
+
   @@index([projectId])
   @@index([prdId])
   @@index([userId])
 }
 
-/**
- * API usage tracking
- * Monitor costs and quota
- */
+/// Daily API usage aggregated per user for cost/quota monitoring.
 model APIUsage {
-  id              String   @id @default(uuid())
-  userId          String   // Firestore user ID
-  date            DateTime @default(now())
-  totalRequests   Int      @default(0)
-  totalTokens     Int      @default(0)
-  totalCost       Float    @default(0.0)
-  modelMix        String   // JSON: { "mixtral-8x7b": 5, "llama3-70b": 2 }
-  
+  id            String   @id @default(uuid())
+  userId        String
+  date          DateTime @default(now())
+  totalRequests Int      @default(0)
+  totalTokens   Int      @default(0)
+  totalCost     Float    @default(0.0)
+  modelMix      String
+
   @@unique([userId, date])
   @@index([userId])
   @@index([date])
-}
-
-// ========================= 
-// REALTIME CONNECTIONS
-// =========================
-
-/**
- * WebSocket connection metadata
- * Track active users for realtime features
- */
-model ActiveConnection {
-  id              String   @id @default(uuid())
-  userId          String   // Firestore user ID
-  projectId       String   // Firestore project ID
-  connectionId    String   @unique // WebSocket connection ID
-  connectedAt     DateTime @default(now())
-  lastHeartbeat   DateTime @updatedAt
-  
-  @@index([userId])
-  @@index([projectId])
 }

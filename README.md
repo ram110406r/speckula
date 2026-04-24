@@ -94,9 +94,6 @@ npm install
 Create a `.env.local` file in the project root:
 
 ```env
-# Groq AI
-GROQ_API_KEY=your_groq_api_key_here
-
 # Firebase (from your Firebase Console → Project Settings → Your apps)
 NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
@@ -104,7 +101,13 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project_id.firebasestorage.app
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+
+# Backend (Fastify service that proxies Groq). Defaults to http://localhost:3001.
+BACKEND_URL=http://localhost:3001
 ```
+
+The `GROQ_API_KEY` now lives on the backend (see `backend/.env.example`), not the
+Next.js app. The frontend's `/api/chat` route simply proxies to the backend.
 
 ### 4. Set up Firebase
 

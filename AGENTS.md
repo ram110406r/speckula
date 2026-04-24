@@ -38,10 +38,12 @@ Agent instructions for this workspace.
 - Shared client logic is in `src/lib/` and global state in `src/store/useAppStore.ts`.
 
 ### Backend
-- Actual server framework is Fastify, entry points: `backend/src/index.ts` and `backend/src/app.ts`.
-- Route handlers live in `backend/src/routes/`.
+- Fastify service at `backend/`, entry points: `backend/src/index.ts` and `backend/src/app.ts`.
+- Scope: AI compute + Groq cache/telemetry only. Firestore is the source of truth for user data.
+- Route handlers live in `backend/src/routes/` (Fastify plugins).
 - Business logic belongs in `backend/src/services/` (keep routes thin).
-- Validation uses Zod schemas (`backend/src/lib/schemas.ts`) at route boundaries.
+- Each route validates its body inline with Zod — no shared schemas module.
+- All `/ai/*` routes require a Firebase ID token; `userId` comes from the verified token, not the body.
 - Database access goes through Prisma (`backend/prisma/schema.prisma`, `backend/src/lib/db.ts`).
 
 ## Conventions Agents Should Follow
@@ -51,9 +53,9 @@ Agent instructions for this workspace.
 - Prefer small, focused changes; avoid broad refactors unless explicitly requested.
 
 ## Known Pitfalls
-- Some backend docs mention Express, but runtime code is Fastify. Trust source code over stale docs.
-- Frontend chat route requires Firebase auth token and `GROQ_API_KEY`; missing env values fail requests.
-- Backend requires Node >= 18 and a configured PostgreSQL `DATABASE_URL` for Prisma flows.
+- Frontend chat route requires a Firebase auth token and `GROQ_API_KEY`; missing env values fail requests.
+- Backend requires Node >= 18, a configured PostgreSQL `DATABASE_URL`, and Firebase Admin service-account env vars for Prisma and token verification.
+- Frontend does not currently call the backend — the Next.js `/api/chat` route is the only Groq path used in the UI.
 
 ## Canonical Docs (Link, Don't Duplicate)
 - Project overview: [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)
@@ -61,8 +63,6 @@ Agent instructions for this workspace.
 - Roadmap: [roadmap.md](roadmap.md)
 - Frontend + platform overview: [README.md](README.md)
 - Backend setup: [backend/SETUP.md](backend/SETUP.md)
-- Backend API details: [backend/API_DOCUMENTATION.md](backend/API_DOCUMENTATION.md)
-- Backend implementation notes: [backend/IMPLEMENTATION_SUMMARY.md](backend/IMPLEMENTATION_SUMMARY.md)
 - Backend reference README: [backend/README.md](backend/README.md)
 
 ## Preferred Verification Before Completion

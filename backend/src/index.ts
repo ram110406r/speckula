@@ -16,10 +16,9 @@ async function startServer() {
     // Start server
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
 
-    console.log(`✅ Server running on http://localhost:${PORT}`);
-    console.log(`🚀 AI Backend powered by Groq (mixtral-8x7b & llama3-70b)`);
-    console.log(`📡 WebSocket ready for realtime updates`);
-    console.log(`🌍 Environment: ${NODE_ENV}`);
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`AI backend powered by Groq (llama-3.3-70b-versatile)`);
+    console.log(`Environment: ${NODE_ENV}`);
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

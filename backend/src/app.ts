@@ -1,8 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import fastifyJwt from '@fastify/jwt';
-import fastifyWebsocket from '@fastify/websocket';
 import aiRoutes from './routes/aiRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
 
 export const createServer = async () => {
   const fastify = Fastify({
@@ -11,33 +10,28 @@ export const createServer = async () => {
         ? {
             transport: {
               target: 'pino-pretty',
-              options: {
-                colorize: true,
-              },
+              options: { colorize: true },
             },
           }
         : true,
   });
 
-  // Plugins
   await fastify.register(cors, {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true,
   });
 
-  await fastify.register(fastifyJwt, {
-    secret: process.env.FIREBASE_PRIVATE_KEY || 'your-secret-key',
+  // Normalize any unhandled error into the `{ ok, error }` envelope the frontend expects.
+  fastify.setErrorHandler((error, _request, reply) => {
+    fastify.log.error(error);
+    const status = error.statusCode && error.statusCode >= 400 ? error.statusCode : 500;
+    reply.code(status).send({ ok: false, error: error.message });
   });
 
-  await fastify.register(fastifyWebsocket);
+  fastify.get('/health', async () => ({ status: 'ok' }));
 
-  // Health check
-  fastify.get('/health', async () => {
-    return { status: 'ok' };
-  });
-
-  // AI Routes
   await fastify.register(aiRoutes, { prefix: '/ai' });
+  await fastify.register(chatRoutes, { prefix: '/ai' });
 
   return fastify;
 };

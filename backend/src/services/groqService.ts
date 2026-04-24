@@ -6,10 +6,12 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// Model selection based on task complexity
+// Model selection based on task complexity.
+// Both slots use Llama 3.3 70B Versatile — Groq retired Mixtral and the older Llama3 models.
+// Kept as two keys so callers can express intent; swap in a smaller model here when one ships.
 const MODELS = {
-  fast: "mixtral-8x7b-32768", // Quick responses, patterns, tasks
-  reasoning: "llama3-70b-8192", // Deep analysis, PRDs, insights
+  fast: "llama-3.3-70b-versatile",
+  reasoning: "llama-3.3-70b-versatile",
 };
 
 interface GroqResponse {
@@ -351,11 +353,10 @@ Only return the JSON, no other text.`;
       projectId
     );
 
-    // Parse and store patterns
     try {
       const patterns = JSON.parse(result.content);
 
-      const stored = await db.patternAnalysis.create({
+      await db.patternAnalysis.create({
         data: {
           projectId,
           noteId,
@@ -363,7 +364,7 @@ Only return the JSON, no other text.`;
           patterns: JSON.stringify(patterns),
           modelUsed: result.modelUsed,
           tokensUsed: result.tokensUsed,
-          expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30-min cache
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
         },
       });
 
@@ -459,14 +460,12 @@ Return JSON:
    * Based on Groq pricing as of 2024
    */
   estimateCost(model: string, tokens: number): number {
-    // Groq pricing per 1M tokens (example rates)
     const rates: Record<string, number> = {
-      "mixtral-8x7b-32768": 0.24, // $0.24 per 1M
-      "llama3-70b-8192": 0.59, // $0.59 per 1M
+      "llama-3.3-70b-versatile": 0.59,
     };
 
-    const rate = rates[model] || 0.24;
-    return (tokens / 1000000) * rate;
+    const rate = rates[model] ?? 0.59;
+    return (tokens / 1_000_000) * rate;
   },
 
   /**
