@@ -27,7 +27,7 @@ model User {
   notes Note[]
   insights Insight[]
   decisions Decision[]
-  prdss PRD[]
+  prds PRD[]
   tasks Task[]
 
   @@index([email])
