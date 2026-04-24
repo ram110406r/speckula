@@ -350,7 +350,7 @@ export function TipTapEditor() {
     extractTimerRef.current = window.setTimeout(async () => {
       setIsAutoExtracting(true);
       try {
-        await extractInsightsAction(user.uid, editor.getJSON());
+        await extractInsightsAction(user.uid, editor.getJSON(), currentDocId);
         await saveDocument(user.uid, currentDocId, {
           lastInsightExtractionHash: currentHash,
         });

@@ -26,17 +26,21 @@ export function PRDsView() {
     setIsLoading(true);
     try {
       const data = await getPRDs(user.uid);
-      setPrds(data);
+      setPrds(currentDocId ? data.filter((prd) => prd.sourceDocId === currentDocId) : []);
     } catch (error) {
       console.error("Failed to fetch PRDs:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, currentDocId]);
 
   useEffect(() => {
     fetchPRDs();
   }, [fetchPRDs]);
+
+  useEffect(() => {
+    setSelectedPRD(null);
+  }, [currentDocId]);
 
   const handleGenerate = async () => {
     if (!user || !currentDocId || isGenerating) return;
@@ -48,7 +52,7 @@ export function PRDsView() {
         return;
       }
       const title = documents.find(d => d.id === currentDocId)?.title || "Untitled Document";
-      await generatePRDAction(user.uid, doc.content, title);
+      await generatePRDAction(user.uid, doc.content, title, currentDocId);
       await fetchPRDs();
     } catch (error) {
       console.error("Generation failed:", error);

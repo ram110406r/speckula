@@ -42,6 +42,7 @@ export interface Insight {
   category: "pain-point" | "opportunity" | "user-segment" | "pattern";
   title: string;
   description: string;
+  sourceDocId?: string;
   userId: string;
   createdAt: Timestamp | null;
 }
@@ -51,6 +52,7 @@ export interface PRD {
   title: string;
   content: string; // Markdown or text
   status: "draft" | "complete";
+  sourceDocId?: string;
   userId: string;
   updatedAt: Timestamp | null;
 }
@@ -81,6 +83,7 @@ export interface ExecutionTask {
   category?: string; // backend, frontend, design, qa, integration
   prdSection?: string; // Reference to which PRD section this came from
   prdId?: string; // Reference to PRD document
+  sourceDocId?: string; // Reference to source editor document
   dependsOn?: string[]; // Array of task IDs this task depends on
   assignee?: string; // User ID or email of assigned team member
   userId: string;

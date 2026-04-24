@@ -467,7 +467,7 @@ Be strict. Penalize vague ideas. Reward validated problems.
 
 export const generateInlineSuggestionForAnticipation = generateNextSteps;
 
-export const extractInsightsAction = async (userId: string, docContent: unknown) => {
+export const extractInsightsAction = async (userId: string, docContent: unknown, sourceDocId?: string) => {
   const context = tipTapToText(docContent);
   const prompt = `Extract exactly 4 key product insights. Format as a JSON array of objects with keys: title, description, and category (one of: pain-point, opportunity, user-segment, pattern).`;
   
@@ -485,7 +485,7 @@ export const extractInsightsAction = async (userId: string, docContent: unknown)
 
   try {
     for (const insight of insights as Array<Omit<import("../firebase/db").Insight, "id" | "userId" | "createdAt">>) {
-      await saveInsight(userId, insight);
+      await saveInsight(userId, { ...insight, sourceDocId });
     }
     return insights;
   } catch (e) {
@@ -494,7 +494,7 @@ export const extractInsightsAction = async (userId: string, docContent: unknown)
   }
 };
 
-export const generatePRDAction = async (userId: string, docContent: unknown, title: string) => {
+export const generatePRDAction = async (userId: string, docContent: unknown, title: string, sourceDocId?: string) => {
   const context = tipTapToText(docContent);
   const prompt = `Generate a professional, detailed PRD based on these notes. 
   The PRD MUST include the following sections:
@@ -511,12 +511,13 @@ export const generatePRDAction = async (userId: string, docContent: unknown, tit
   await savePRD(userId, {
     title: `PRD: ${title}`,
     content,
-    status: "draft"
+    status: "draft",
+    sourceDocId,
   });
   return content;
 };
 
-export const suggestTasksAction = async (userId: string, docContent: unknown) => {
+export const suggestTasksAction = async (userId: string, docContent: unknown, sourceDocId?: string) => {
   const context = tipTapToText(docContent);
   const prompt = `Suggest 5 concrete execution tasks. Format as a JSON array of objects with keys: title, priority (high, medium, low), milestone (short string).`;
   
@@ -536,7 +537,8 @@ export const suggestTasksAction = async (userId: string, docContent: unknown) =>
     for (const task of tasks as Array<Record<string, unknown>>) {
       await saveTask(userId, {
         ...task,
-        status: "todo"
+        status: "todo",
+        sourceDocId,
       } as Omit<import("../firebase/db").ExecutionTask, "userId" | "updatedAt">);
     }
     return tasks;

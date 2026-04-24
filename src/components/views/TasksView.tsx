@@ -51,23 +51,23 @@ export function TasksView() {
     setIsLoading(true);
     try {
       const data = await getTasks(user.uid);
-      setTasks(data);
+      setTasks(currentDocId ? data.filter((task) => task.sourceDocId === currentDocId) : []);
     } catch (error) {
       console.error("Failed to fetch tasks:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, currentDocId]);
 
   const fetchPRDs = React.useCallback(async () => {
     if (!user) return;
     try {
       const data = await getPRDs(user.uid);
-      setPRDs(data);
+      setPRDs(currentDocId ? data.filter((prd) => prd.sourceDocId === currentDocId) : []);
     } catch (error) {
       console.error("Failed to fetch PRDs:", error);
     }
-  }, [user]);
+  }, [user, currentDocId]);
 
   useEffect(() => {
     fetchTasks();
@@ -104,6 +104,7 @@ export function TasksView() {
           ...task,
           status: "todo",
           prdId: prd.id,
+          sourceDocId: currentDocId ?? undefined,
           dependsOn: []
         });
         

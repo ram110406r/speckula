@@ -28,13 +28,13 @@ export function InsightsView() {
     setIsLoading(true);
     try {
       const data = await getInsights(user.uid);
-      setInsights(data);
+      setInsights(currentDocId ? data.filter((insight) => insight.sourceDocId === currentDocId) : []);
     } catch (error) {
       console.error("Failed to fetch insights:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, currentDocId]);
 
   useEffect(() => {
     fetchInsights();
@@ -52,7 +52,7 @@ export function InsightsView() {
         alert("Document is empty. Please add some notes first.");
         return;
       }
-      await extractInsightsAction(user.uid, doc.content);
+      await extractInsightsAction(user.uid, doc.content, currentDocId);
       await fetchInsights();
     } catch (error) {
       console.error("Extraction failed:", error);
