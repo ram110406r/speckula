@@ -55,6 +55,24 @@ export function AIPanel() {
   }, [currentDocId, dismissedHintsByDoc]);
 
   React.useEffect(() => {
+    setMessages([]);
+    setInput("");
+    setSignals({ insights: [], suggestions: [], challenges: [] });
+    setFeatureDrafts({});
+    setIsLoading(false);
+    setIsAnalyzing(false);
+    setIsGeneratingFeatureId(null);
+    setIsGeneratingPRDFromDecision(null);
+    lastAnalyzedRef.current = "";
+    lastAnalyzedAtRef.current = 0;
+
+    if (analyzeTimerRef.current) {
+      window.clearTimeout(analyzeTimerRef.current);
+      analyzeTimerRef.current = null;
+    }
+  }, [currentDocId]);
+
+  React.useEffect(() => {
     const normalized = hashContent(activeContext);
 
     if (!user || normalized.length < 120) {

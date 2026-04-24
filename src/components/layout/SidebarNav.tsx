@@ -31,7 +31,7 @@ const navItems: { icon: React.ElementType; label: string; view: AppView }[] = [
 
 export function SidebarNav() {
   const { user, loginWithGoogle, logout, loading } = useAuth();
-  const { activeView, setActiveView, documents, setDocuments, currentDocId, setCurrentDocId } = useAppStore();
+  const { activeView, setActiveView, documents, setDocuments, currentDocId, setCurrentDocId, resetForNewDocument } = useAppStore();
   const [isCreating, setIsCreating] = React.useState(false);
   const [isDarkMode, setIsDarkMode] = React.useState(false);
 
@@ -79,6 +79,7 @@ export function SidebarNav() {
     if (!user || isCreating) return;
     setIsCreating(true);
     try {
+      resetForNewDocument();
       const newId = await createDocument(user.uid);
       const docs = await getUserDocuments(user.uid);
       setDocuments(docs);

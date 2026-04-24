@@ -80,6 +80,7 @@ interface AppState {
   setTaskDependencies: (deps: TaskDependencyRecord[] | null) => void;
   outcomeLoop: OutcomeLoopState;
   setOutcomeLoop: (state: Partial<OutcomeLoopState>) => void;
+  resetForNewDocument: () => void;
   resetState: () => void;
 }
 
@@ -105,6 +106,14 @@ const initialState = {
   },
 };
 
+const initialOutcomeLoopState: OutcomeLoopState = {
+  expectedOutcome: null,
+  actualOutcome: null,
+  learningInsight: null,
+  confidenceBefore: 0,
+  confidenceAfter: 0,
+};
+
 export const useAppStore = create<AppState>((set) => ({
   ...initialState,
   toggleAiPanel: () => set((state) => ({ aiPanelOpen: !state.aiPanelOpen })),
@@ -125,6 +134,17 @@ export const useAppStore = create<AppState>((set) => ({
         ...state,
       },
     })),
+  resetForNewDocument: () =>
+    set({
+      activeContext: '',
+      activeView: 'editor',
+      pendingInsertion: null,
+      strategicContext: null,
+      pendingDecisionForPRD: null,
+      selectedPRDForTasks: null,
+      taskDependencies: null,
+      outcomeLoop: { ...initialOutcomeLoopState },
+    }),
   dismissHintForDoc: (docId, hintId) =>
     set((state) => {
       const existing = state.dismissedHintsByDoc[docId] ?? [];

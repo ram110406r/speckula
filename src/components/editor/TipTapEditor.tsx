@@ -191,6 +191,12 @@ export function TipTapEditor() {
     if (!editor || !user || !currentDocId) return;
 
     const loadContent = async () => {
+      editor.commands.setContent("");
+      setInlineSuggestion(null);
+      setIsInlineThinking(false);
+      activeInlineHashRef.current = "";
+      dismissedInlineHashRef.current = "";
+      setActiveContext("");
       setIsLoadingContent(true);
       try {
         const doc = await getDocument(user.uid, currentDocId);
