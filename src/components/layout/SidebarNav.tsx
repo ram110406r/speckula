@@ -102,6 +102,7 @@ export function SidebarNav() {
       const docs = await getUserDocuments(user.uid);
       setDocuments(docs);
       if (currentDocId === id) {
+        resetForNewDocument();
         setCurrentDocId(docs.length > 0 ? docs[0].id : null);
       }
     } catch (error) {
