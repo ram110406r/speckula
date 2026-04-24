@@ -91,7 +91,6 @@ export function TasksView() {
       const prioritizedTasks = await intelligentPrioritizeAction(tasksWithMetadata, deps);
       
       // Step 4: Save all tasks to Firestore
-      const depMap = new Map<string, string[]>();
       const savedTaskIds: string[] = [];
       const taskRefsToUpdate: Array<{ id: string; dependsOn: string[] }> = [];
       
@@ -123,10 +122,7 @@ export function TasksView() {
       for (const { id, dependsOn } of taskRefsToUpdate) {
         await updateTask(user.uid, id, { dependsOn });
       }
-      
-      // Log dependency info for debugging
-      console.log("Task dependencies mapped:", depMap);
-      
+
       await fetchTasks();
     } catch (error) {
       console.error("Task generation from PRD failed:", error);

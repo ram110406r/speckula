@@ -71,5 +71,9 @@ export async function publishCase({ userId, draft, visibility }: PublishCaseInpu
 }
 
 export function validatePublishReadiness(expectedOutcome: ExpectedOutcome | null | undefined) {
-  return Boolean(expectedOutcome && expectedOutcome.metric && expectedOutcome.timeframe);
+  if (!expectedOutcome) return false;
+  if (!expectedOutcome.metric?.trim()) return false;
+  if (!expectedOutcome.timeframe?.trim()) return false;
+  if (typeof expectedOutcome.target_value !== "number" || !Number.isFinite(expectedOutcome.target_value)) return false;
+  return true;
 }

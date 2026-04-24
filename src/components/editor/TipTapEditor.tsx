@@ -201,7 +201,13 @@ export function TipTapEditor() {
       try {
         const doc = await getDocument(user.uid, currentDocId);
         if (doc) {
-          editor.commands.setContent(doc.content || "");
+          try {
+            editor.commands.setContent(doc.content || "");
+          } catch (contentError) {
+            // Malformed Firestore content shouldn't wedge the editor — fall back to empty.
+            console.error("Invalid TipTap content in Firestore:", contentError);
+            editor.commands.setContent("");
+          }
           lastExtractedHashRef.current = doc.lastInsightExtractionHash ?? null;
         } else {
           editor.commands.setContent("");
@@ -281,9 +287,10 @@ export function TipTapEditor() {
 
           setIsInlineThinking(false);
           activeInlineHashRef.current = result.contextHash;
+          const prioritized = prioritizeSteps(result.suggestion.next_steps);
           setInlineSuggestion({
             stage: result.suggestion.stage,
-            next_steps: [...prioritizeSteps(result.suggestion.next_steps).high_priority, ...prioritizeSteps(result.suggestion.next_steps).medium],
+            next_steps: [...prioritized.high_priority, ...prioritized.medium],
           });
         },
         onError: (error) => {

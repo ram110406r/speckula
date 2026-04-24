@@ -43,6 +43,16 @@ export function AIPanel() {
   const lastAnalyzedAtRef = React.useRef(0);
   const analyzeTimerRef = React.useRef<number | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const streamAbortRef = React.useRef<AbortController | null>(null);
+  const isMountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      streamAbortRef.current?.abort();
+    };
+  }, []);
 
   const ANALYZE_DEBOUNCE_MS = 4000;
   const ANALYZE_COOLDOWN_MS = 12000;
@@ -245,6 +255,10 @@ export function AIPanel() {
     const assistantId = (Date.now() + 1).toString();
     setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "" }]);
 
+    streamAbortRef.current?.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -263,6 +277,7 @@ export function AIPanel() {
             content: m.content,
           })),
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) throw new Error("API error");
@@ -276,6 +291,7 @@ export function AIPanel() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        if (controller.signal.aborted || !isMountedRef.current) break;
         accumulated += decoder.decode(value, { stream: true });
         setMessages((prev) =>
           prev.map((m) =>
@@ -284,7 +300,9 @@ export function AIPanel() {
         );
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       console.error("AI Error:", error);
+      if (!isMountedRef.current) return;
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -293,7 +311,10 @@ export function AIPanel() {
         )
       );
     } finally {
-      setIsLoading(false);
+      if (streamAbortRef.current === controller) {
+        streamAbortRef.current = null;
+      }
+      if (isMountedRef.current) setIsLoading(false);
     }
   };
 

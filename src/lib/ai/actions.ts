@@ -465,33 +465,49 @@ Be strict. Penalize vague ideas. Reward validated problems.
   };
 };
 
-export const generateInlineSuggestionForAnticipation = generateNextSteps;
+const INSIGHT_CATEGORIES = ["pain-point", "opportunity", "user-segment", "pattern"] as const;
+type InsightCategory = (typeof INSIGHT_CATEGORIES)[number];
+
+interface NormalizedInsight {
+  title: string;
+  description: string;
+  category: InsightCategory;
+}
+
+function normalizeInsight(raw: unknown): NormalizedInsight | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as { title?: unknown; description?: unknown; category?: unknown };
+
+  const title = typeof item.title === "string" ? item.title.trim() : "";
+  const description = typeof item.description === "string" ? item.description.trim() : "";
+  if (!title || !description) return null;
+
+  const category = typeof item.category === "string" && (INSIGHT_CATEGORIES as readonly string[]).includes(item.category)
+    ? (item.category as InsightCategory)
+    : "pattern";
+
+  return { title, description, category };
+}
 
 export const extractInsightsAction = async (userId: string, docContent: unknown, sourceDocId?: string) => {
   const context = tipTapToText(docContent);
   const prompt = `Extract exactly 4 key product insights. Format as a JSON array of objects with keys: title, description, and category (one of: pain-point, opportunity, user-segment, pattern).`;
-  
+
   const result = await callAI(prompt, context);
-  let insights: unknown;
-  try {
-    insights = parseJsonPayload(result);
-    if (!Array.isArray(insights)) {
-      throw new Error("Insights response was not an array.");
-    }
-  } catch (e) {
-    console.error("Failed to parse insights JSON:", e);
-    throw e;
+  const parsed = parseJsonPayload(result);
+  if (!Array.isArray(parsed)) {
+    throw new Error("Insights response was not an array.");
   }
 
-  try {
-    for (const insight of insights as Array<Omit<import("../firebase/db").Insight, "id" | "userId" | "createdAt">>) {
-      await saveInsight(userId, { ...insight, sourceDocId });
-    }
-    return insights;
-  } catch (e) {
-    console.error("Failed to persist insights:", e);
-    throw e;
+  const insights = parsed
+    .map(normalizeInsight)
+    .filter((entry): entry is NormalizedInsight => entry !== null);
+
+  for (const insight of insights) {
+    await saveInsight(userId, { ...insight, sourceDocId });
   }
+
+  return insights;
 };
 
 export const generatePRDAction = async (userId: string, docContent: unknown, title: string, sourceDocId?: string) => {
@@ -517,35 +533,56 @@ export const generatePRDAction = async (userId: string, docContent: unknown, tit
   return content;
 };
 
+const TASK_PRIORITIES = ["high", "medium", "low"] as const;
+type TaskPriorityValue = (typeof TASK_PRIORITIES)[number];
+
+interface NormalizedSuggestedTask {
+  title: string;
+  priority: TaskPriorityValue;
+  milestone?: string;
+}
+
+function normalizeSuggestedTask(raw: unknown): NormalizedSuggestedTask | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as { title?: unknown; priority?: unknown; milestone?: unknown };
+
+  const title = typeof item.title === "string" ? item.title.trim() : "";
+  if (!title) return null;
+
+  const priority = typeof item.priority === "string" && (TASK_PRIORITIES as readonly string[]).includes(item.priority)
+    ? (item.priority as TaskPriorityValue)
+    : "medium";
+
+  const milestone = typeof item.milestone === "string" && item.milestone.trim().length > 0
+    ? item.milestone.trim()
+    : undefined;
+
+  return { title, priority, milestone };
+}
+
 export const suggestTasksAction = async (userId: string, docContent: unknown, sourceDocId?: string) => {
   const context = tipTapToText(docContent);
   const prompt = `Suggest 5 concrete execution tasks. Format as a JSON array of objects with keys: title, priority (high, medium, low), milestone (short string).`;
-  
+
   const result = await callAI(prompt, context);
-  let tasks: unknown;
-  try {
-    tasks = parseJsonPayload(result);
-    if (!Array.isArray(tasks)) {
-      throw new Error("Tasks response was not an array.");
-    }
-  } catch (e) {
-    console.error("Failed to parse tasks JSON:", e);
-    throw e;
+  const parsed = parseJsonPayload(result);
+  if (!Array.isArray(parsed)) {
+    throw new Error("Tasks response was not an array.");
   }
 
-  try {
-    for (const task of tasks as Array<Record<string, unknown>>) {
-      await saveTask(userId, {
-        ...task,
-        status: "todo",
-        sourceDocId,
-      } as Omit<import("../firebase/db").ExecutionTask, "userId" | "updatedAt">);
-    }
-    return tasks;
-  } catch (e) {
-    console.error("Failed to persist tasks:", e);
-    throw e;
+  const tasks = parsed
+    .map(normalizeSuggestedTask)
+    .filter((entry): entry is NormalizedSuggestedTask => entry !== null);
+
+  for (const task of tasks) {
+    await saveTask(userId, {
+      ...task,
+      status: "todo",
+      sourceDocId,
+    });
   }
+
+  return tasks;
 };
 
 export const strategicGuidanceAction = async (docContent: unknown): Promise<StrategicGuidance> => {
@@ -779,15 +816,19 @@ Output ONLY a JSON array with this structure:
       throw new Error("Tasks response was not an array.");
     }
     
-    return tasks.map(t => ({
-      title: t.title || "Untitled Task",
-      description: t.description || t.title || "",
-      priority: (["high", "medium", "low"].includes(t.priority) ? t.priority : "medium") as "high" | "medium" | "low",
-      effort: Math.min(10, Math.max(1, parseInt(t.effort) || 5)),
-      category: t.category || "general",
-      prdSection: t.prdSection || "General",
-      milestone: t.milestone
-    })) as TaskWithMetadata[];
+    return tasks.map(t => {
+      const rawEffort = Number(t.effort);
+      const effort = Number.isFinite(rawEffort) ? Math.min(10, Math.max(1, Math.round(rawEffort))) : 5;
+      return {
+        title: t.title || "Untitled Task",
+        description: t.description || t.title || "",
+        priority: (["high", "medium", "low"].includes(t.priority) ? t.priority : "medium") as "high" | "medium" | "low",
+        effort,
+        category: t.category || "general",
+        prdSection: t.prdSection || "General",
+        milestone: t.milestone,
+      };
+    }) as TaskWithMetadata[];
   } catch (e) {
     console.error("[generateTasksFromPRDAction] Failed to parse tasks JSON:", e);
     throw e;
