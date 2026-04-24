@@ -234,10 +234,10 @@ export const aiEngineService = {
  * This is a template - implement based on your chosen provider
  */
 export const callAIAPI = async (
-  input: any,
+  input: unknown,
   action: string,
-  apiKey?: string
-): Promise<any> => {
+  _apiKey?: string
+): Promise<{ success: boolean; data: null }> => {
   // TODO: Implement based on your AI provider
   // This could call Groq, OpenAI, Anthropic, etc.
   

@@ -169,7 +169,7 @@ export const UpdateTaskSchema = z.object({
 export const ConnectIntegrationSchema = z.object({
   projectId: z.string().uuid('Invalid project ID'),
   type: z.string(), // slack | jira | github | etc
-  config: z.record(z.unknown()),
+  config: z.record(z.string(), z.unknown()),
 });
 
 // Export types

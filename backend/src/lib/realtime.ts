@@ -1,5 +1,5 @@
 import { Server, WebSocket } from 'ws';
-import { Server as HTTPServer } from 'http';
+import { IncomingMessage, Server as HTTPServer } from 'http';
 import { verifyAccessToken } from '../lib/auth';
 import { db } from '../lib/db';
 
@@ -11,8 +11,13 @@ interface AuthenticatedWebSocket extends WebSocket {
 interface RealtimeEvent {
   type: string;
   projectId: string;
-  data: any;
+  data: unknown;
   timestamp: Date;
+}
+
+interface ClientMessage {
+  type?: string;
+  projectId?: string;
 }
 
 /**
@@ -29,7 +34,7 @@ export class RealtimeServer {
   }
 
   private setupConnectionHandler() {
-    this.wss.on('connection', (ws: AuthenticatedWebSocket, req) => {
+    this.wss.on('connection', (ws: AuthenticatedWebSocket, req: IncomingMessage) => {
       console.log('[WS] Client connected');
 
       // Authenticate using token from query params
@@ -43,13 +48,13 @@ export class RealtimeServer {
       try {
         const payload = verifyAccessToken(token);
         ws.userId = payload.userId;
-      } catch (error) {
+      } catch {
         ws.close(4001, 'Unauthorized - invalid token');
         return;
       }
 
       // Handle incoming messages
-      ws.on('message', (message) => {
+      ws.on('message', (message: Buffer | ArrayBuffer | Buffer[]) => {
         try {
           const data = JSON.parse(message.toString());
           this.handleMessage(ws, data);
@@ -70,18 +75,20 @@ export class RealtimeServer {
         this.unsubscribeFromProject(ws);
       });
 
-      ws.on('error', (error) => {
+      ws.on('error', (error: Error) => {
         console.error('[WS] Error:', error);
       });
     });
   }
 
-  private async handleMessage(ws: AuthenticatedWebSocket, data: any) {
+  private async handleMessage(ws: AuthenticatedWebSocket, data: ClientMessage) {
     const { type, projectId } = data;
 
     switch (type) {
       case 'subscribe':
-        await this.subscribeToProject(ws, projectId);
+        if (typeof projectId === 'string') {
+          await this.subscribeToProject(ws, projectId);
+        }
         break;
       case 'unsubscribe':
         this.unsubscribeFromProject(ws);
@@ -192,7 +199,7 @@ export class RealtimeServer {
   /**
    * Emit note_updated event
    */
-  public noteUpdated(projectId: string, noteId: string, note: any) {
+  public noteUpdated(projectId: string, noteId: string, note: Record<string, unknown>) {
     this.broadcastToProject(projectId, {
       type: 'note_updated',
       projectId,
@@ -204,7 +211,7 @@ export class RealtimeServer {
   /**
    * Emit insight_generated event
    */
-  public insightGenerated(projectId: string, insight: any) {
+  public insightGenerated(projectId: string, insight: Record<string, unknown>) {
     this.broadcastToProject(projectId, {
       type: 'insight_generated',
       projectId,
@@ -216,7 +223,7 @@ export class RealtimeServer {
   /**
    * Emit decision_updated event
    */
-  public decisionUpdated(projectId: string, decision: any) {
+  public decisionUpdated(projectId: string, decision: Record<string, unknown>) {
     this.broadcastToProject(projectId, {
       type: 'decision_updated',
       projectId,
@@ -228,7 +235,7 @@ export class RealtimeServer {
   /**
    * Emit task_updated event
    */
-  public taskUpdated(projectId: string, task: any) {
+  public taskUpdated(projectId: string, task: Record<string, unknown>) {
     this.broadcastToProject(projectId, {
       type: 'task_updated',
       projectId,
@@ -240,7 +247,7 @@ export class RealtimeServer {
   /**
    * Emit prd_generated event
    */
-  public prdGenerated(projectId: string, prd: any) {
+  public prdGenerated(projectId: string, prd: Record<string, unknown>) {
     this.broadcastToProject(projectId, {
       type: 'prd_generated',
       projectId,

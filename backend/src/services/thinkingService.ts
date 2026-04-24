@@ -165,7 +165,7 @@ export const noteService = {
   /**
    * Check if content hash has changed from last extraction
    */
-  hasContentChanged(note: any, currentContent: string): boolean {
+  hasContentChanged(note: { lastInsightExtractionHash?: string | null }, currentContent: string): boolean {
     const newHash = this.computeContentHash(currentContent);
     return note.lastInsightExtractionHash !== newHash;
   },

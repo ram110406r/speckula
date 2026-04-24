@@ -222,9 +222,7 @@ router.patch(
 
     const { confidenceScore } = req.body;
     if (typeof confidenceScore !== 'number' || confidenceScore < 0 || confidenceScore > 1) {
-      throw new ValidationError({
-        errors: [{ message: 'confidenceScore must be a number between 0 and 1', path: ['confidenceScore'] }],
-      } as any);
+      throw new ValidationError();
     }
 
     const insight = await insightService.updateConfidenceScore(

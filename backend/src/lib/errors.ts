@@ -13,7 +13,7 @@ export class AppError extends Error {
 }
 
 export class ValidationError extends AppError {
-  constructor(public details: ZodError) {
+  constructor(public details?: ZodError) {
     super(400, 'Validation failed', 'VALIDATION_ERROR');
   }
 }
@@ -50,7 +50,7 @@ export const sendError = (res: Response, error: unknown) => {
       ok: false,
       code: error.code,
       message: error.message,
-      details: error.details.errors,
+      details: error.details?.issues ?? [],
     });
   }
 

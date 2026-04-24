@@ -2,12 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import { extractTokenFromHeader, verifyAccessToken } from './auth';
 import { AuthError, sendError } from './errors';
 
-declare global {
-  namespace Express {
-    interface Request {
-      userId?: string;
-      email?: string;
-    }
+declare module 'express-serve-static-core' {
+  interface Request {
+    userId?: string;
+    email?: string;
   }
 }
 
@@ -40,7 +38,7 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
  * Middleware: Error handling wrapper for async routes
  */
 export const asyncHandler = (
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>
 ) => {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
@@ -54,7 +52,7 @@ export const errorHandler = (
   err: Error,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ) => {
   sendError(res, err);
 };

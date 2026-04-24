@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authService } from '../services/authService';
 import { authMiddleware, asyncHandler } from '../lib/middleware';
-import { sendSuccess, sendError, ValidationError } from '../lib/errors';
+import { sendSuccess, ValidationError } from '../lib/errors';
 import { SignupSchema, LoginSchema, RefreshTokenSchema } from '../lib/schemas';
 
 const router = Router();
@@ -57,7 +57,7 @@ router.post(
     }
 
     if (!req.userId) {
-      throw new ValidationError(parsed.error);
+      throw new ValidationError();
     }
 
     const result = await authService.refreshAccessToken(parsed.data.refreshToken, req.userId);
@@ -95,9 +95,7 @@ router.post(
     const { refreshToken } = req.body;
     
     if (!refreshToken) {
-      throw new ValidationError({
-        errors: [{ message: 'refreshToken is required', path: ['refreshToken'] }],
-      } as any);
+      throw new ValidationError();
     }
 
     await authService.logout(refreshToken);

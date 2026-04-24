@@ -335,7 +335,7 @@ export const taskService = {
    */
   async getTasksByStatus(projectId: string, userId: string, status: string) {
     const tasks = await this.getTasksForProject(projectId, userId);
-    return tasks.filter((t) => t.status === status);
+    return tasks.filter((task: { status: string }) => task.status === status);
   },
 
   /**

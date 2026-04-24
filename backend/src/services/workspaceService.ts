@@ -63,7 +63,7 @@ export const workspaceService = {
     // Check if user has access
     const hasAccess =
       workspace.ownerId === userId ||
-      workspace.members.some((m) => m.userId === userId);
+      workspace.members.some((member: { userId: string }) => member.userId === userId);
 
     if (!hasAccess) {
       throw new ForbiddenError('You do not have access to this workspace');

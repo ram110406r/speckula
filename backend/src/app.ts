@@ -1,24 +1,23 @@
-import Fastify, { FastifyInstance } from 'fastify';
-import cors from 'fastify-cors';
-import fastifyJwt from 'fastify-jwt';
-import fastifyWebsocket from 'fastify-websocket';
-import pino from 'pino';
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import fastifyJwt from '@fastify/jwt';
+import fastifyWebsocket from '@fastify/websocket';
+import aiRoutes from './routes/aiRoutes.js';
 
-const logger = pino(
-  process.env.NODE_ENV === 'development'
-    ? {
-        transport: {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-          },
-        },
-      }
-    : undefined
-);
-
-export const createServer = async (): Promise<FastifyInstance> => {
-  const fastify = Fastify({ logger });
+export const createServer = async () => {
+  const fastify = Fastify({
+    logger:
+      process.env.NODE_ENV === 'development'
+        ? {
+            transport: {
+              target: 'pino-pretty',
+              options: {
+                colorize: true,
+              },
+            },
+          }
+        : true,
+  });
 
   // Plugins
   await fastify.register(cors, {
@@ -33,15 +32,12 @@ export const createServer = async (): Promise<FastifyInstance> => {
   await fastify.register(fastifyWebsocket);
 
   // Health check
-  fastify.get('/health', async (request, reply) => {
+  fastify.get('/health', async () => {
     return { status: 'ok' };
   });
 
   // AI Routes
-  fastify.register(async (fastify) => {
-    const aiRoutes = (await import('./routes/aiRoutes.js')).default;
-    await aiRoutes(fastify);
-  }, { prefix: '/ai' });
+  await fastify.register(aiRoutes, { prefix: '/ai' });
 
   return fastify;
 };

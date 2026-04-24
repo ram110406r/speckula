@@ -55,9 +55,9 @@ export const firestoreContextService = {
       .limit(limit)
       .get();
 
-    const notes = notesSnapshot.docs.map((doc) => mapDocumentToText(doc as FirestoreDoc)).join('\n\n');
+    const notes = notesSnapshot.docs.map((doc: FirestoreDoc) => mapDocumentToText(doc)).join('\n\n');
     const decisions = decisionsSnapshot.docs
-      .map((doc) => {
+      .map((doc: FirestoreDoc) => {
         const data = doc.data();
         const title = toText(data.title);
         const justification = toText(data.justification);
