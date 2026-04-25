@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+        env:
+          # Build needs *something* in these to typecheck client config; real values not needed in CI.
+          NEXT_PUBLIC_FIREBASE_API_KEY: ci
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ci
+          NEXT_PUBLIC_FIREBASE_APP_ID: ci
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm test -- --run
+      - run: npm run build
