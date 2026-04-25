@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "concurrently -n web,api -c cyan,magenta \"next dev --webpack\" \"npm --prefix backend run dev\"",
+    "dev:web": "next dev --webpack",
+    "dev:api": "npm --prefix backend run dev",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
@@ -37,6 +39,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
     "jsdom": "^29.0.2",
