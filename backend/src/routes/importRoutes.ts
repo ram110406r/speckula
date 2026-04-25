@@ -59,14 +59,17 @@ const cleanHtmlText = (raw: string): string => {
 };
 
 export default async function importRoutes(fastify: FastifyInstance) {
+  // Auth runs as onRequest (before preParsing) so multipart never starts
+  // streaming a body for an unauthenticated caller — otherwise we'd happily
+  // buffer up to MAX_FILE_BYTES before checking the bearer token.
+  fastify.addHook('onRequest', verifyFirebaseAuth);
+
   await fastify.register(multipart, {
     limits: {
       fileSize: MAX_FILE_BYTES,
       files: 1,
     },
   });
-
-  fastify.addHook('preHandler', verifyFirebaseAuth);
 
   fastify.post('/file', async (request: FastifyRequest, reply: FastifyReply) => {
     const contentType = request.headers['content-type'] ?? '';
@@ -106,12 +109,22 @@ export default async function importRoutes(fastify: FastifyInstance) {
       });
     } catch (error) {
       fastify.log.error(error);
-      const message =
-        error instanceof Error && /file size limit/i.test(error.message)
-          ? 'File too large. Maximum size is 10MB.'
-          : 'Could not extract text from this PDF.';
-      const status = /file size limit/i.test(message) ? 413 : 500;
-      replyError(reply, status, message);
+      // @fastify/multipart surfaces specific error codes — map them to
+      // accurate HTTP responses instead of pretending every failure is a
+      // PDF-parse failure.
+      const code = (error as { code?: string } | undefined)?.code;
+      const message = error instanceof Error ? error.message : '';
+
+      if (code === 'FST_REQ_FILE_TOO_LARGE' || /file size limit|too large/i.test(message)) {
+        return replyError(reply, 413, 'File too large. Maximum size is 10MB.');
+      }
+      if (code === 'FST_FILES_LIMIT' || /files limit/i.test(message)) {
+        return replyError(reply, 400, 'Only one file may be uploaded per request.');
+      }
+      if (code === 'FST_INVALID_MULTIPART_CONTENT_TYPE') {
+        return replyError(reply, 400, 'Expected multipart/form-data upload.');
+      }
+      replyError(reply, 500, 'Could not extract text from this PDF.');
     }
   });
 

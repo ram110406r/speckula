@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import createServer from './app';
 import { disconnectDb } from './lib/db';
+import { getFirebaseApp } from './lib/firebaseAdmin';
 
 // Load environment variables
 dotenv.config();
@@ -10,6 +11,18 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 async function startServer() {
   try {
+    // Initialize Firebase Admin eagerly so credential problems surface at
+    // startup instead of as opaque 401s on the first authenticated request.
+    try {
+      getFirebaseApp();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('\n[startup] Firebase Admin failed to initialize:');
+      console.error(`  ${message}\n`);
+      console.error('Fix backend/.env and restart. Required keys: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY (PEM, with literal \\n separators).');
+      process.exit(1);
+    }
+
     // Create Fastify server
     const fastify = await createServer();
 
