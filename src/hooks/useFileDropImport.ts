@@ -5,6 +5,7 @@ import type { Editor } from "@tiptap/react";
 
 import { importFromPDF, ImportError } from "@/lib/api/importClient";
 import { insertTextAsNodes } from "@/lib/editor/insertTextAsNodes";
+import { useAppStore } from "@/store/useAppStore";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_CSV_ROWS = 200;
@@ -94,6 +95,11 @@ export function useFileDropImport({ editor, containerRef }: UseFileDropImportArg
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const dragDepth = useRef(0);
+  const currentDocId = useAppStore((state) => state.currentDocId);
+  const docIdRef = useRef(currentDocId);
+  useEffect(() => {
+    docIdRef.current = currentDocId;
+  }, [currentDocId]);
 
   const showError = useCallback((message: string) => {
     setErrorMessage(message);
@@ -119,13 +125,16 @@ export function useFileDropImport({ editor, containerRef }: UseFileDropImportArg
         return;
       }
 
+      const startedDocId = docIdRef.current;
       setIsImporting(true);
       try {
         if (ext === ".pdf") {
           const result = await importFromPDF(file);
+          if (docIdRef.current !== startedDocId) return;
           insertTextAsNodes(editor, result.text);
         } else {
           const raw = await file.text();
+          if (docIdRef.current !== startedDocId) return;
           let text = raw;
           if (ext === ".md") text = stripMarkdown(raw);
           else if (ext === ".csv") text = csvToText(raw);

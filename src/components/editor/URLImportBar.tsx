@@ -31,6 +31,7 @@ export function URLImportBar({ visible, onImport, onDismiss }: URLImportBarProps
   if (!visible) return null;
 
   const submit = async () => {
+    if (loading) return;
     setError(null);
     const trimmed = value.trim();
     if (!trimmed) return;

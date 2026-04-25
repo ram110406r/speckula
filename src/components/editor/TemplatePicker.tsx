@@ -35,11 +35,21 @@ export function TemplatePicker({ open, onSelect }: TemplatePickerProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={() => { /* user must pick a template */ }}>
+    <Dialog
+      open={open}
+      // Controlled dialog with all dismissal sources blocked: backdrop press
+      // (disablePointerDismissal) and Escape (onOpenChange swallows it).
+      // The user must pick a template card or "Start blank".
+      onOpenChange={() => { /* user must pick a template */ }}
+      disablePointerDismissal
+    >
       <DialogContent
         showCloseButton={false}
         className="sm:max-w-2xl"
-        onKeyDown={handleKeyDown}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") event.preventDefault();
+          handleKeyDown(event);
+        }}
       >
         <DialogHeader>
           <DialogTitle>Start with a template</DialogTitle>

@@ -37,9 +37,18 @@ async function getAuthToken(forceRefresh = false): Promise<string> {
 }
 
 async function unwrap<T>(response: Response): Promise<T> {
-  const envelope = (await response.json().catch(() => null)) as BackendEnvelope<T> | null;
+  const raw = await response.text().catch(() => "");
+  let envelope: BackendEnvelope<T> | null = null;
+  try {
+    envelope = raw ? (JSON.parse(raw) as BackendEnvelope<T>) : null;
+  } catch {
+    envelope = null;
+  }
+
   if (!response.ok || !envelope?.ok || envelope.data === undefined) {
-    const message = envelope?.error || `Import call failed (${response.status})`;
+    const message =
+      envelope?.error ||
+      (raw && raw.length < 300 ? raw : `Import call failed (${response.status})`);
     throw new ImportError(message, response.status);
   }
   return envelope.data;

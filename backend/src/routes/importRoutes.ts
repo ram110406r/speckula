@@ -69,6 +69,11 @@ export default async function importRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', verifyFirebaseAuth);
 
   fastify.post('/file', async (request: FastifyRequest, reply: FastifyReply) => {
+    const contentType = request.headers['content-type'] ?? '';
+    if (!contentType.toLowerCase().startsWith('multipart/form-data')) {
+      return replyError(reply, 400, 'Expected multipart/form-data upload.');
+    }
+
     try {
       const file = await request.file();
       if (!file) {
@@ -130,7 +135,9 @@ export default async function importRoutes(fastify: FastifyInstance) {
       }
 
       const controller = new AbortController();
+      const startedAt = Date.now();
       const timeoutId = setTimeout(() => controller.abort(), URL_FETCH_TIMEOUT_MS);
+      const remaining = () => Math.max(0, URL_FETCH_TIMEOUT_MS - (Date.now() - startedAt));
 
       let html: string;
       try {
@@ -142,7 +149,18 @@ export default async function importRoutes(fastify: FastifyInstance) {
         if (!response.ok) {
           return replyError(reply, 400, 'Could not fetch that URL.');
         }
-        html = await response.text();
+
+        // Bound the body read by the same overall timeout — the fetch signal
+        // covers metadata, but slow streams could still hang past 10s.
+        html = await Promise.race<string>([
+          response.text(),
+          new Promise<string>((_, reject) =>
+            setTimeout(() => {
+              controller.abort();
+              reject(new DOMException('Body read timed out', 'AbortError'));
+            }, remaining())
+          ),
+        ]);
       } catch (error) {
         const isAbort = error instanceof Error && error.name === 'AbortError';
         if (isAbort) {

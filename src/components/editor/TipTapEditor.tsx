@@ -377,13 +377,13 @@ export function TipTapEditor() {
   }, [editor, pendingInsertion, setPendingInsertion]);
 
   React.useEffect(() => {
-    if (!editor || !pendingImport) return;
+    if (!editor || !pendingImport || !currentDocId || isLoadingContent) return;
 
     insertTextAsNodes(editor, pendingImport.text, {
       prependTitle: pendingImport.title ?? undefined,
     });
     setPendingImport(null);
-  }, [editor, pendingImport, setPendingImport]);
+  }, [editor, pendingImport, setPendingImport, currentDocId, isLoadingContent]);
 
   React.useEffect(() => {
     if (!editor || !user || !currentDocId || isLoadingContent) return;
