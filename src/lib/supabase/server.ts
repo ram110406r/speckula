@@ -1,6 +1,0 @@
-﻿// Placeholder Supabase server module.
-// Buildcase currently uses Firebase; keep this file parseable for linting.
-
-export function getSupabaseServerClient() {
-  return null;
-}

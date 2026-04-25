@@ -105,35 +105,22 @@ export function LandingPage() {
       </section>
 
       {/* Philosophy Section */}
-      <section id="philosophy" className="w-full bg-white border-y border-border py-24 flex flex-col items-center">
-        <div className="max-w-4xl text-center space-y-8 px-6">
-          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">The Decision Instrument Philosophy</h2>
+      <section id="philosophy" className="w-full bg-card border-y border-border py-24 flex flex-col items-center">
+        <div className="max-w-3xl text-center space-y-6 px-6">
+          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">Calm. Focused. Precise.</h2>
           <p className="text-lg text-muted-foreground leading-relaxed">
-            Standard product tools are too noisy. Buildcase is built to be a calm, focused environment where the logic of your product wins. No distractions, no neon glows—just pure product intelligence.
+            Product tools are noisy. Buildcase is built as a focused environment where the logic of your product wins — no distractions, no dashboards for the sake of dashboards.
           </p>
-          <div className="pt-8 flex flex-wrap justify-center gap-12 opacity-60">
-            <LogoPlaceholder name="Linear" />
-            <LogoPlaceholder name="Vercel" />
-            <LogoPlaceholder name="Figma" />
-            <LogoPlaceholder name="Raycast" />
-          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="mt-auto py-16 w-full max-w-6xl flex flex-col items-center gap-8 border-t border-border/40">
-        <div className="flex items-center gap-3 label-system text-[12px] opacity-60 normal-case">
-          <ShieldCheck className="h-4 w-4 text-primary/60" />
-          <span>Secure with Google Cloud Identity & Private Workspaces</span>
+      <footer className="mt-auto py-12 w-full max-w-6xl flex flex-col items-center gap-4 border-t border-border/40">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="h-3.5 w-3.5 text-primary/60" />
+          <span>Secured with Google Cloud Identity</span>
         </div>
-        <div className="flex items-center gap-8 label-system text-[12px] text-muted-foreground">
-          <span>Privacy by design</span>
-          <span>Terms coming soon</span>
-          <span>Social links in progress</span>
-        </div>
-        <p className="label-system text-[12px] lowercase opacity-40">
-          © 2026 Buildcase. Minimal. Calm. Precise.
-        </p>
+        <p className="text-xs text-muted-foreground/70">© 2026 Buildcase</p>
       </footer>
     </div>
   );
@@ -141,26 +128,14 @@ export function LandingPage() {
 
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
-    <div className="bg-white border border-border p-10 rounded-xl hover:shadow-xl hover:shadow-primary/5 transition-all group flex flex-col gap-6">
-      <div className="w-12 h-12 rounded-lg bg-background border border-border flex items-center justify-center text-primary transition-transform group-hover:scale-105 duration-300 shadow-sm">
+    <div className="bg-card border border-border p-8 rounded-xl hover:border-primary/30 transition-colors flex flex-col gap-5">
+      <div className="w-10 h-10 rounded-lg bg-primary/5 flex items-center justify-center text-primary">
         {icon}
       </div>
       <div>
-        <h3 className="text-xl font-semibold mb-3 text-foreground tracking-tight">{title}</h3>
-        <p className="text-sm text-muted-foreground/90 leading-relaxed font-medium">{description}</p>
+        <h3 className="text-lg font-semibold mb-2 text-foreground tracking-tight">{title}</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
       </div>
-      <div className="mt-auto pt-4 flex items-center gap-2 label-system text-[12px] group-hover:text-primary transition-colors">
-        Learn More <ArrowRight className="h-3 w-3" />
-      </div>
-    </div>
-  );
-}
-
-function LogoPlaceholder({ name }: { name: string }) {
-  return (
-    <div className="flex items-center gap-2 grayscale hover:grayscale-0 transition-all cursor-default group">
-      <div className="w-5 h-5 bg-foreground/10 rounded-sm group-hover:bg-primary/20 transition-colors" />
-      <span className="label-system text-[12px] lowercase opacity-40 group-hover:opacity-80 transition-all">{name}</span>
     </div>
   );
 }

@@ -1,47 +1,39 @@
-import Fastify, { FastifyInstance } from 'fastify';
-import cors from 'fastify-cors';
-import fastifyJwt from 'fastify-jwt';
-import fastifyWebsocket from 'fastify-websocket';
-import pino from 'pino';
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import aiRoutes from './routes/aiRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
+import importRoutes from './routes/importRoutes.js';
 
-const logger = pino(
-  process.env.NODE_ENV === 'development'
-    ? {
-        transport: {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-          },
-        },
-      }
-    : undefined
-);
+export const createServer = async () => {
+  const fastify = Fastify({
+    logger:
+      process.env.NODE_ENV === 'development'
+        ? {
+            transport: {
+              target: 'pino-pretty',
+              options: { colorize: true },
+            },
+          }
+        : true,
+  });
 
-export const createServer = async (): Promise<FastifyInstance> => {
-  const fastify = Fastify({ logger });
-
-  // Plugins
   await fastify.register(cors, {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true,
   });
 
-  await fastify.register(fastifyJwt, {
-    secret: process.env.FIREBASE_PRIVATE_KEY || 'your-secret-key',
+  // Normalize any unhandled error into the `{ ok, error }` envelope the frontend expects.
+  fastify.setErrorHandler((error, _request, reply) => {
+    fastify.log.error(error);
+    const status = error.statusCode && error.statusCode >= 400 ? error.statusCode : 500;
+    reply.code(status).send({ ok: false, error: error.message });
   });
 
-  await fastify.register(fastifyWebsocket);
+  fastify.get('/health', async () => ({ status: 'ok' }));
 
-  // Health check
-  fastify.get('/health', async (request, reply) => {
-    return { status: 'ok' };
-  });
-
-  // AI Routes
-  fastify.register(async (fastify) => {
-    const aiRoutes = (await import('./routes/aiRoutes.js')).default;
-    await aiRoutes(fastify);
-  }, { prefix: '/ai' });
+  await fastify.register(aiRoutes, { prefix: '/ai' });
+  await fastify.register(chatRoutes, { prefix: '/ai' });
+  await fastify.register(importRoutes, { prefix: '/import' });
 
   return fastify;
 };

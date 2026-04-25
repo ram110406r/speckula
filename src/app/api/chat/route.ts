@@ -1,83 +1,38 @@
-import { createGroq } from '@ai-sdk/groq';
-import { streamText } from 'ai';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+// Thin proxy: forwards chat requests to the Fastify backend, which owns
+// Firebase token verification, Groq access, and (eventually) cost logging.
+// The request body and Authorization header pass through untouched;
+// the response stream is piped back to the client.
 
-// Initialize Groq provider
-const groq = createGroq({
-  apiKey: process.env.GROQ_API_KEY,
-});
-
-const firebaseProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-const firebaseJwks = createRemoteJWKSet(
-  new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
-);
-
-async function verifyFirebaseToken(authHeader: string | null) {
-  if (!authHeader?.startsWith("Bearer ")) {
-    throw new Error("Missing authorization token.");
-  }
-
-  if (!firebaseProjectId) {
-    throw new Error("Missing Firebase project configuration.");
-  }
-
-  const token = authHeader.slice("Bearer ".length).trim();
-  const { payload } = await jwtVerify(token, firebaseJwks, {
-    issuer: `https://securetoken.google.com/${firebaseProjectId}`,
-    audience: firebaseProjectId,
-  });
-
-  if (!payload.sub) {
-    throw new Error("Invalid Firebase token.");
-  }
-
-  return payload;
-}
-
-// Remove edge runtime — the WASM Next.js build doesn't handle it properly
 export const dynamic = 'force-dynamic';
 
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+
 export async function POST(req: Request) {
+  const auth = req.headers.get('authorization');
+  const body = await req.text();
+
   try {
-    if (!process.env.GROQ_API_KEY) {
-      throw new Error("Missing Groq configuration.");
-    }
-
-    await verifyFirebaseToken(req.headers.get("authorization"));
-    const body = await req.json().catch(() => null);
-    const messages = body && typeof body === "object" ? (body as { messages?: unknown }).messages : null;
-
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return new Response(JSON.stringify({ error: "Invalid request payload." }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    const result = streamText({
-      model: groq('llama-3.3-70b-versatile'),
-      system: `You are Buildcase AI, a senior product management assistant. 
-      Your goal is to help product managers discover insights, define product strategy, and build PRDs.
-      Be concise, structured, and professional. Use markdown for all responses.
-      Focus on product thinking: pain points, user segments, and business impact.`,
-      messages,
+    const upstream = await fetch(`${BACKEND_URL}/ai/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(auth ? { authorization: auth } : {}),
+      },
+      body,
     });
 
-    // Stream back as plain text for compatibility
-    return result.toTextStreamResponse({
+    return new Response(upstream.body, {
+      status: upstream.status,
       headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Type': upstream.headers.get('content-type') ?? 'text/plain; charset=utf-8',
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const status = message.includes("Missing authorization") || message.includes("Invalid Firebase token") ? 401 :
-      message.includes("Invalid request payload") ? 400 : 500;
-
-    console.error('AI Error:', message);
-    return new Response(JSON.stringify({ error: message }), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
+    const message =
+      error instanceof Error ? `AI backend unreachable: ${error.message}` : 'AI backend unreachable.';
+    return new Response(message, {
+      status: 502,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
   }
 }

@@ -1,6 +1,7 @@
 import Groq from "groq-sdk";
 import { db } from "../lib/db.js";
 import crypto from "crypto";
+import { extractJsonArray } from "./jsonExtract.js";
 
 let _groq: Groq | null = null;
 const groq = new Proxy({} as Groq, {
@@ -17,10 +18,23 @@ const groq = new Proxy({} as Groq, {
   },
 });
 
-// Model selection based on task complexity
+let dbWarningLogged = false;
+const warnDbDegraded = (op: string, error: unknown) => {
+  if (!dbWarningLogged) {
+    dbWarningLogged = true;
+    console.warn(
+      `[groqService] Postgres unavailable — AI calls will run without caching/telemetry. First failure on ${op}:`,
+      error instanceof Error ? error.message : error
+    );
+  }
+};
+
+// Model selection based on task complexity.
+// Both slots use Llama 3.3 70B Versatile — Groq retired Mixtral and the older Llama3 models.
+// Kept as two keys so callers can express intent; swap in a smaller model here when one ships.
 const MODELS = {
-  fast: "mixtral-8x7b-32768", // Quick responses, patterns, tasks
-  reasoning: "llama3-70b-8192", // Deep analysis, PRDs, insights
+  fast: "llama-3.3-70b-versatile",
+  reasoning: "llama-3.3-70b-versatile",
 };
 
 interface GroqResponse {
@@ -46,14 +60,18 @@ export const groqService = {
     const promptHash = this.hashPrompt(prompt);
     const modelName = MODELS[model];
 
-    // Check cache first
-    const cached = await db.promptCache.findUnique({
-      where: { promptHash },
-    });
+    // Cache/telemetry is best-effort: if Postgres is unavailable or
+    // misconfigured, fall through to a fresh Groq call so the user-facing AI
+    // request still succeeds.
+    const cached = await db.promptCache
+      .findUnique({ where: { promptHash } })
+      .catch((error) => {
+        warnDbDegraded("promptCache.findUnique", error);
+        return null;
+      });
 
     if (cached && cached.expiresAt > new Date()) {
-      // Log cache hit
-      await db.promptLog.create({
+      db.promptLog.create({
         data: {
           userId,
           projectId,
@@ -67,13 +85,12 @@ export const groqService = {
           cost: 0,
           cachedResult: true,
         },
-      });
+      }).catch((error) => warnDbDegraded("promptLog.create (hit)", error));
 
-      // Update hit count
-      await db.promptCache.update({
+      db.promptCache.update({
         where: { promptHash },
         data: { hitCount: { increment: 1 } },
-      });
+      }).catch((error) => warnDbDegraded("promptCache.update", error));
 
       return {
         content: cached.result,
@@ -98,8 +115,8 @@ export const groqService = {
       (response.usage?.completion_tokens || 0);
     const cost = this.estimateCost(modelName, totalTokens);
 
-    // Log API usage
-    await db.promptLog.create({
+    // Fire-and-forget telemetry; failures must not affect the AI response.
+    db.promptLog.create({
       data: {
         userId,
         projectId,
@@ -113,18 +130,41 @@ export const groqService = {
         cost,
         cachedResult: false,
       },
-    });
+    }).catch((error) => warnDbDegraded("promptLog.create", error));
 
-    // Cache result
     const cacheTTLMinutes = parseInt(process.env.AI_CACHE_TTL_MINUTES || "60");
-    await db.promptCache.create({
-      data: {
+    db.promptCache.upsert({
+      where: { promptHash },
+      create: {
         promptHash,
         result: content,
         modelUsed: modelName,
         expiresAt: new Date(Date.now() + cacheTTLMinutes * 60 * 1000),
       },
-    });
+      update: {
+        result: content,
+        expiresAt: new Date(Date.now() + cacheTTLMinutes * 60 * 1000),
+      },
+    }).catch((error) => warnDbDegraded("promptCache.upsert", error));
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    db.aPIUsage.upsert({
+      where: { userId_date: { userId, date: today } },
+      create: {
+        userId,
+        date: today,
+        totalRequests: 1,
+        totalTokens,
+        totalCost: cost,
+        modelMix: modelName,
+      },
+      update: {
+        totalRequests: { increment: 1 },
+        totalTokens: { increment: totalTokens },
+        totalCost: { increment: cost },
+      },
+    }).catch((error) => warnDbDegraded("aPIUsage.upsert", error));
 
     return {
       content,
@@ -134,7 +174,8 @@ export const groqService = {
   },
 
   /**
-   * Generate insights from note content
+   * Generate insights from note content.
+   * Returns frontend-shaped insights: { title, description, category }.
    */
   async generateInsights(
     noteContent: string,
@@ -142,66 +183,54 @@ export const groqService = {
     noteId: string,
     userId: string
   ) {
-    const prompt = `
-Analyze the following note and extract key insights. Return as JSON.
+    const prompt = `Extract exactly 4 key product insights from these notes.
 
-Note:
+Notes:
 ${noteContent}
 
-Return JSON with this structure:
-{
-  "insights": [
-    {
-      "insight": "The actual insight text",
-      "confidence": 0.85,
-      "category": "opportunity|risk|trend|observation"
+Return ONLY a JSON array (no prose, no markdown fences) with this exact shape:
+[
+  { "title": "Short headline (max 8 words)", "description": "1-2 sentence explanation", "category": "pain-point" | "opportunity" | "user-segment" | "pattern" }
+]`;
+
+    const result = await this.callGroq(prompt, "reasoning", userId, projectId);
+    const insights = extractJsonArray(result.content);
+
+    type InsightCategory = "pain-point" | "opportunity" | "user-segment" | "pattern";
+    const allowedCategories = new Set<InsightCategory>(["pain-point", "opportunity", "user-segment", "pattern"]);
+    const normalized: { title: string; description: string; category: InsightCategory }[] = [];
+    for (const raw of insights) {
+      const item = raw as { title?: unknown; description?: unknown; category?: unknown };
+      const title = typeof item.title === "string" ? item.title.trim() : "";
+      const description = typeof item.description === "string" ? item.description.trim() : "";
+      if (!title || !description) continue;
+      const category: InsightCategory =
+        typeof item.category === "string" && (allowedCategories as Set<string>).has(item.category)
+          ? (item.category as InsightCategory)
+          : "pattern";
+      normalized.push({ title, description, category });
     }
-  ],
-  "summary": "Brief summary of all insights"
-}
 
-Only return the JSON, no other text.`;
-
-    const result = await this.callGroq(
-      prompt,
-      "reasoning",
-      userId,
-      projectId
-    );
-
-    // Parse and store insights
-    try {
-      const parsed = JSON.parse(result.content);
-      const insights = [];
-
-      for (const insight of parsed.insights || []) {
-        const stored = await db.aIInsight.create({
-          data: {
-            projectId,
-            noteId,
-            userId,
-            content: insight.insight,
-            confidenceScore: insight.confidence,
-            modelUsed: result.modelUsed,
-            tokensUsed: result.tokensUsed,
-          },
-        });
-        insights.push(stored);
-      }
-
-      return {
-        insights,
-        summary: parsed.summary,
-        tokensUsed: result.tokensUsed,
-      };
-    } catch (error) {
-      console.error("Failed to parse insights JSON:", error);
-      throw error;
+    // Persist to Postgres (audit log; frontend separately writes canonical copy to Firestore)
+    for (const insight of normalized) {
+      await db.aIInsight.create({
+        data: {
+          projectId,
+          noteId,
+          userId,
+          content: `${insight.title}\n${insight.description}`,
+          confidenceScore: 0.7,
+          modelUsed: result.modelUsed,
+          tokensUsed: result.tokensUsed,
+        },
+      }).catch(() => undefined);
     }
+
+    return { insights: normalized, tokensUsed: result.tokensUsed };
   },
 
   /**
-   * Generate PRD from notes + decisions
+   * Generate PRD from notes + decisions. Returns markdown content.
    */
   async generatePRD(
     title: string,
@@ -210,8 +239,7 @@ Only return the JSON, no other text.`;
     projectId: string,
     userId: string
   ) {
-    const prompt = `
-You are a product strategist. Create a comprehensive PRD (Product Requirements Document) based on the following context.
+    const prompt = `Generate a professional, detailed PRD based on these notes.
 
 Project Title: ${title}
 
@@ -221,22 +249,19 @@ ${projectNotes}
 Key Decisions:
 ${decisions}
 
-Generate a complete PRD with:
-- Executive Summary
-- Problem Statement
-- Proposed Solution
-- Key Features
-- Success Metrics
-- Timeline
-- Dependencies
-- Risks & Mitigations
+The PRD MUST include the following sections:
+1. Problem Statement (Deep dive into current friction)
+2. Target Users (Primary/Secondary segments)
+3. Feature Breakdown (Core capabilities)
+4. User Stories (As a... I want to... so that...)
+5. Edge Cases (Potential pitfalls)
+6. Success Metrics (KPIs to measure impact)
 
-Format as markdown.`;
+Format in clean Markdown with professional headings. Return only the markdown.`;
 
     const result = await this.callGroq(prompt, "reasoning", userId, projectId);
 
-    // Store PRD
-    const prd = await db.aIPRD.create({
+    await db.aIPRD.create({
       data: {
         projectId,
         userId,
@@ -245,16 +270,13 @@ Format as markdown.`;
         modelUsed: result.modelUsed,
         tokensUsed: result.tokensUsed,
       },
-    });
+    }).catch(() => undefined);
 
-    return {
-      prd,
-      tokensUsed: result.tokensUsed,
-    };
+    return { content: result.content, tokensUsed: result.tokensUsed };
   },
 
   /**
-   * Suggest tasks from PRD
+   * Suggest tasks from PRD or notes. Returns frontend-shaped tasks: { title, priority, milestone? }.
    */
   async suggestTasks(
     prdContent: string,
@@ -262,65 +284,53 @@ Format as markdown.`;
     prdId: string | undefined,
     userId: string
   ) {
-    const prompt = `
-Based on this PRD, suggest concrete tasks for implementation. Return as JSON.
+    const prompt = `Suggest 5 concrete execution tasks for this work.
 
-PRD:
+Source:
 ${prdContent}
 
-Return JSON with this structure:
-{
-  "tasks": [
-    {
-      "title": "Task title",
-      "description": "What needs to be done",
-      "priority": "high|medium|low",
-      "estimatedDays": 3,
-      "reasoning": "Why this task is important"
+Return ONLY a JSON array (no prose, no markdown fences) with this exact shape:
+[
+  { "title": "Task title", "priority": "high" | "medium" | "low", "milestone": "Short milestone label" }
+]`;
+
+    const result = await this.callGroq(prompt, "fast", userId, projectId);
+    const rawTasks = extractJsonArray(result.content);
+
+    const allowedPriorities = new Set(["high", "medium", "low"]);
+    const normalized: { title: string; priority: "high" | "medium" | "low"; milestone?: string }[] = [];
+    for (const raw of rawTasks) {
+      const item = raw as { title?: unknown; priority?: unknown; milestone?: unknown };
+      const title = typeof item.title === "string" ? item.title.trim() : "";
+      if (!title) continue;
+      const priority: "high" | "medium" | "low" =
+        typeof item.priority === "string" && allowedPriorities.has(item.priority)
+          ? (item.priority as "high" | "medium" | "low")
+          : "medium";
+      const milestone = typeof item.milestone === "string" && item.milestone.trim().length > 0
+        ? item.milestone.trim()
+        : undefined;
+      normalized.push({ title, priority, milestone });
     }
-  ]
-}
 
-Only return the JSON, no other text.`;
-
-    const result = await this.callGroq(
-      prompt,
-      "fast",
-      userId,
-      projectId
-    );
-
-    // Parse and store suggestions
-    try {
-      const parsed = JSON.parse(result.content);
-      const tasks = [];
-
-      for (const task of parsed.tasks || []) {
-        const stored = await db.aISuggestedTask.create({
-          data: {
-            projectId,
-            prdId,
-            userId,
-            title: task.title,
-            description: task.description,
-            priority: task.priority,
-            reasoning: task.reasoning,
-            confidenceScore: 0.8,
-            modelUsed: result.modelUsed,
-            tokensUsed: result.tokensUsed,
-          },
-        });
-        tasks.push(stored);
-      }
-
-      return {
-        tasks,
-        tokensUsed: result.tokensUsed,
-      };
-    } catch (error) {
-      console.error("Failed to parse tasks JSON:", error);
-      throw error;
+    for (const task of normalized) {
+      await db.aISuggestedTask.create({
+        data: {
+          projectId,
+          prdId,
+          userId,
+          title: task.title,
+          description: task.milestone ?? null,
+          priority: task.priority,
+          reasoning: task.milestone ?? "",
+          confidenceScore: 0.7,
+          modelUsed: result.modelUsed,
+          tokensUsed: result.tokensUsed,
+        },
+      }).catch(() => undefined);
     }
+
+    return { tasks: normalized, tokensUsed: result.tokensUsed };
   },
 
   /**
@@ -362,11 +372,10 @@ Only return the JSON, no other text.`;
       projectId
     );
 
-    // Parse and store patterns
     try {
       const patterns = JSON.parse(result.content);
 
-      const stored = await db.patternAnalysis.create({
+      db.patternAnalysis.create({
         data: {
           projectId,
           noteId,
@@ -374,9 +383,9 @@ Only return the JSON, no other text.`;
           patterns: JSON.stringify(patterns),
           modelUsed: result.modelUsed,
           tokensUsed: result.tokensUsed,
-          expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30-min cache
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
         },
-      });
+      }).catch((error) => warnDbDegraded("patternAnalysis.create", error));
 
       return {
         patterns,
@@ -470,14 +479,12 @@ Return JSON:
    * Based on Groq pricing as of 2024
    */
   estimateCost(model: string, tokens: number): number {
-    // Groq pricing per 1M tokens (example rates)
     const rates: Record<string, number> = {
-      "mixtral-8x7b-32768": 0.24, // $0.24 per 1M
-      "llama3-70b-8192": 0.59, // $0.59 per 1M
+      "llama-3.3-70b-versatile": 0.59,
     };
 
-    const rate = rates[model] || 0.24;
-    return (tokens / 1000000) * rate;
+    const rate = rates[model] ?? 0.59;
+    return (tokens / 1_000_000) * rate;
   },
 
   /**

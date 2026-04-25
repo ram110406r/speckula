@@ -96,21 +96,6 @@ export interface PublicProfile {
   name: string;
   bio: string;
   skills: string[];
-  publicCases: string[];
-  scoreAverage: number;
-  createdAt: Timestamp | null;
-  updatedAt: Timestamp | null;
-}
-
-export interface PublicCase {
-  id?: string;
-  caseId?: string;
-  userId: string;
-  title: string;
-  content: string;
-  score: number;
-  outcome: Record<string, unknown>;
-  visibility: "public" | "private";
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
 }
@@ -126,19 +111,8 @@ export interface TeamWorkspace {
   name: string;
   members: WorkspaceMember[];
   memberIds?: string[];
-  cases: string[];
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
-}
-
-export interface CaseComment {
-  id?: string;
-  commentId?: string;
-  caseId: string;
-  userId: string;
-  content: string;
-  timestamp: number;
-  parentId?: string | null;
 }
 
 // Path Helpers
@@ -148,12 +122,10 @@ const userDecisionsCollection = (userId: string) => collection(db, "users", user
 const userPrdsCollection = (userId: string) => collection(db, "users", userId, "prds");
 const userTasksCollection = (userId: string) => collection(db, "users", userId, "tasks");
 const publicProfilesCollection = () => collection(db, "publicProfiles");
-const publicCasesCollection = () => collection(db, "publicCases");
 const workspacesCollection = () => collection(db, "workspaces");
 
 const userDocRef = (userId: string, docId: string) => doc(db, "users", userId, "documents", docId);
 const publicProfileRef = (userId: string) => doc(db, "publicProfiles", userId);
-const publicCaseRef = (caseId: string) => doc(db, "publicCases", caseId);
 const workspaceRef = (workspaceId: string) => doc(db, "workspaces", workspaceId);
 
 // --- DOCUMENT ACTIONS ---
@@ -314,6 +286,16 @@ export const updateTask = async (userId: string, taskId: string, data: Partial<E
   }
 };
 
+export const deleteTask = async (userId: string, taskId: string) => {
+  try {
+    const ref = doc(db, "users", userId, "tasks", taskId);
+    await deleteDoc(ref);
+  } catch (error) {
+    logFirestorePermissionHint("deleteTask", error);
+    throw error;
+  }
+};
+
 export const getTasks = async (userId: string) => {
   try {
     const q = query(userTasksCollection(userId), orderBy("updatedAt", "desc"));
@@ -428,113 +410,12 @@ export const getPublicProfiles = async () => {
   }
 };
 
-export const getPublicCases = async () => {
-  try {
-    const q = query(publicCasesCollection(), where("visibility", "==", "public"));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (PublicCase & { id: string })[];
-  } catch (error) {
-    console.error("Error fetching public cases:", error);
-    return [];
-  }
-};
-
-export const getPublicCasesByUser = async (userId: string, includePrivate = false) => {
-  try {
-    const q = includePrivate
-      ? query(publicCasesCollection(), where("userId", "==", userId))
-      : query(publicCasesCollection(), where("userId", "==", userId), where("visibility", "==", "public"));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (PublicCase & { id: string })[];
-  } catch (error) {
-    console.error("Error fetching user public cases:", error);
-    return [];
-  }
-};
-
-export const getPublicCase = async (caseId: string) => {
-  try {
-    const snap = await getDoc(publicCaseRef(caseId));
-    return snap.exists() ? ({ id: snap.id, ...snap.data() } as PublicCase & { id: string }) : null;
-  } catch (error) {
-    console.error("Error fetching public case:", error);
-    return null;
-  }
-};
-
-export const savePublicCase = async (data: Omit<PublicCase, "createdAt" | "updatedAt">) => {
-  try {
-    if (data.caseId) {
-      await setDoc(
-        publicCaseRef(data.caseId),
-        {
-          ...data,
-          caseId: data.caseId,
-          updatedAt: serverTimestamp(),
-          createdAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-      return data.caseId;
-    }
-
-    const ref = await addDoc(publicCasesCollection(), {
-      ...data,
-      caseId: "",
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    await setDoc(ref, { caseId: ref.id }, { merge: true });
-    return ref.id;
-  } catch (error) {
-    logFirestorePermissionHint("savePublicCase", error);
-    throw error;
-  }
-};
-
-export const updatePublicCase = async (caseId: string, data: Partial<PublicCase>) => {
-  try {
-    await setDoc(publicCaseRef(caseId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
-  } catch (error) {
-    logFirestorePermissionHint("updatePublicCase", error);
-    throw error;
-  }
-};
-
-export const getCaseComments = async (caseId: string) => {
-  try {
-    const snap = await getDocs(collection(db, "publicCases", caseId, "comments"));
-    const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CaseComment & { id: string })[];
-    return entries.sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0));
-  } catch (error) {
-    console.error("Error fetching case comments:", error);
-    return [];
-  }
-};
-
-export const addCaseComment = async (caseId: string, userId: string, content: string, parentId?: string | null) => {
-  try {
-    const ref = await addDoc(collection(db, "publicCases", caseId, "comments"), {
-      caseId,
-      userId,
-      content,
-      timestamp: Date.now(),
-      parentId: parentId ?? null,
-    });
-    return ref.id;
-  } catch (error) {
-    logFirestorePermissionHint("addCaseComment", error);
-    throw error;
-  }
-};
-
-export const saveWorkspace = async (userId: string, name: string, cases: string[] = []) => {
+export const saveWorkspace = async (userId: string, name: string) => {
   try {
     const ref = await addDoc(workspacesCollection(), {
       name,
       members: [{ userId, role: "owner" as const }],
       memberIds: [userId],
-      cases,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

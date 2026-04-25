@@ -1,240 +1,181 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { groqService } from '../services/groqService';
+import { groqService } from '../services/groqService.js';
+import { verifyFirebaseAuth } from '../lib/firebaseAuth.js';
 import { z } from 'zod';
 
-// Validation schemas
 const generateInsightsSchema = z.object({
-  projectId: z.string(),
-  noteId: z.string(),
-  content: z.string(),
-  userId: z.string(),
+  projectId: z.string().min(1).optional(),
+  noteId: z.string().min(1),
+  content: z.string().min(1),
 });
 
 const generatePRDSchema = z.object({
-  projectId: z.string(),
-  title: z.string(),
-  notes: z.string(),
-  decisions: z.string(),
-  userId: z.string(),
+  projectId: z.string().min(1).optional(),
+  title: z.string().min(1),
+  notes: z.string().min(1),
+  decisions: z.string().optional().default(""),
 });
 
 const suggestTasksSchema = z.object({
-  projectId: z.string(),
-  prdContent: z.string(),
-  prdId: z.string().optional(),
-  userId: z.string(),
+  projectId: z.string().min(1).optional(),
+  prdContent: z.string().min(1),
+  prdId: z.string().min(1).optional(),
 });
 
+const DEFAULT_PROJECT_ID = "default";
+
 const analyzePatternsSchema = z.object({
-  projectId: z.string(),
-  noteId: z.string(),
-  content: z.string(),
-  userId: z.string(),
+  projectId: z.string().min(1),
+  noteId: z.string().min(1),
+  content: z.string().min(1),
 });
 
 const scoreDecisionSchema = z.object({
-  projectId: z.string(),
-  decisionId: z.string(),
-  title: z.string(),
-  description: z.string(),
+  projectId: z.string().min(1),
+  decisionId: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
   context: z.string(),
-  userId: z.string(),
 });
 
+// `userId` comes from the verified Firebase ID token, never from the request body.
+// A non-null assertion is safe because verifyFirebaseAuth rejects requests without a valid token.
+const requireUserId = (request: FastifyRequest): string => request.userId as string;
+
+const replyError = (reply: FastifyReply, error: unknown, fallback: string) => {
+  const message = error instanceof Error ? error.message : fallback;
+  reply.code(400).send({ ok: false, error: message });
+};
+
 export default async function aiRoutes(fastify: FastifyInstance) {
-  /**
-   * POST /ai/insights/generate
-   * Generate insights from note content using Groq
-   */
+  fastify.addHook('preHandler', verifyFirebaseAuth);
+
   fastify.post<{ Body: z.infer<typeof generateInsightsSchema> }>(
     '/insights/generate',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const body = generateInsightsSchema.parse(request.body);
-        
+        const userId = requireUserId(request);
         const result = await groqService.generateInsights(
           body.content,
-          body.projectId,
+          body.projectId ?? DEFAULT_PROJECT_ID,
           body.noteId,
-          body.userId
+          userId
         );
-
-        reply.code(200).send({
-          ok: true,
-          data: result,
-        });
+        reply.code(200).send({ ok: true, data: result });
       } catch (error) {
         fastify.log.error(error);
-        reply.code(400).send({
-          ok: false,
-          error: error instanceof Error ? error.message : 'Failed to generate insights',
-        });
+        replyError(reply, error, 'Failed to generate insights');
       }
     }
   );
 
-  /**
-   * POST /ai/prd/generate
-   * Generate PRD from notes and decisions using Groq (llama3-70b)
-   */
   fastify.post<{ Body: z.infer<typeof generatePRDSchema> }>(
     '/prd/generate',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const body = generatePRDSchema.parse(request.body);
-
+        const userId = requireUserId(request);
         const result = await groqService.generatePRD(
           body.title,
           body.notes,
           body.decisions,
-          body.projectId,
-          body.userId
+          body.projectId ?? DEFAULT_PROJECT_ID,
+          userId
         );
-
-        reply.code(201).send({
-          ok: true,
-          data: result,
-        });
+        reply.code(201).send({ ok: true, data: result });
       } catch (error) {
         fastify.log.error(error);
-        reply.code(400).send({
-          ok: false,
-          error: error instanceof Error ? error.message : 'Failed to generate PRD',
-        });
+        replyError(reply, error, 'Failed to generate PRD');
       }
     }
   );
 
-  /**
-   * POST /ai/tasks/suggest
-   * Suggest tasks from PRD using Groq (mixtral for speed)
-   */
   fastify.post<{ Body: z.infer<typeof suggestTasksSchema> }>(
     '/tasks/suggest',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const body = suggestTasksSchema.parse(request.body);
-
+        const userId = requireUserId(request);
         const result = await groqService.suggestTasks(
           body.prdContent,
-          body.projectId,
+          body.projectId ?? DEFAULT_PROJECT_ID,
           body.prdId,
-          body.userId
+          userId
         );
-
-        reply.code(200).send({
-          ok: true,
-          data: result,
-        });
+        reply.code(200).send({ ok: true, data: result });
       } catch (error) {
         fastify.log.error(error);
-        reply.code(400).send({
-          ok: false,
-          error: error instanceof Error ? error.message : 'Failed to suggest tasks',
-        });
+        replyError(reply, error, 'Failed to suggest tasks');
       }
     }
   );
 
-  /**
-   * POST /ai/patterns/analyze
-   * Analyze patterns in real-time (fast response with mixtral)
-   */
   fastify.post<{ Body: z.infer<typeof analyzePatternsSchema> }>(
     '/patterns/analyze',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const body = analyzePatternsSchema.parse(request.body);
-
-        const result = await groqService.analyzePatterns(
-          body.content,
-          body.projectId,
-          body.noteId,
-          body.userId
-        );
-
-        reply.code(200).send({
-          ok: true,
-          data: result,
-        });
+        const userId = requireUserId(request);
+        const result = await groqService.analyzePatterns(body.content, body.projectId, body.noteId, userId);
+        reply.code(200).send({ ok: true, data: result });
       } catch (error) {
         fastify.log.error(error);
-        reply.code(400).send({
-          ok: false,
-          error: error instanceof Error ? error.message : 'Failed to analyze patterns',
-        });
+        replyError(reply, error, 'Failed to analyze patterns');
       }
     }
   );
 
-  /**
-   * POST /ai/decision/score
-   * Score decision confidence using Groq reasoning model
-   */
   fastify.post<{ Body: z.infer<typeof scoreDecisionSchema> }>(
     '/decision/score',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const body = scoreDecisionSchema.parse(request.body);
-
+        const userId = requireUserId(request);
         const result = await groqService.scoreDecision(
           body.title,
           body.description,
           body.context,
           body.projectId,
-          body.userId,
+          userId,
           body.decisionId
         );
-
-        reply.code(200).send({
-          ok: true,
-          data: result,
-        });
+        reply.code(200).send({ ok: true, data: result });
       } catch (error) {
         fastify.log.error(error);
-        reply.code(400).send({
-          ok: false,
-          error: error instanceof Error ? error.message : 'Failed to score decision',
-        });
+        replyError(reply, error, 'Failed to score decision');
       }
     }
   );
 
-  /**
-   * GET /ai/usage
-   * Get API usage stats for cost tracking
-   */
   fastify.get(
-    '/usage/:userId/:date',
-    async (
-      request: FastifyRequest<{ Params: { userId: string; date: string } }>,
-      reply: FastifyReply
-    ) => {
+    '/usage/:date',
+    async (request: FastifyRequest<{ Params: { date: string } }>, reply) => {
       try {
-        const { userId, date } = request.params;
-        const queryDate = new Date(date);
-        const db = groqService.getDb();
+        const userId = requireUserId(request);
+        const queryDate = new Date(request.params.date);
+        if (Number.isNaN(queryDate.getTime())) {
+          reply.code(400).send({ ok: false, error: 'Invalid date' });
+          return;
+        }
 
+        const dayStart = new Date(queryDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(queryDate);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const db = groqService.getDb();
         const usage = await db.aPIUsage.findFirst({
-          where: {
-            userId,
-            date: {
-              gte: new Date(queryDate.setHours(0, 0, 0, 0)),
-              lte: new Date(queryDate.setHours(23, 59, 59, 999)),
-            },
-          },
+          where: { userId, date: { gte: dayStart, lte: dayEnd } },
         });
 
         reply.code(200).send({
           ok: true,
-          data: usage || { message: 'No usage data for this date' },
+          data: usage ?? { message: 'No usage data for this date' },
         });
       } catch (error) {
         fastify.log.error(error);
-        reply.code(400).send({
-          ok: false,
-          error: error instanceof Error ? error.message : 'Failed to get usage',
-        });
+        replyError(reply, error, 'Failed to get usage');
       }
     }
   );

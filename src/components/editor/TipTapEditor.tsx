@@ -6,7 +6,6 @@ import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Heading from '@tiptap/extension-heading';
-import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
 import { Sparkles, Wand2, Lightbulb, Loader2 } from "lucide-react";
 
 import { useAuth } from '@/lib/firebase/AuthProvider';
@@ -21,6 +20,11 @@ import {
 import { triggerAISuggestion, cancelAISuggestionTrigger } from '@/lib/ai/aiTrigger';
 import { prioritizeSteps } from '@/lib/ai/priorityEngine';
 import { InlineSuggestion } from './InlineSuggestion';
+import { TemplatePicker } from './TemplatePicker';
+import type { BuildcaseTemplate } from '@/lib/templates';
+import { EditorDropOverlay } from './EditorDropOverlay';
+import { useFileDropImport } from '@/hooks/useFileDropImport';
+import { insertTextAsNodes } from '@/lib/editor/insertTextAsNodes';
 
 const INLINE_AI_LEARNING_KEY = "buildcase-inline-ai-learning-v1";
 
@@ -36,14 +40,24 @@ export function TipTapEditor() {
   const [isInlineThinking, setIsInlineThinking] = useState(false);
   const [inlineSuggestion, setInlineSuggestion] = useState<InlineSuggestionPayload | null>(null);
   const [inlinePosition, setInlinePosition] = useState({ x: 16, y: 96 });
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const { user } = useAuth();
-  const { currentDocId, setIsSaving, documents, setActiveContext, pendingInsertion, setPendingInsertion } = useAppStore();
+  const { currentDocId, setIsSaving, setActiveContext, pendingInsertion, setPendingInsertion, newDocumentId, clearNewDocumentFlag, pendingImport, setPendingImport } = useAppStore();
   const lastExtractedHashRef = React.useRef<string | null>(null);
   const extractTimerRef = React.useRef<number | null>(null);
   const editorContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const dropZoneRef = React.useRef<HTMLDivElement | null>(null);
   const dismissedInlineHashRef = React.useRef("");
   const activeInlineHashRef = React.useRef("");
   const learningRef = React.useRef<InlineLearningState>({ acceptedSuggestions: [], dismissedSuggestions: [] });
+  const isMountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -61,9 +75,6 @@ export function TipTapEditor() {
           return 'What are you trying to solve today?';
         },
       }),
-      BubbleMenuExtension.configure({
-        element: mounted ? document.querySelector('.bubble-menu') as HTMLElement : undefined,
-      }),
     ],
     immediatelyRender: false,
     content: ``,
@@ -75,6 +86,11 @@ export function TipTapEditor() {
   });
 
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+
+  const { isDragging, errorMessage, isImporting, dismissError } = useFileDropImport({
+    editor,
+    containerRef: dropZoneRef,
+  });
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -201,7 +217,13 @@ export function TipTapEditor() {
       try {
         const doc = await getDocument(user.uid, currentDocId);
         if (doc) {
-          editor.commands.setContent(doc.content || "");
+          try {
+            editor.commands.setContent(doc.content || "");
+          } catch (contentError) {
+            // Malformed Firestore content shouldn't wedge the editor — fall back to empty.
+            console.error("Invalid TipTap content in Firestore:", contentError);
+            editor.commands.setContent("");
+          }
           lastExtractedHashRef.current = doc.lastInsightExtractionHash ?? null;
         } else {
           editor.commands.setContent("");
@@ -217,6 +239,25 @@ export function TipTapEditor() {
 
     loadContent();
   }, [currentDocId, editor, user, setActiveContext]);
+
+  React.useEffect(() => {
+    if (!editor || !currentDocId || isLoadingContent) return;
+    if (newDocumentId !== currentDocId) return;
+    if (!editor.isEmpty) return;
+    setShowTemplatePicker(true);
+  }, [editor, currentDocId, isLoadingContent, newDocumentId]);
+
+  const handleTemplateSelect = React.useCallback(
+    (template: BuildcaseTemplate) => {
+      if (editor && template.id !== "blank") {
+        editor.commands.setContent(template.content);
+        editor.commands.focus("start");
+      }
+      setShowTemplatePicker(false);
+      if (currentDocId) clearNewDocumentFlag(currentDocId);
+    },
+    [editor, currentDocId, clearNewDocumentFlag]
+  );
 
   React.useEffect(() => {
     if (!editor) return;
@@ -281,9 +322,10 @@ export function TipTapEditor() {
 
           setIsInlineThinking(false);
           activeInlineHashRef.current = result.contextHash;
+          const prioritized = prioritizeSteps(result.suggestion.next_steps);
           setInlineSuggestion({
             stage: result.suggestion.stage,
-            next_steps: [...prioritizeSteps(result.suggestion.next_steps).high_priority, ...prioritizeSteps(result.suggestion.next_steps).medium],
+            next_steps: [...prioritized.high_priority, ...prioritized.medium],
           });
         },
         onError: (error) => {
@@ -335,6 +377,15 @@ export function TipTapEditor() {
   }, [editor, pendingInsertion, setPendingInsertion]);
 
   React.useEffect(() => {
+    if (!editor || !pendingImport || !currentDocId || isLoadingContent) return;
+
+    insertTextAsNodes(editor, pendingImport.text, {
+      prependTitle: pendingImport.title ?? undefined,
+    });
+    setPendingImport(null);
+  }, [editor, pendingImport, setPendingImport, currentDocId, isLoadingContent]);
+
+  React.useEffect(() => {
     if (!editor || !user || !currentDocId || isLoadingContent) return;
 
     const contentText = editor.getText().trim();
@@ -348,17 +399,20 @@ export function TipTapEditor() {
     }
 
     extractTimerRef.current = window.setTimeout(async () => {
+      if (!isMountedRef.current) return;
       setIsAutoExtracting(true);
       try {
         await extractInsightsAction(user.uid, editor.getJSON(), currentDocId);
+        if (!isMountedRef.current) return;
         await saveDocument(user.uid, currentDocId, {
           lastInsightExtractionHash: currentHash,
         });
         lastExtractedHashRef.current = currentHash;
       } catch (error) {
+        if (!isMountedRef.current) return;
         console.error("Auto insight extraction failed:", error);
       } finally {
-        setIsAutoExtracting(false);
+        if (isMountedRef.current) setIsAutoExtracting(false);
       }
     }, 4000);
 
@@ -367,29 +421,59 @@ export function TipTapEditor() {
         window.clearTimeout(extractTimerRef.current);
       }
     };
-  }, [editor?.state.doc, editor, user, currentDocId, isLoadingContent]);
+  }, [editor, user, currentDocId, isLoadingContent]);
 
-  // Debounced auto-save logic
+  // Debounced auto-save: triggers on editor edits, and flushes on unmount /
+  // doc-switch so view changes don't drop unsaved content.
   React.useEffect(() => {
     if (!editor || !user || !currentDocId || isLoadingContent) return;
 
-    const handler = setTimeout(async () => {
-      setIsSaving(true);
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+    let dirty = false;
+    let saving = false;
+
+    const flush = async () => {
+      if (!dirty || saving) return;
+      saving = true;
+      dirty = false;
+      if (isMountedRef.current) setIsSaving(true);
       try {
-        const currentDoc = documents.find(d => d.id === currentDocId);
+        const latestDocs = useAppStore.getState().documents;
+        const currentDoc = latestDocs.find(d => d.id === currentDocId);
         await saveDocument(user.uid, currentDocId, {
           content: editor.getJSON(),
-          title: currentDoc?.title || "Untitled Document"
+          title: currentDoc?.title || "Untitled Document",
         });
       } catch (error) {
         console.error("Failed to auto-save:", error);
+        dirty = true;
       } finally {
-        setTimeout(() => setIsSaving(false), 800);
+        saving = false;
+        setTimeout(() => {
+          if (isMountedRef.current) setIsSaving(false);
+        }, 800);
       }
-    }, 2000); // 2 second debounce
+    };
 
-    return () => clearTimeout(handler);
-  }, [editor?.state.doc, editor, user, currentDocId, setIsSaving, isLoadingContent, documents]);
+    const onUpdate = () => {
+      dirty = true;
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(flush, 2000);
+    };
+
+    editor.on("update", onUpdate);
+
+    return () => {
+      editor.off("update", onUpdate);
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      // Flush any pending edits before unmount/doc-switch. Fire-and-forget;
+      // the Firestore SDK queues the write internally so it survives unmount.
+      if (dirty) void flush();
+    };
+  }, [editor, user, currentDocId, setIsSaving, isLoadingContent]);
 
   React.useEffect(() => {
     setMounted(true);
@@ -457,7 +541,24 @@ export function TipTapEditor() {
         onDismiss={dismissInlineSuggestion}
       />
 
-      <EditorContent editor={editor} className="h-full w-full" />
+      <div ref={dropZoneRef} className="relative h-full w-full">
+        <EditorDropOverlay visible={isDragging} />
+        {isImporting && !isDragging && (
+          <div className="pointer-events-none absolute right-3 top-3 z-40 flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-[11px] text-muted-foreground shadow-sm">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Importing…
+          </div>
+        )}
+        <EditorContent editor={editor} className="h-full w-full" />
+      </div>
+
+      {errorMessage && (
+        <div className="absolute bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
+          <button type="button" onClick={dismissError} className="font-medium">{errorMessage}</button>
+        </div>
+      )}
+
+      <TemplatePicker open={showTemplatePicker} onSelect={handleTemplateSelect} />
     </div>
   );
 }

@@ -36,7 +36,7 @@ export default function RootLayout({
                 const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                 const isDark = stored ? stored === 'dark' : systemDark;
                 document.documentElement.classList.toggle('dark', isDark);
-              } catch (error) {}
+              } catch (_error) { /* localStorage unavailable (e.g. private browsing) */ }
             })();`,
           }}
         />
