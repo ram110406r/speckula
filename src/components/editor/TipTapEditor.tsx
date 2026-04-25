@@ -20,6 +20,11 @@ import {
 import { triggerAISuggestion, cancelAISuggestionTrigger } from '@/lib/ai/aiTrigger';
 import { prioritizeSteps } from '@/lib/ai/priorityEngine';
 import { InlineSuggestion } from './InlineSuggestion';
+import { TemplatePicker } from './TemplatePicker';
+import type { BuildcaseTemplate } from '@/lib/templates';
+import { EditorDropOverlay } from './EditorDropOverlay';
+import { useFileDropImport } from '@/hooks/useFileDropImport';
+import { insertTextAsNodes } from '@/lib/editor/insertTextAsNodes';
 
 const INLINE_AI_LEARNING_KEY = "buildcase-inline-ai-learning-v1";
 
@@ -35,11 +40,13 @@ export function TipTapEditor() {
   const [isInlineThinking, setIsInlineThinking] = useState(false);
   const [inlineSuggestion, setInlineSuggestion] = useState<InlineSuggestionPayload | null>(null);
   const [inlinePosition, setInlinePosition] = useState({ x: 16, y: 96 });
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const { user } = useAuth();
-  const { currentDocId, setIsSaving, documents, setActiveContext, pendingInsertion, setPendingInsertion } = useAppStore();
+  const { currentDocId, setIsSaving, documents, setActiveContext, pendingInsertion, setPendingInsertion, newDocumentId, clearNewDocumentFlag, pendingImport, setPendingImport } = useAppStore();
   const lastExtractedHashRef = React.useRef<string | null>(null);
   const extractTimerRef = React.useRef<number | null>(null);
   const editorContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const dropZoneRef = React.useRef<HTMLDivElement | null>(null);
   const dismissedInlineHashRef = React.useRef("");
   const activeInlineHashRef = React.useRef("");
   const learningRef = React.useRef<InlineLearningState>({ acceptedSuggestions: [], dismissedSuggestions: [] });
@@ -79,6 +86,11 @@ export function TipTapEditor() {
   });
 
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+
+  const { isDragging, errorMessage, isImporting, dismissError } = useFileDropImport({
+    editor,
+    containerRef: dropZoneRef,
+  });
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -229,6 +241,25 @@ export function TipTapEditor() {
   }, [currentDocId, editor, user, setActiveContext]);
 
   React.useEffect(() => {
+    if (!editor || !currentDocId || isLoadingContent) return;
+    if (newDocumentId !== currentDocId) return;
+    if (!editor.isEmpty) return;
+    setShowTemplatePicker(true);
+  }, [editor, currentDocId, isLoadingContent, newDocumentId]);
+
+  const handleTemplateSelect = React.useCallback(
+    (template: BuildcaseTemplate) => {
+      if (editor && template.id !== "blank") {
+        editor.commands.setContent(template.content);
+        editor.commands.focus("start");
+      }
+      setShowTemplatePicker(false);
+      if (currentDocId) clearNewDocumentFlag(currentDocId);
+    },
+    [editor, currentDocId, clearNewDocumentFlag]
+  );
+
+  React.useEffect(() => {
     if (!editor) return;
 
     const updateContext = () => {
@@ -344,6 +375,15 @@ export function TipTapEditor() {
     editor.chain().focus().insertContent(`\n\n${pendingInsertion}\n\n`).run();
     setPendingInsertion(null);
   }, [editor, pendingInsertion, setPendingInsertion]);
+
+  React.useEffect(() => {
+    if (!editor || !pendingImport) return;
+
+    insertTextAsNodes(editor, pendingImport.text, {
+      prependTitle: pendingImport.title ?? undefined,
+    });
+    setPendingImport(null);
+  }, [editor, pendingImport, setPendingImport]);
 
   React.useEffect(() => {
     if (!editor || !user || !currentDocId || isLoadingContent) return;
@@ -475,7 +515,24 @@ export function TipTapEditor() {
         onDismiss={dismissInlineSuggestion}
       />
 
-      <EditorContent editor={editor} className="h-full w-full" />
+      <div ref={dropZoneRef} className="relative h-full w-full">
+        <EditorDropOverlay visible={isDragging} />
+        {isImporting && !isDragging && (
+          <div className="pointer-events-none absolute right-3 top-3 z-40 flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-[11px] text-muted-foreground shadow-sm">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Importing…
+          </div>
+        )}
+        <EditorContent editor={editor} className="h-full w-full" />
+      </div>
+
+      {errorMessage && (
+        <div className="absolute bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-md">
+          <button type="button" onClick={dismissError} className="font-medium">{errorMessage}</button>
+        </div>
+      )}
+
+      <TemplatePicker open={showTemplatePicker} onSelect={handleTemplateSelect} />
     </div>
   );
 }

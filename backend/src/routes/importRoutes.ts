@@ -1,0 +1,187 @@
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import multipart from '@fastify/multipart';
+import { z } from 'zod';
+import { extract } from '@extractus/article-extractor';
+import striptags from 'striptags';
+import { verifyFirebaseAuth } from '../lib/firebaseAuth.js';
+
+import pdfParse from 'pdf-parse';
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const URL_FETCH_TIMEOUT_MS = 10_000;
+
+const urlImportSchema = z.object({
+  url: z.string().url(),
+});
+
+const replyError = (reply: FastifyReply, status: number, message: string) => {
+  reply.code(status).send({ ok: false, error: message });
+};
+
+const isPrivateHost = (hostname: string): boolean => {
+  const lower = hostname.toLowerCase();
+  if (lower === 'localhost' || lower === '127.0.0.1' || lower === '::1' || lower === '0.0.0.0') {
+    return true;
+  }
+  // IPv4 private ranges
+  const ipv4 = lower.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+    if (a === 10) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 169 && b === 254) return true; // link-local
+  }
+  return false;
+};
+
+const cleanPdfText = (raw: string): string => {
+  return raw
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*\d+\s*$/.test(line)) // drop bare page-number lines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
+const cleanHtmlText = (raw: string): string => {
+  return raw
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
+export default async function importRoutes(fastify: FastifyInstance) {
+  await fastify.register(multipart, {
+    limits: {
+      fileSize: MAX_FILE_BYTES,
+      files: 1,
+    },
+  });
+
+  fastify.addHook('preHandler', verifyFirebaseAuth);
+
+  fastify.post('/file', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const file = await request.file();
+      if (!file) {
+        return replyError(reply, 400, 'No file uploaded.');
+      }
+
+      if (file.mimetype !== 'application/pdf') {
+        return replyError(reply, 400, 'Only PDF files are supported on this endpoint');
+      }
+
+      const buffer = await file.toBuffer();
+      if (buffer.length > MAX_FILE_BYTES) {
+        return replyError(reply, 413, 'File too large. Maximum size is 10MB.');
+      }
+
+      const parsed = await pdfParse(buffer);
+      const text = cleanPdfText(parsed.text || '');
+
+      if (!text) {
+        return replyError(reply, 500, 'Could not extract text from this PDF.');
+      }
+
+      reply.code(200).send({
+        ok: true,
+        data: {
+          text,
+          charCount: text.length,
+          pageCount: parsed.numpages ?? 0,
+        },
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      const message =
+        error instanceof Error && /file size limit/i.test(error.message)
+          ? 'File too large. Maximum size is 10MB.'
+          : 'Could not extract text from this PDF.';
+      const status = /file size limit/i.test(message) ? 413 : 500;
+      replyError(reply, status, message);
+    }
+  });
+
+  fastify.post<{ Body: z.infer<typeof urlImportSchema> }>(
+    '/url',
+    async (request, reply) => {
+      let parsedUrl: URL;
+      try {
+        const body = urlImportSchema.parse(request.body);
+        parsedUrl = new URL(body.url);
+      } catch {
+        return replyError(reply, 400, 'Invalid or unreachable URL.');
+      }
+
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return replyError(reply, 400, 'Invalid or unreachable URL.');
+      }
+
+      if (isPrivateHost(parsedUrl.hostname)) {
+        return replyError(reply, 400, 'Private network URLs are not allowed.');
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), URL_FETCH_TIMEOUT_MS);
+
+      let html: string;
+      try {
+        const response = await fetch(parsedUrl.toString(), {
+          headers: { 'User-Agent': 'Buildcase/1.0 (content import)' },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          return replyError(reply, 400, 'Could not fetch that URL.');
+        }
+        html = await response.text();
+      } catch (error) {
+        const isAbort = error instanceof Error && error.name === 'AbortError';
+        if (isAbort) {
+          return replyError(reply, 504, 'The URL took too long to respond.');
+        }
+        fastify.log.error(error);
+        return replyError(reply, 400, 'Invalid or unreachable URL.');
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      try {
+        const article = await extract(html, undefined, {
+          headers: { 'User-Agent': 'Buildcase/1.0 (content import)' },
+        });
+
+        const rawContent = article?.content ?? '';
+        const stripped = striptags(rawContent, [], '\n');
+        const text = cleanHtmlText(stripped);
+
+        if (!text || text.length < 40) {
+          return replyError(reply, 422, 'Could not extract readable content from this URL.');
+        }
+
+        const title = (article?.title ?? '').trim() || null;
+
+        reply.code(200).send({
+          ok: true,
+          data: {
+            title,
+            text,
+            sourceUrl: parsedUrl.toString(),
+            charCount: text.length,
+          },
+        });
+      } catch (error) {
+        fastify.log.error(error);
+        replyError(reply, 422, 'Could not extract readable content from this URL.');
+      }
+    }
+  );
+}

@@ -3,11 +3,12 @@
 import React, { useEffect } from "react";
 import { TipTapEditor } from "./TipTapEditor";
 import { useAppStore } from "@/store/useAppStore";
-import { PanelRightOpen, PanelRightClose, CircleDashed, ShieldAlert, FlaskConical, HelpCircle } from "lucide-react";
+import { PanelRightOpen, PanelRightClose, CircleDashed, ShieldAlert, FlaskConical, HelpCircle, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { saveDocument } from "@/lib/firebase/db";
 import { useAuth } from "@/lib/firebase/AuthProvider";
+import { URLImportBar } from "./URLImportBar";
 
 const STRUCTURE_BLOCKS = [
   { id: "problem", label: "Problem", icon: CircleDashed, starter: "Problem: Who is struggling, what behavior is stuck, and what metric is moving the wrong way?" },
@@ -18,8 +19,9 @@ const STRUCTURE_BLOCKS = [
 
 export function Editor() {
   const { user } = useAuth();
-  const { aiPanelOpen, toggleAiPanel, isSaving, currentDocId, documents, setDocuments, activeContext, setPendingInsertion } = useAppStore();
+  const { aiPanelOpen, toggleAiPanel, isSaving, currentDocId, documents, setDocuments, activeContext, setPendingInsertion, setPendingImport } = useAppStore();
   const currentDoc = documents.find(d => d.id === currentDocId);
+  const [showURLImport, setShowURLImport] = React.useState(false);
 
   const normalizedContext = activeContext.toLowerCase();
   const activeSectionId = normalizedContext.includes("hypothesis")
@@ -78,7 +80,18 @@ export function Editor() {
           {isSaving && (
             <span className="text-xs text-muted-foreground whitespace-nowrap">Saving…</span>
           )}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Import from URL"
+              aria-pressed={showURLImport}
+              className={`h-8 gap-1.5 text-xs ${showURLImport ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setShowURLImport((prev) => !prev)}
+            >
+              <Link2 className="h-4 w-4" />
+              Import URL
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -112,6 +125,15 @@ export function Editor() {
           </div>
         )}
       </div>
+
+      <URLImportBar
+        visible={showURLImport}
+        onImport={(text, title) => {
+          setPendingImport({ text, title });
+          setShowURLImport(false);
+        }}
+        onDismiss={() => setShowURLImport(false)}
+      />
 
       {/* Editor Body */}
       <div className="relative flex-1 overflow-auto p-5 lg:p-8">

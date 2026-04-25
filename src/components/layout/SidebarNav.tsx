@@ -57,7 +57,7 @@ const navGroups: { label: string; items: GroupedNavItem[] }[] = [
 
 export function SidebarNav() {
   const { user, loginWithGoogle, logout, loading } = useAuth();
-  const { activeView, setActiveView, documents, setDocuments, currentDocId, setCurrentDocId, resetForNewDocument } = useAppStore();
+  const { activeView, setActiveView, documents, setDocuments, currentDocId, setCurrentDocId, resetForNewDocument, markDocumentAsNew } = useAppStore();
   const [isCreating, setIsCreating] = React.useState(false);
   const [isDarkMode, setIsDarkMode] = React.useState(false);
 
@@ -109,6 +109,7 @@ export function SidebarNav() {
       const newId = await createDocument(user.uid);
       const docs = await getUserDocuments(user.uid);
       setDocuments(docs);
+      markDocumentAsNew(newId);
       setCurrentDocId(newId);
       setActiveView("editor");
     } catch (error) {

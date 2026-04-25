@@ -67,6 +67,11 @@ interface AppState {
   setActiveView: (view: AppView) => void;
   pendingInsertion: string | null;
   setPendingInsertion: (content: string | null) => void;
+  newDocumentId: string | null;
+  markDocumentAsNew: (id: string) => void;
+  clearNewDocumentFlag: (id: string) => void;
+  pendingImport: { text: string; title: string | null } | null;
+  setPendingImport: (payload: { text: string; title: string | null } | null) => void;
   dismissedHintsByDoc: Record<string, string[]>;
   dismissHintForDoc: (docId: string, hintId: string) => void;
   clearDismissedHintsForDoc: (docId: string) => void;
@@ -92,6 +97,8 @@ const initialState = {
   isSaving: false,
   activeView: 'editor' as AppView,
   pendingInsertion: null,
+  newDocumentId: null,
+  pendingImport: null,
   dismissedHintsByDoc: {},
   strategicContext: null,
   pendingDecisionForPRD: null,
@@ -123,6 +130,10 @@ export const useAppStore = create<AppState>((set) => ({
   setIsSaving: (status) => set({ isSaving: status }),
   setActiveView: (view) => set({ activeView: view }),
   setPendingInsertion: (content) => set({ pendingInsertion: content }),
+  markDocumentAsNew: (id) => set({ newDocumentId: id }),
+  clearNewDocumentFlag: (id) =>
+    set((state) => (state.newDocumentId === id ? { newDocumentId: null } : state)),
+  setPendingImport: (payload) => set({ pendingImport: payload }),
   setStrategicContext: (context) => set({ strategicContext: context }),
   setPendingDecisionForPRD: (decision) => set({ pendingDecisionForPRD: decision }),
   setSelectedPRDForTasks: (prd) => set({ selectedPRDForTasks: prd }),

@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import aiRoutes from './routes/aiRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import importRoutes from './routes/importRoutes.js';
 
 export const createServer = async () => {
   const fastify = Fastify({
@@ -32,6 +33,7 @@ export const createServer = async () => {
 
   await fastify.register(aiRoutes, { prefix: '/ai' });
   await fastify.register(chatRoutes, { prefix: '/ai' });
+  await fastify.register(importRoutes, { prefix: '/import' });
 
   return fastify;
 };
