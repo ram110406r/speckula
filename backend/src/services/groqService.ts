@@ -2,8 +2,19 @@ import Groq from "groq-sdk";
 import { db } from "../lib/db.js";
 import crypto from "crypto";
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
+let _groq: Groq | null = null;
+const groq = new Proxy({} as Groq, {
+  get(_, prop) {
+    if (!_groq) {
+      if (!process.env.GROQ_API_KEY) {
+        throw new Error(
+          "GROQ_API_KEY is not set. Set it in backend/.env to use AI features."
+        );
+      }
+      _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    }
+    return (_groq as any)[prop];
+  },
 });
 
 // Model selection based on task complexity
