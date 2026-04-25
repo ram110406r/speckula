@@ -4,23 +4,25 @@ import { verifyFirebaseAuth } from '../lib/firebaseAuth.js';
 import { z } from 'zod';
 
 const generateInsightsSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.string().min(1).optional(),
   noteId: z.string().min(1),
   content: z.string().min(1),
 });
 
 const generatePRDSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.string().min(1).optional(),
   title: z.string().min(1),
   notes: z.string().min(1),
-  decisions: z.string(),
+  decisions: z.string().optional().default(""),
 });
 
 const suggestTasksSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.string().min(1).optional(),
   prdContent: z.string().min(1),
   prdId: z.string().min(1).optional(),
 });
+
+const DEFAULT_PROJECT_ID = "default";
 
 const analyzePatternsSchema = z.object({
   projectId: z.string().min(1),
@@ -54,7 +56,12 @@ export default async function aiRoutes(fastify: FastifyInstance) {
       try {
         const body = generateInsightsSchema.parse(request.body);
         const userId = requireUserId(request);
-        const result = await groqService.generateInsights(body.content, body.projectId, body.noteId, userId);
+        const result = await groqService.generateInsights(
+          body.content,
+          body.projectId ?? DEFAULT_PROJECT_ID,
+          body.noteId,
+          userId
+        );
         reply.code(200).send({ ok: true, data: result });
       } catch (error) {
         fastify.log.error(error);
@@ -69,7 +76,13 @@ export default async function aiRoutes(fastify: FastifyInstance) {
       try {
         const body = generatePRDSchema.parse(request.body);
         const userId = requireUserId(request);
-        const result = await groqService.generatePRD(body.title, body.notes, body.decisions, body.projectId, userId);
+        const result = await groqService.generatePRD(
+          body.title,
+          body.notes,
+          body.decisions,
+          body.projectId ?? DEFAULT_PROJECT_ID,
+          userId
+        );
         reply.code(201).send({ ok: true, data: result });
       } catch (error) {
         fastify.log.error(error);
@@ -84,7 +97,12 @@ export default async function aiRoutes(fastify: FastifyInstance) {
       try {
         const body = suggestTasksSchema.parse(request.body);
         const userId = requireUserId(request);
-        const result = await groqService.suggestTasks(body.prdContent, body.projectId, body.prdId, userId);
+        const result = await groqService.suggestTasks(
+          body.prdContent,
+          body.projectId ?? DEFAULT_PROJECT_ID,
+          body.prdId,
+          userId
+        );
         reply.code(200).send({ ok: true, data: result });
       } catch (error) {
         fastify.log.error(error);

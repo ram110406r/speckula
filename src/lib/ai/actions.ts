@@ -156,6 +156,56 @@ async function callAI(prompt: string, context: string) {
   throw new Error("AI call failed.");
 }
 
+interface BackendEnvelope<T> {
+  ok: boolean;
+  data?: T;
+  error?: string;
+}
+
+/**
+ * Call a dedicated Fastify route through the Next.js proxy.
+ * Handles auth header, 30s timeout, 401 retry-with-refresh, and unwraps the { ok, data } envelope.
+ */
+async function callBackendRoute<T>(path: string, body: unknown): Promise<T> {
+  const maxAttempts = 2;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const token = await getAuthToken(attempt > 0);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch(`/api/ai/${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (response.status === 401 && attempt === 0) {
+        continue;
+      }
+
+      const envelope = await response.json().catch(() => null) as BackendEnvelope<T> | null;
+      if (!response.ok || !envelope?.ok || envelope.data === undefined) {
+        const message = envelope?.error || `Backend call failed (${response.status})`;
+        throw new Error(message);
+      }
+      return envelope.data;
+    } catch (error) {
+      const isAbortError = error instanceof DOMException && error.name === "AbortError";
+      if (attempt === maxAttempts - 1 || isAbortError) {
+        throw error;
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+  throw new Error(`Backend call to /ai/${path} failed.`);
+}
+
 function tryParseJson(candidate: string): unknown | null {
   try {
     return JSON.parse(candidate);
@@ -491,15 +541,14 @@ function normalizeInsight(raw: unknown): NormalizedInsight | null {
 
 export const extractInsightsAction = async (userId: string, docContent: unknown, sourceDocId?: string) => {
   const context = tipTapToText(docContent);
-  const prompt = `Extract exactly 4 key product insights. Format as a JSON array of objects with keys: title, description, and category (one of: pain-point, opportunity, user-segment, pattern).`;
+  if (!context.trim()) return [];
 
-  const result = await callAI(prompt, context);
-  const parsed = parseJsonPayload(result);
-  if (!Array.isArray(parsed)) {
-    throw new Error("Insights response was not an array.");
-  }
+  const data = await callBackendRoute<{ insights: NormalizedInsight[]; tokensUsed: number }>(
+    "insights/generate",
+    { content: context, noteId: sourceDocId ?? "default" }
+  );
 
-  const insights = parsed
+  const insights = (data.insights ?? [])
     .map(normalizeInsight)
     .filter((entry): entry is NormalizedInsight => entry !== null);
 
@@ -511,26 +560,23 @@ export const extractInsightsAction = async (userId: string, docContent: unknown,
 };
 
 export const generatePRDAction = async (userId: string, docContent: unknown, title: string, sourceDocId?: string) => {
-  const context = tipTapToText(docContent);
-  const prompt = `Generate a professional, detailed PRD based on these notes. 
-  The PRD MUST include the following sections:
-  1. Problem Statement (Deep dive into current friction)
-  2. Target Users (Primary/Secondary segments)
-  3. Feature Breakdown (Core capabilities)
-  4. User Stories (As a... I want to... so that...)
-  5. Edge Cases (Potential pitfalls)
-  6. Success Metrics (KPIs to measure impact)
-  
-  Format in clean Markdown with professional headings.`;
-  
-  const content = await callAI(prompt, context);
+  const notes = tipTapToText(docContent);
+  if (!notes.trim()) {
+    throw new Error("Cannot generate a PRD from empty notes.");
+  }
+
+  const data = await callBackendRoute<{ content: string; tokensUsed: number }>(
+    "prd/generate",
+    { title, notes, decisions: "" }
+  );
+
   await savePRD(userId, {
     title: `PRD: ${title}`,
-    content,
+    content: data.content,
     status: "draft",
     sourceDocId,
   });
-  return content;
+  return data.content;
 };
 
 const TASK_PRIORITIES = ["high", "medium", "low"] as const;
@@ -562,15 +608,14 @@ function normalizeSuggestedTask(raw: unknown): NormalizedSuggestedTask | null {
 
 export const suggestTasksAction = async (userId: string, docContent: unknown, sourceDocId?: string) => {
   const context = tipTapToText(docContent);
-  const prompt = `Suggest 5 concrete execution tasks. Format as a JSON array of objects with keys: title, priority (high, medium, low), milestone (short string).`;
+  if (!context.trim()) return [];
 
-  const result = await callAI(prompt, context);
-  const parsed = parseJsonPayload(result);
-  if (!Array.isArray(parsed)) {
-    throw new Error("Tasks response was not an array.");
-  }
+  const data = await callBackendRoute<{ tasks: NormalizedSuggestedTask[]; tokensUsed: number }>(
+    "tasks/suggest",
+    { prdContent: context }
+  );
 
-  const tasks = parsed
+  const tasks = (data.tasks ?? [])
     .map(normalizeSuggestedTask)
     .filter((entry): entry is NormalizedSuggestedTask => entry !== null);
 
