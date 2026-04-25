@@ -6,7 +6,6 @@ import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Heading from '@tiptap/extension-heading';
-import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
 import { Sparkles, Wand2, Lightbulb, Loader2 } from "lucide-react";
 
 import { useAuth } from '@/lib/firebase/AuthProvider';
@@ -44,6 +43,14 @@ export function TipTapEditor() {
   const dismissedInlineHashRef = React.useRef("");
   const activeInlineHashRef = React.useRef("");
   const learningRef = React.useRef<InlineLearningState>({ acceptedSuggestions: [], dismissedSuggestions: [] });
+  const isMountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -60,9 +67,6 @@ export function TipTapEditor() {
           }
           return 'What are you trying to solve today?';
         },
-      }),
-      BubbleMenuExtension.configure({
-        element: mounted ? document.querySelector('.bubble-menu') as HTMLElement : undefined,
       }),
     ],
     immediatelyRender: false,
@@ -355,17 +359,20 @@ export function TipTapEditor() {
     }
 
     extractTimerRef.current = window.setTimeout(async () => {
+      if (!isMountedRef.current) return;
       setIsAutoExtracting(true);
       try {
         await extractInsightsAction(user.uid, editor.getJSON(), currentDocId);
+        if (!isMountedRef.current) return;
         await saveDocument(user.uid, currentDocId, {
           lastInsightExtractionHash: currentHash,
         });
         lastExtractedHashRef.current = currentHash;
       } catch (error) {
+        if (!isMountedRef.current) return;
         console.error("Auto insight extraction failed:", error);
       } finally {
-        setIsAutoExtracting(false);
+        if (isMountedRef.current) setIsAutoExtracting(false);
       }
     }, 4000);
 
@@ -374,13 +381,14 @@ export function TipTapEditor() {
         window.clearTimeout(extractTimerRef.current);
       }
     };
-  }, [editor?.state.doc, editor, user, currentDocId, isLoadingContent]);
+  }, [editor, user, currentDocId, isLoadingContent]);
 
   // Debounced auto-save logic
   React.useEffect(() => {
     if (!editor || !user || !currentDocId || isLoadingContent) return;
 
     const handler = setTimeout(async () => {
+      if (!isMountedRef.current) return;
       setIsSaving(true);
       try {
         const currentDoc = documents.find(d => d.id === currentDocId);
@@ -389,14 +397,17 @@ export function TipTapEditor() {
           title: currentDoc?.title || "Untitled Document"
         });
       } catch (error) {
+        if (!isMountedRef.current) return;
         console.error("Failed to auto-save:", error);
       } finally {
-        setTimeout(() => setIsSaving(false), 800);
+        setTimeout(() => {
+          if (isMountedRef.current) setIsSaving(false);
+        }, 800);
       }
-    }, 2000); // 2 second debounce
+    }, 2000);
 
     return () => clearTimeout(handler);
-  }, [editor?.state.doc, editor, user, currentDocId, setIsSaving, isLoadingContent, documents]);
+  }, [editor, user, currentDocId, setIsSaving, isLoadingContent, documents]);
 
   React.useEffect(() => {
     setMounted(true);

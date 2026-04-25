@@ -45,6 +45,8 @@ export function AIPanel() {
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const streamAbortRef = React.useRef<AbortController | null>(null);
   const isMountedRef = React.useRef(true);
+  const messageIdRef = React.useRef(0);
+  const nextMessageId = React.useCallback(() => `msg-${++messageIdRef.current}`, []);
 
   React.useEffect(() => {
     isMountedRef.current = true;
@@ -233,14 +235,14 @@ export function AIPanel() {
     const token = await user?.getIdToken();
     if (!token) {
       setMessages((prev) => [...prev, {
-        id: Date.now().toString(),
+        id: nextMessageId(),
         role: "assistant",
         content: "Please sign in again to use the AI assistant.",
       }]);
       return;
     }
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: nextMessageId(),
       role: "user",
       content: messageText.trim(),
     };
@@ -251,8 +253,7 @@ export function AIPanel() {
     setInput("");
     setIsLoading(true);
 
-    // Add a placeholder assistant message for streaming
-    const assistantId = (Date.now() + 1).toString();
+    const assistantId = nextMessageId();
     setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "" }]);
 
     streamAbortRef.current?.abort();
@@ -540,7 +541,7 @@ export function AIPanel() {
             <p className="label-system text-[11px] text-primary">Decision Timeline</p>
             <div className="mt-2 space-y-2">
               {signals.decisions.slice(0, 3).map((decision, idx) => (
-                <div key={`timeline-${idx}`} className="rounded-xl border border-border/60 bg-[#fcfaf4] px-3 py-2">
+                <div key={`timeline-${decision.text}-${idx}`} className="rounded-xl border border-border/60 bg-[#fcfaf4] px-3 py-2">
                   <p className="text-xs font-semibold text-foreground">{decision.text}</p>
                   <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                     <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />Just now</span>
