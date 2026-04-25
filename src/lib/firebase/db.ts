@@ -314,6 +314,16 @@ export const updateTask = async (userId: string, taskId: string, data: Partial<E
   }
 };
 
+export const deleteTask = async (userId: string, taskId: string) => {
+  try {
+    const ref = doc(db, "users", userId, "tasks", taskId);
+    await deleteDoc(ref);
+  } catch (error) {
+    logFirestorePermissionHint("deleteTask", error);
+    throw error;
+  }
+};
+
 export const getTasks = async (userId: string) => {
   try {
     const q = query(userTasksCollection(userId), orderBy("updatedAt", "desc"));

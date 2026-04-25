@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { CheckSquare, Plus, Circle, CheckCircle2, Clock, Loader2, ArrowRight, Zap, Users } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { CheckSquare, Plus, Circle, CheckCircle2, Clock, Loader2, ArrowRight, Zap, Users, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
-import { getTasks, updateTask, getDocument, type ExecutionTask, getPRDs, type PRD, saveTask } from "@/lib/firebase/db";
+import { getTasks, updateTask, deleteTask, getDocument, type ExecutionTask, getPRDs, type PRD, saveTask } from "@/lib/firebase/db";
 import { generateTasksFromPRDAction, analyzeDependenciesAction, intelligentPrioritizeAction } from "@/lib/ai/actions";
 
 type TaskStatus = "todo" | "in-progress" | "done";
@@ -45,6 +45,11 @@ export function TasksView() {
   const [filterStatus, setFilterStatus] = React.useState<TaskStatus | "all">("all");
   const [showPRDSelector, setShowPRDSelector] = React.useState(false);
   const [selectedTask, setSelectedTask] = React.useState<ExecutionTask | null>(null);
+  const [showNewTask, setShowNewTask] = React.useState(false);
+  const [newTaskTitle, setNewTaskTitle] = React.useState("");
+  const [newTaskDescription, setNewTaskDescription] = React.useState("");
+  const [newTaskPriority, setNewTaskPriority] = React.useState<TaskPriority>("medium");
+  const [isSavingNew, setIsSavingNew] = React.useState(false);
 
   const fetchTasks = React.useCallback(async () => {
     if (!user) return;
@@ -154,11 +159,85 @@ export function TasksView() {
   const assignTaskToUser = async (task: ExecutionTask, assignee: string) => {
     if (!user || !task.id) return;
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, assignee } : t));
+    setSelectedTask(prev => (prev && prev.id === task.id ? { ...prev, assignee } : prev));
     try {
       await updateTask(user.uid, task.id, { assignee });
     } catch (error) {
       console.error("Failed to assign task:", error);
       fetchTasks();
+    }
+  };
+
+  const setTaskStatus = async (task: ExecutionTask, status: TaskStatus) => {
+    if (!user || !task.id || task.status === status) return;
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status } : t));
+    setSelectedTask(prev => (prev && prev.id === task.id ? { ...prev, status } : prev));
+    try {
+      await updateTask(user.uid, task.id, { status });
+    } catch (error) {
+      console.error("Failed to update status:", error);
+      fetchTasks();
+    }
+  };
+
+  const setTaskPriority = async (task: ExecutionTask, priority: TaskPriority) => {
+    if (!user || !task.id || task.priority === priority) return;
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, priority } : t));
+    setSelectedTask(prev => (prev && prev.id === task.id ? { ...prev, priority } : prev));
+    try {
+      await updateTask(user.uid, task.id, { priority });
+    } catch (error) {
+      console.error("Failed to update priority:", error);
+      fetchTasks();
+    }
+  };
+
+  const cycleStatus = (task: ExecutionTask) => {
+    const next: Record<TaskStatus, TaskStatus> = {
+      "todo": "in-progress",
+      "in-progress": "done",
+      "done": "todo",
+    };
+    setTaskStatus(task, next[task.status]);
+  };
+
+  const handleDeleteTask = async (task: ExecutionTask) => {
+    if (!user || !task.id) return;
+    if (!confirm(`Delete task "${task.title}"?`)) return;
+    const taskId = task.id;
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+    setSelectedTask(null);
+    try {
+      await deleteTask(user.uid, taskId);
+    } catch (error) {
+      console.error("Failed to delete task:", error);
+      alert("Failed to delete task.");
+      fetchTasks();
+    }
+  };
+
+  const handleCreateTask = async () => {
+    if (!user || !newTaskTitle.trim() || isSavingNew) return;
+    setIsSavingNew(true);
+    try {
+      await saveTask(user.uid, {
+        title: newTaskTitle.trim(),
+        description: newTaskDescription.trim() || undefined,
+        status: "todo",
+        priority: newTaskPriority,
+        sourceDocId: currentDocId ?? undefined,
+        dependsOn: [],
+      });
+      setNewTaskTitle("");
+      setNewTaskDescription("");
+      setNewTaskPriority("medium");
+      setShowNewTask(false);
+      await fetchTasks();
+    } catch (error) {
+      console.error("Failed to create task:", error);
+      alert("Failed to create task.");
+    } finally {
+      setIsSavingNew(false);
     }
   };
 
@@ -200,12 +279,20 @@ export function TasksView() {
             variant="ghost"
             className="h-8 text-xs"
             onClick={handleGenerateBasic}
-            disabled={isGenerating}
+            disabled={isGenerating || !currentDocId}
+            title={!currentDocId ? "Select a document first" : undefined}
           >
             {isGenerating ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Zap className="mr-1.5 h-3.5 w-3.5" />}
             {isGenerating ? "Generating…" : "Generate from PRD"}
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 text-xs">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs"
+            onClick={() => setShowNewTask(true)}
+            disabled={!currentDocId}
+            title={!currentDocId ? "Select a document first" : undefined}
+          >
             <Plus className="mr-1 h-3.5 w-3.5" /> New task
           </Button>
         </div>
@@ -227,7 +314,7 @@ export function TasksView() {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-10 space-y-10 max-w-4xl custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-10 space-y-10 max-w-4xl mx-auto w-full custom-scrollbar">
         {isLoading && (
           <div className="flex flex-col items-center justify-center p-20 gap-3">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -265,12 +352,17 @@ export function TasksView() {
                       isDone
                         ? "border-border/40 bg-transparent opacity-60 hover:opacity-100"
                         : isBlocked
-                        ? "border-amber-300/60 bg-amber-50/30 hover:border-amber-400/70"
+                        ? "border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60"
                         : "border-border bg-background hover:border-primary/40"
                     }`}
                     onClick={() => setSelectedTask(task)}
                   >
-                    <div className="mt-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); cycleStatus(task); }}
+                      title={`Mark ${task.status === "todo" ? "in progress" : task.status === "in-progress" ? "done" : "to do"}`}
+                      className="mt-0.5 shrink-0 rounded-md p-0.5 -m-0.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    >
                       {isDone ? (
                         <CheckCircle2 className="h-4 w-4 text-primary" />
                       ) : task.status === "in-progress" ? (
@@ -278,14 +370,14 @@ export function TasksView() {
                       ) : (
                         <Circle className={`h-4 w-4 ${isBlocked ? "text-amber-500" : "text-muted-foreground/50"}`} />
                       )}
-                    </div>
+                    </button>
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-medium leading-snug ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
                         {task.title}
                       </p>
                       <div className="flex items-center gap-2 mt-2 flex-wrap text-xs text-muted-foreground">
                         {isBlocked && (
-                          <span className="flex items-center gap-1 text-amber-700">
+                          <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
                             <ArrowRight className="h-3 w-3" />
                             Blocked by {blockingTasks.length}
                           </span>
@@ -344,39 +436,61 @@ export function TasksView() {
         </DialogContent>
       </Dialog>
 
-      {/* Task Detail Popover */}
+      {/* Task Detail Dialog */}
       {selectedTask && (
-        <Dialog open={!!selectedTask} onOpenChange={() => setSelectedTask(null)}>
+        <Dialog open={!!selectedTask} onOpenChange={(open) => { if (!open) setSelectedTask(null); }}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>{selectedTask.title}</DialogTitle>
-              <DialogDescription>{selectedTask.description}</DialogDescription>
+              <DialogDescription className="sr-only">Task details</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               {selectedTask.description && (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground">Description</label>
-                  <p className="text-sm mt-1">{selectedTask.description}</p>
+                  <p className="text-sm mt-1 whitespace-pre-wrap">{selectedTask.description}</p>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground">Priority</label>
-                  <p className="text-sm mt-1 capitalize">{selectedTask.priority}</p>
+                  <label className="text-xs font-semibold text-muted-foreground">Status</label>
+                  <select
+                    value={selectedTask.status}
+                    onChange={(e) => setTaskStatus(selectedTask, e.target.value as TaskStatus)}
+                    className="w-full mt-1 px-3 py-2 text-sm border border-border rounded-lg bg-background"
+                  >
+                    {statusOrder.map(s => (
+                      <option key={s} value={s}>{statusConfig[s].label}</option>
+                    ))}
+                  </select>
                 </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground">Priority</label>
+                  <select
+                    value={selectedTask.priority}
+                    onChange={(e) => setTaskPriority(selectedTask, e.target.value as TaskPriority)}
+                    className="w-full mt-1 px-3 py-2 text-sm border border-border rounded-lg bg-background"
+                  >
+                    {(["high", "medium", "low"] as TaskPriority[]).map(p => (
+                      <option key={p} value={p}>{priorityConfig[p].label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 {selectedTask.effort && (
                   <div>
                     <label className="text-xs font-semibold text-muted-foreground">Effort</label>
                     <p className="text-sm mt-1">{selectedTask.effort}/10</p>
                   </div>
                 )}
+                {selectedTask.category && (
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground">Category</label>
+                    <p className="text-sm mt-1 capitalize">{selectedTask.category}</p>
+                  </div>
+                )}
               </div>
-              {selectedTask.category && (
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground">Category</label>
-                  <p className="text-sm mt-1 capitalize">{selectedTask.category}</p>
-                </div>
-              )}
               {selectedTask.prdSection && (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground">PRD Section</label>
@@ -397,9 +511,74 @@ export function TasksView() {
                 </select>
               </div>
             </div>
+            <DialogFooter className="justify-between sm:justify-between">
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => handleDeleteTask(selectedTask)}
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedTask(null)}>
+                Close
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* New Task Dialog */}
+      <Dialog open={showNewTask} onOpenChange={(open) => { if (!open) { setShowNewTask(false); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>New task</DialogTitle>
+            <DialogDescription>Create a task in the current document.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Title</label>
+              <input
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                placeholder="What needs to be done?"
+                autoFocus
+                className="w-full mt-1 px-3 py-2 text-sm border border-border rounded-lg bg-background"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Description</label>
+              <textarea
+                value={newTaskDescription}
+                onChange={(e) => setNewTaskDescription(e.target.value)}
+                placeholder="Optional details"
+                rows={3}
+                className="w-full mt-1 px-3 py-2 text-sm border border-border rounded-lg bg-background resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Priority</label>
+              <select
+                value={newTaskPriority}
+                onChange={(e) => setNewTaskPriority(e.target.value as TaskPriority)}
+                className="w-full mt-1 px-3 py-2 text-sm border border-border rounded-lg bg-background"
+              >
+                {(["high", "medium", "low"] as TaskPriority[]).map(p => (
+                  <option key={p} value={p}>{priorityConfig[p].label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button size="sm" variant="ghost" onClick={() => setShowNewTask(false)} disabled={isSavingNew}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleCreateTask} disabled={!newTaskTitle.trim() || isSavingNew || !user}>
+              {isSavingNew ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

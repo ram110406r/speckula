@@ -281,7 +281,10 @@ export function AIPanel() {
         signal: controller.signal,
       });
 
-      if (!response.ok) throw new Error("API error");
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`API error ${response.status}: ${detail || response.statusText}`);
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();

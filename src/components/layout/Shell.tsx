@@ -83,7 +83,13 @@ export function Shell() {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[250px_minmax(0,1fr)_360px]">
+      <div
+        className={
+          showAIPanel
+            ? "grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[250px_minmax(0,1fr)_360px]"
+            : "grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[250px_minmax(0,1fr)]"
+        }
+      >
         <div className="hidden min-h-0 border-r border-border/70 bg-sidebar md:block">
           <SidebarNav />
         </div>
