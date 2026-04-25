@@ -15,18 +15,26 @@ async function forward(req: Request, segments: string[]) {
 
   const body = req.method === 'GET' ? undefined : await req.arrayBuffer();
 
-  const upstream = await fetch(`${BACKEND_URL}/import/${segments.join('/')}`, {
-    method: req.method,
-    headers,
-    body,
-  });
+  try {
+    const upstream = await fetch(`${BACKEND_URL}/import/${segments.join('/')}`, {
+      method: req.method,
+      headers,
+      body,
+    });
 
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: {
-      'Content-Type': upstream.headers.get('content-type') ?? 'application/json',
-    },
-  });
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: {
+        'Content-Type': upstream.headers.get('content-type') ?? 'application/json',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Import backend unreachable.';
+    return new Response(JSON.stringify({ ok: false, error: `Import backend unreachable: ${message}` }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ path: string[] }> }) {

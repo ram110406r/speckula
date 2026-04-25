@@ -11,19 +11,28 @@ export async function POST(req: Request) {
   const auth = req.headers.get('authorization');
   const body = await req.text();
 
-  const upstream = await fetch(`${BACKEND_URL}/ai/chat`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(auth ? { authorization: auth } : {}),
-    },
-    body,
-  });
+  try {
+    const upstream = await fetch(`${BACKEND_URL}/ai/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(auth ? { authorization: auth } : {}),
+      },
+      body,
+    });
 
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: {
-      'Content-Type': upstream.headers.get('content-type') ?? 'text/plain; charset=utf-8',
-    },
-  });
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: {
+        'Content-Type': upstream.headers.get('content-type') ?? 'text/plain; charset=utf-8',
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? `AI backend unreachable: ${error.message}` : 'AI backend unreachable.';
+    return new Response(message, {
+      status: 502,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
 }
