@@ -7,6 +7,17 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+let dbWarningLogged = false;
+const warnDbDegraded = (op: string, error: unknown) => {
+  if (!dbWarningLogged) {
+    dbWarningLogged = true;
+    console.warn(
+      `[groqService] Postgres unavailable — AI calls will run without caching/telemetry. First failure on ${op}:`,
+      error instanceof Error ? error.message : error
+    );
+  }
+};
+
 // Model selection based on task complexity.
 // Both slots use Llama 3.3 70B Versatile — Groq retired Mixtral and the older Llama3 models.
 // Kept as two keys so callers can express intent; swap in a smaller model here when one ships.
@@ -38,14 +49,18 @@ export const groqService = {
     const promptHash = this.hashPrompt(prompt);
     const modelName = MODELS[model];
 
-    // Check cache first
-    const cached = await db.promptCache.findUnique({
-      where: { promptHash },
-    });
+    // Cache/telemetry is best-effort: if Postgres is unavailable or
+    // misconfigured, fall through to a fresh Groq call so the user-facing AI
+    // request still succeeds.
+    const cached = await db.promptCache
+      .findUnique({ where: { promptHash } })
+      .catch((error) => {
+        warnDbDegraded("promptCache.findUnique", error);
+        return null;
+      });
 
     if (cached && cached.expiresAt > new Date()) {
-      // Log cache hit
-      await db.promptLog.create({
+      db.promptLog.create({
         data: {
           userId,
           projectId,
@@ -59,13 +74,12 @@ export const groqService = {
           cost: 0,
           cachedResult: true,
         },
-      });
+      }).catch((error) => warnDbDegraded("promptLog.create (hit)", error));
 
-      // Update hit count
-      await db.promptCache.update({
+      db.promptCache.update({
         where: { promptHash },
         data: { hitCount: { increment: 1 } },
-      });
+      }).catch((error) => warnDbDegraded("promptCache.update", error));
 
       return {
         content: cached.result,
@@ -90,8 +104,8 @@ export const groqService = {
       (response.usage?.completion_tokens || 0);
     const cost = this.estimateCost(modelName, totalTokens);
 
-    // Log API usage
-    await db.promptLog.create({
+    // Fire-and-forget telemetry; failures must not affect the AI response.
+    db.promptLog.create({
       data: {
         userId,
         projectId,
@@ -105,11 +119,10 @@ export const groqService = {
         cost,
         cachedResult: false,
       },
-    });
+    }).catch((error) => warnDbDegraded("promptLog.create", error));
 
-    // Cache result
     const cacheTTLMinutes = parseInt(process.env.AI_CACHE_TTL_MINUTES || "60");
-    await db.promptCache.upsert({
+    db.promptCache.upsert({
       where: { promptHash },
       create: {
         promptHash,
@@ -121,12 +134,11 @@ export const groqService = {
         result: content,
         expiresAt: new Date(Date.now() + cacheTTLMinutes * 60 * 1000),
       },
-    });
+    }).catch((error) => warnDbDegraded("promptCache.upsert", error));
 
-    // Daily per-user usage aggregate
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    await db.aPIUsage.upsert({
+    db.aPIUsage.upsert({
       where: { userId_date: { userId, date: today } },
       create: {
         userId,
@@ -141,7 +153,7 @@ export const groqService = {
         totalTokens: { increment: totalTokens },
         totalCost: { increment: cost },
       },
-    });
+    }).catch((error) => warnDbDegraded("aPIUsage.upsert", error));
 
     return {
       content,
@@ -352,7 +364,7 @@ Only return the JSON, no other text.`;
     try {
       const patterns = JSON.parse(result.content);
 
-      await db.patternAnalysis.create({
+      db.patternAnalysis.create({
         data: {
           projectId,
           noteId,
@@ -362,7 +374,7 @@ Only return the JSON, no other text.`;
           tokensUsed: result.tokensUsed,
           expiresAt: new Date(Date.now() + 30 * 60 * 1000),
         },
-      });
+      }).catch((error) => warnDbDegraded("patternAnalysis.create", error));
 
       return {
         patterns,

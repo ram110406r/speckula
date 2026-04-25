@@ -42,7 +42,7 @@ export function TipTapEditor() {
   const [inlinePosition, setInlinePosition] = useState({ x: 16, y: 96 });
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const { user } = useAuth();
-  const { currentDocId, setIsSaving, documents, setActiveContext, pendingInsertion, setPendingInsertion, newDocumentId, clearNewDocumentFlag, pendingImport, setPendingImport } = useAppStore();
+  const { currentDocId, setIsSaving, setActiveContext, pendingInsertion, setPendingInsertion, newDocumentId, clearNewDocumentFlag, pendingImport, setPendingImport } = useAppStore();
   const lastExtractedHashRef = React.useRef<string | null>(null);
   const extractTimerRef = React.useRef<number | null>(null);
   const editorContainerRef = React.useRef<HTMLDivElement | null>(null);
@@ -423,31 +423,57 @@ export function TipTapEditor() {
     };
   }, [editor, user, currentDocId, isLoadingContent]);
 
-  // Debounced auto-save logic
+  // Debounced auto-save: triggers on editor edits, and flushes on unmount /
+  // doc-switch so view changes don't drop unsaved content.
   React.useEffect(() => {
     if (!editor || !user || !currentDocId || isLoadingContent) return;
 
-    const handler = setTimeout(async () => {
-      if (!isMountedRef.current) return;
-      setIsSaving(true);
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+    let dirty = false;
+    let saving = false;
+
+    const flush = async () => {
+      if (!dirty || saving) return;
+      saving = true;
+      dirty = false;
+      if (isMountedRef.current) setIsSaving(true);
       try {
-        const currentDoc = documents.find(d => d.id === currentDocId);
+        const latestDocs = useAppStore.getState().documents;
+        const currentDoc = latestDocs.find(d => d.id === currentDocId);
         await saveDocument(user.uid, currentDocId, {
           content: editor.getJSON(),
-          title: currentDoc?.title || "Untitled Document"
+          title: currentDoc?.title || "Untitled Document",
         });
       } catch (error) {
-        if (!isMountedRef.current) return;
         console.error("Failed to auto-save:", error);
+        dirty = true;
       } finally {
+        saving = false;
         setTimeout(() => {
           if (isMountedRef.current) setIsSaving(false);
         }, 800);
       }
-    }, 2000);
+    };
 
-    return () => clearTimeout(handler);
-  }, [editor, user, currentDocId, setIsSaving, isLoadingContent, documents]);
+    const onUpdate = () => {
+      dirty = true;
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(flush, 2000);
+    };
+
+    editor.on("update", onUpdate);
+
+    return () => {
+      editor.off("update", onUpdate);
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      // Flush any pending edits before unmount/doc-switch. Fire-and-forget;
+      // the Firestore SDK queues the write internally so it survives unmount.
+      if (dirty) void flush();
+    };
+  }, [editor, user, currentDocId, setIsSaving, isLoadingContent]);
 
   React.useEffect(() => {
     setMounted(true);
