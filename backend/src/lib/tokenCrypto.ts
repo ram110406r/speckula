@@ -30,13 +30,17 @@ export const encryptToken = (plaintext: string): string => {
 };
 
 export const decryptToken = (payload: string): string => {
-  const key = getKey();
-  const buf = Buffer.from(payload, 'base64');
-  const iv = buf.subarray(0, IV_LENGTH);
-  const authTag = buf.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
-  const ciphertext = buf.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
-  const decipher = createDecipheriv(ALGO, key, iv);
-  decipher.setAuthTag(authTag);
-  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  return decrypted.toString('utf-8');
+  try {
+    const key = getKey();
+    const buf = Buffer.from(payload, 'base64');
+    const iv = buf.subarray(0, IV_LENGTH);
+    const authTag = buf.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
+    const ciphertext = buf.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
+    const decipher = createDecipheriv(ALGO, key, iv);
+    decipher.setAuthTag(authTag);
+    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return decrypted.toString('utf-8');
+  } catch (err) {
+    throw new Error(`Failed to decrypt Slack bot token: ${(err as Error).message}`);
+  }
 };

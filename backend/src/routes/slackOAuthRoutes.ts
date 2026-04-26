@@ -222,7 +222,8 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const { userId, teamId, limit = 100 } = request.body;
+      const { userId, teamId, limit: rawLimit = 100 } = request.body;
+      const limit = Math.min(Math.max(1, Number(rawLimit) || 100), 1000);
       if (!userId || !teamId) {
         return reply.code(400).send({ ok: false, error: 'userId and teamId required' });
       }

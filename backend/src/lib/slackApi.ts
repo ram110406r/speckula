@@ -64,13 +64,23 @@ export interface SlackChannel {
 }
 
 export const listChannels = async (token: string): Promise<SlackChannel[]> => {
-  // Get both public + private channels the bot is a member of (or could join).
-  const result = await slackGet<{ channels: SlackChannel[]; response_metadata?: { next_cursor?: string } }>(
-    'conversations.list',
-    token,
-    { types: 'public_channel,private_channel', exclude_archived: 'true', limit: '200' }
-  );
-  return result.channels;
+  const all: SlackChannel[] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await slackGet<{ channels: SlackChannel[]; response_metadata?: { next_cursor?: string } }>(
+      'conversations.list',
+      token,
+      {
+        types: 'public_channel,private_channel',
+        exclude_archived: 'true',
+        limit: '200',
+        ...(cursor ? { cursor } : {}),
+      }
+    );
+    all.push(...result.channels);
+    cursor = result.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+  return all;
 };
 
 export interface SlackMessage {
@@ -88,13 +98,21 @@ export const fetchChannelHistory = async (
   channelId: string,
   options: { limit?: number; oldest?: string } = {}
 ): Promise<SlackMessage[]> => {
-  const params: Record<string, string> = {
-    channel: channelId,
-    limit: String(options.limit ?? 200),
-  };
-  if (options.oldest) params.oldest = options.oldest;
-  const result = await slackGet<{ messages: SlackMessage[] }>('conversations.history', token, params);
-  return result.messages;
+  const all: SlackMessage[] = [];
+  const cap = options.limit ?? 200;
+  let cursor: string | undefined;
+  do {
+    const batchSize = Math.min(200, cap - all.length);
+    const params: Record<string, string> = { channel: channelId, limit: String(batchSize) };
+    if (options.oldest) params.oldest = options.oldest;
+    if (cursor) params.cursor = cursor;
+    const result = await slackGet<{ messages: SlackMessage[]; response_metadata?: { next_cursor?: string } }>(
+      'conversations.history', token, params
+    );
+    all.push(...result.messages);
+    cursor = result.response_metadata?.next_cursor || undefined;
+  } while (cursor && all.length < cap);
+  return all;
 };
 
 // ─── Auth test (handy for verifying a token works) ─────────────────────────
