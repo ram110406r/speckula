@@ -43,6 +43,19 @@ interface GroqResponse {
   modelUsed: string;
 }
 
+// Derive a stored confidence score from the AI's own output. We bump up when
+// the text shows specificity signals (numbers, quoted phrases, named user
+// segments) and otherwise treat the output as a softer assertion.
+const SEGMENT_HINT_REGEX = /\b(users?|customers?|students|teachers|developers|designers|engineers|managers|founders|parents|teens|professionals|freelancers|nurses|patients|doctors|clinicians|gamers|creators|writers|merchants|millennials|gen ?z|gen ?x|boomers|small businesses|enterprises|teams|investors)\b/i;
+
+const deriveConfidenceFromSpecificity = (text: string): number => {
+  if (!text) return 0.6;
+  const hasNumber = /\d/.test(text);
+  const hasQuote = /["'`‘’“”]/.test(text);
+  const hasNamedSegment = SEGMENT_HINT_REGEX.test(text);
+  return hasNumber || hasQuote || hasNamedSegment ? 0.8 : 0.6;
+};
+
 /**
  * Core Groq AI Service
  * Handles all AI operations with caching and cost optimization
@@ -183,14 +196,24 @@ export const groqService = {
     noteId: string,
     userId: string
   ) {
-    const prompt = `Extract exactly 4 key product insights from these notes.
+    const prompt = `You are a sharp product analyst. Your job is to surface non-obvious insights from raw research notes — things the PM might have missed, patterns across multiple data points, and contradictions worth interrogating.
 
 Notes:
 ${noteContent}
 
-Return ONLY a JSON array (no prose, no markdown fences) with this exact shape:
+Rules:
+- Do not state the obvious. If a college student says they struggle to track expenses, that is not an insight — that is the problem statement. An insight is WHY they struggle, or WHAT they do instead, or WHERE existing tools fail them.
+- Look for: repeated friction across different contexts, workarounds users have invented, stated needs that contradict observed behavior, segments with meaningfully different needs, market assumptions that the notes disprove.
+- Each insight must reference something specific from the notes — a word, a pattern, a contradiction. If you cannot point to something specific, it is not an insight.
+- Be precise. "Students avoid budgeting apps because manual entry feels like homework" is an insight. "Students need better budgeting tools" is not.
+
+Return ONLY a JSON array (no prose, no markdown fences) with exactly 4 items:
 [
-  { "title": "Short headline (max 8 words)", "description": "1-2 sentence explanation", "category": "pain-point" | "opportunity" | "user-segment" | "pattern" }
+  {
+    "title": "Short precise headline (max 8 words, no generic verbs like 'improve' or 'enhance')",
+    "description": "2-3 sentences. What is the specific pattern or contradiction? What does it imply for product decisions? Do NOT end with a generic recommendation.",
+    "category": "pain-point" | "opportunity" | "user-segment" | "pattern"
+  }
 ]`;
 
     const result = await this.callGroq(prompt, "reasoning", userId, projectId);
@@ -219,7 +242,7 @@ Return ONLY a JSON array (no prose, no markdown fences) with this exact shape:
           noteId,
           userId,
           content: `${insight.title}\n${insight.description}`,
-          confidenceScore: 0.7,
+          confidenceScore: deriveConfidenceFromSpecificity(insight.description),
           modelUsed: result.modelUsed,
           tokensUsed: result.tokensUsed,
         },
@@ -239,25 +262,38 @@ Return ONLY a JSON array (no prose, no markdown fences) with this exact shape:
     projectId: string,
     userId: string
   ) {
-    const prompt = `Generate a professional, detailed PRD based on these notes.
+    const prompt = `You are a staff PM writing a PRD that will go directly to engineering. This document must be specific enough that a developer could start building from it without asking clarifying questions.
 
-Project Title: ${title}
+Project: ${title}
 
-Notes:
+Research and context:
 ${projectNotes}
 
-Key Decisions:
+Key decisions already made:
 ${decisions}
 
-The PRD MUST include the following sections:
-1. Problem Statement (Deep dive into current friction)
-2. Target Users (Primary/Secondary segments)
-3. Feature Breakdown (Core capabilities)
-4. User Stories (As a... I want to... so that...)
-5. Edge Cases (Potential pitfalls)
-6. Success Metrics (KPIs to measure impact)
+Write a PRD with these sections. Every section must be grounded in the research above — do not invent requirements that are not supported by evidence in the notes.
 
-Format in clean Markdown with professional headings. Return only the markdown.`;
+## Problem Statement
+State the specific user problem in one paragraph. Name the user segment. Describe the exact friction point. Cite specific evidence from the research. Do not use generic language like "users struggle with" — be precise.
+
+## Who This Is For
+Primary user segment with specific characteristics drawn from the research.
+Secondary segment if the research supports one. If the research only supports one segment, say so and do not invent a second.
+
+## What We Are Building
+Bullet list of specific capabilities. Each bullet must answer: what does the user do, what does the system do, what is the outcome? No vague features.
+
+## User Stories
+3-5 stories in the format: As a [specific user type from research], I want to [specific action], so that [specific outcome tied to a pain point in the research]. Do not write generic user stories — each one must trace back to something in the notes.
+
+## What We Are Not Building
+At least 2 explicit exclusions with reasoning. What obvious solutions did we decide against and why? This section prevents scope creep.
+
+## How We Know It Is Working
+3 specific, measurable success metrics. Each metric must include: what we measure, how we measure it, and what the threshold for success is. "Increased engagement" is not a metric.
+
+Return only the markdown.`;
 
     const result = await this.callGroq(prompt, "reasoning", userId, projectId);
 
@@ -284,14 +320,25 @@ Format in clean Markdown with professional headings. Return only the markdown.`;
     prdId: string | undefined,
     userId: string
   ) {
-    const prompt = `Suggest 5 concrete execution tasks for this work.
+    const prompt = `You are a senior engineer breaking down a spec into the minimum viable set of tasks to ship the first working version.
 
 Source:
 ${prdContent}
 
-Return ONLY a JSON array (no prose, no markdown fences) with this exact shape:
+Rules:
+- Suggest exactly 5 tasks. Not features — tasks. A task is something one person can complete in 1-5 days.
+- Order them by dependency: tasks that must be done first come first.
+- Each task must map to a specific capability in the source spec. Do not suggest tasks for capabilities not mentioned in the spec.
+- Prioritize ruthlessly: high = blocks everything else or is the core user-facing feature; medium = important but not blocking; low = polish or nice-to-have that can ship later.
+- Milestone labels should reflect the shipping phase, not just repeat the task title. Use: "Foundation", "Core Feature", "Integration", "Polish", "Validation".
+
+Return ONLY a JSON array (no prose, no markdown fences):
 [
-  { "title": "Task title", "priority": "high" | "medium" | "low", "milestone": "Short milestone label" }
+  {
+    "title": "Specific task title — verb + noun + scope (e.g. 'Build expense entry form with category picker')",
+    "priority": "high" | "medium" | "low",
+    "milestone": "Foundation" | "Core Feature" | "Integration" | "Polish" | "Validation"
+  }
 ]`;
 
     const result = await this.callGroq(prompt, "fast", userId, projectId);
@@ -323,7 +370,7 @@ Return ONLY a JSON array (no prose, no markdown fences) with this exact shape:
           description: task.milestone ?? null,
           priority: task.priority,
           reasoning: task.milestone ?? "",
-          confidenceScore: 0.7,
+          confidenceScore: deriveConfidenceFromSpecificity(`${task.title} ${task.milestone ?? ""}`),
           modelUsed: result.modelUsed,
           tokensUsed: result.tokensUsed,
         },
@@ -343,27 +390,28 @@ Return ONLY a JSON array (no prose, no markdown fences) with this exact shape:
     noteId: string,
     userId: string
   ) {
-    const prompt = `
-Analyze this text for patterns. Return as JSON.
+    const prompt = `You are a research analyst doing a first-pass quality check on product notes before they go into an AI pipeline. Your job is to flag problems with the notes themselves, not to analyze the product idea.
 
 Text:
 ${content}
 
-Identify:
-1. Repeated keywords or concepts
-2. Weak or unclear definitions
-3. Missing context or gaps
-4. Suggestions for improvement
+Check for these specific problems:
 
-Return JSON:
+keywords: Terms that appear multiple times but are never defined. These will confuse the AI downstream. List the undefined repeated terms.
+
+weakSignals: Claims made without evidence. Phrases like "users want", "most people", "currently", "often" without specific support. List the specific weak claims.
+
+gaps: Questions the notes raise but do not answer. What would a PM need to know before making a decision based on these notes? List specific unanswered questions, not generic gaps.
+
+suggestions: Specific things the PM should add to make these notes more useful for AI analysis. Not "add more detail" — specific additions like "Define what 'affordable' means to your target user" or "Add sample size for the survey results mentioned on line 3".
+
+Return ONLY this JSON, no other text:
 {
-  "keywords": ["keyword1", "keyword2"],
-  "weakSignals": ["unclear concept 1"],
-  "gaps": ["missing information 1"],
-  "suggestions": ["suggestion 1"]
-}
-
-Only return the JSON, no other text.`;
+  "keywords": ["undefined term 1", "undefined term 2"],
+  "weakSignals": ["specific weak claim 1", "specific weak claim 2"],
+  "gaps": ["specific unanswered question 1", "specific unanswered question 2"],
+  "suggestions": ["specific addition 1", "specific addition 2"]
+}`;
 
     const result = await this.callGroq(
       prompt,
