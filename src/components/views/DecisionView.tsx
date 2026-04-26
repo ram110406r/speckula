@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Compass, Sparkles, Loader2, Target, Zap, Brain } from "lucide-react";
+import { Compass, Sparkles, Loader2, Target, Zap, Brain, AlertTriangle, AlertCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,11 +38,33 @@ import { compareOutcomes, type OutcomeComparison } from "@/lib/ai/comparisonEngi
 import { getExpectedOutcome, setExpectedOutcome, type ExpectedOutcomeRecord } from "@/lib/ai/expectedOutcome";
 import { getActualOutcome, recordActualOutcome, type ActualOutcomeRecord } from "@/lib/ai/actualOutcome";
 import { updateConfidenceScore } from "@/lib/ai/scoreFeedback";
+import { evaluateDecisionHealth, evaluatePushback, type HealthStatus, type PushbackAction } from "@/lib/ai/decisionHealth";
 
 const priorityColors = {
   high: "text-primary border-primary/20 bg-primary/5",
   medium: "text-muted-foreground border-border bg-muted/5",
   low: "text-muted-foreground/60 border-border/40 bg-transparent",
+};
+
+const healthStyles: Record<HealthStatus, { pill: string; dot: string }> = {
+  healthy: {
+    pill: "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
+    dot: "bg-emerald-500",
+  },
+  risky: {
+    pill: "border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-300",
+    dot: "bg-amber-500",
+  },
+  weak: {
+    pill: "border-red-500/40 bg-red-500/5 text-red-700 dark:text-red-300",
+    dot: "bg-red-500",
+  },
+};
+
+const healthLabel: Record<HealthStatus, string> = {
+  healthy: "Healthy",
+  risky: "Risky",
+  weak: "Weak",
 };
 
 interface ScoredDecision extends DecisionSuggestion {
@@ -94,6 +116,16 @@ export function DecisionView() {
       ...prev,
       [decisionId]: { ...getFeedbackState(decisionId), ...patch },
     }));
+  };
+
+  const handlePushbackCta = (action: PushbackAction) => {
+    if (action === "add-evidence") {
+      setActiveView("editor");
+      return;
+    }
+    if (action === "rescore") {
+      handleGenerate();
+    }
   };
 
   const handleSubmitFeedback = async (decision: ScoredDecision, success: boolean) => {
@@ -548,6 +580,17 @@ export function DecisionView() {
                       Score {s.score}
                     </span>
                   </div>
+                  {(() => {
+                    const health = evaluateDecisionHealth(s);
+                    const styles = healthStyles[health.status];
+                    return (
+                      <div className={`mb-3 flex items-center gap-2 rounded-md border px-2 py-1 text-xs ${styles.pill}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${styles.dot}`} />
+                        <span className="font-medium">{healthLabel[health.status]}</span>
+                        <span className="opacity-75">— {health.reason}</span>
+                      </div>
+                    );
+                  })()}
                   <h3 className="text-sm font-semibold mb-3 leading-snug">
                     {s.title}
                   </h3>
@@ -558,10 +601,41 @@ export function DecisionView() {
                     <span className="block text-[10px] uppercase tracking-[0.06em] mb-1 text-muted-foreground/70">Trade-offs</span>
                     {s.tradeoffs}
                   </div>
-                  <div className="text-xs text-foreground leading-relaxed bg-muted/40 p-2.5 rounded-md">
+                  <div className="text-xs text-foreground leading-relaxed bg-muted/40 p-2.5 rounded-md mb-3">
                     <span className="block text-[10px] uppercase tracking-[0.06em] mb-1 text-muted-foreground">User story</span>
                     {s.userStory}
                   </div>
+                  {(() => {
+                    const pushbacks = evaluatePushback(s);
+                    if (pushbacks.length === 0) return null;
+                    return (
+                      <div className="space-y-2">
+                        {pushbacks.map((pb) => {
+                          const isAlert = pb.severity === "alert";
+                          const pillCls = isAlert
+                            ? "border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-300"
+                            : "border-amber-500/40 bg-amber-500/5 text-amber-800 dark:text-amber-200";
+                          const Icon = isAlert ? AlertCircle : AlertTriangle;
+                          return (
+                            <div key={pb.id} className={`rounded-md border px-3 py-2 text-xs ${pillCls}`}>
+                              <div className="flex items-start gap-2">
+                                <Icon className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                                <p className="flex-1 leading-relaxed">{pb.message}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handlePushbackCta(pb.cta.action)}
+                                className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium hover:underline underline-offset-2"
+                              >
+                                {pb.cta.label}
+                                <ArrowRight className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="px-5 py-3 bg-muted/20 border-t border-border/60 flex items-center justify-between text-xs">
                   <div className="flex flex-col gap-1">
