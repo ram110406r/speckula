@@ -55,6 +55,13 @@ export function Shell() {
   const currentDoc = documents.find((doc) => doc.id === currentDocId);
   const activityText = formatRelativeActivity(currentDoc?.updatedAt);
 
+  const phaseLabel = (() => {
+    if (activeView === "editor" || activeView === "insights") return "Evidence";
+    if (activeView === "decisions") return "Argument";
+    if (activeView === "prds" || activeView === "tasks") return "Verdict";
+    return null;
+  })();
+
   const renderMainView = () => {
     switch (activeView) {
       case "insights": return <InsightsView />;
@@ -78,6 +85,12 @@ export function Shell() {
               {currentDoc?.title || (documents.length === 0 ? "No document selected" : "Untitled Document")}
             </p>
           </div>
+
+          {phaseLabel && (
+            <span className="hidden sm:inline rounded border border-primary/30 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-primary/70">
+              {phaseLabel}
+            </span>
+          )}
 
           {activityText && (
             <span className="hidden sm:inline text-xs text-muted-foreground">{activityText}</span>

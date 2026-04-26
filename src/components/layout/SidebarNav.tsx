@@ -29,38 +29,56 @@ interface GroupedNavItem {
 
 const navGroups: { label: string; items: GroupedNavItem[] }[] = [
   {
-    label: "Think",
+    label: "Evidence",
     items: [
-      { icon: FileText, label: "Notes", view: "editor" },
-      { icon: Lightbulb, label: "Insights", view: "insights" },
+      { icon: FileText, label: "Research", view: "editor" },
+      { icon: Lightbulb, label: "Signals", view: "insights" },
     ],
   },
   {
-    label: "Decide",
+    label: "Argument",
     items: [
       { icon: Compass, label: "Decisions", view: "decisions" },
     ],
   },
   {
-    label: "Build",
+    label: "Verdict",
     items: [
-      { icon: LayoutDashboard, label: "PRDs", view: "prds" },
+      { icon: LayoutDashboard, label: "Spec", view: "prds" },
       { icon: CheckSquare, label: "Tasks", view: "tasks" },
     ],
   },
   {
-    label: "Share",
+    label: "Publish",
     items: [
-      { icon: Share2, label: "Public Cases", view: "platform" },
-    ],
-  },
-  {
-    label: "Connect",
-    items: [
+      { icon: Share2, label: "Cases", view: "platform" },
       { icon: MessageSquare, label: "Slack", view: "slack" },
     ],
   },
 ];
+
+type Phase = "evidence" | "argument" | "verdict" | null;
+
+const phaseFor = (view: AppView): Phase => {
+  if (view === "editor" || view === "insights") return "evidence";
+  if (view === "decisions") return "argument";
+  if (view === "prds" || view === "tasks") return "verdict";
+  return null;
+};
+
+const phaseSteps: { key: Exclude<Phase, null>; label: string }[] = [
+  { key: "evidence", label: "Evidence" },
+  { key: "argument", label: "Argument" },
+  { key: "verdict", label: "Verdict" },
+];
+
+const nextStepHints: Partial<Record<AppView, string>> = {
+  editor: "Add your research, then generate signals →",
+  insights: "Review signals, then score decisions →",
+  decisions: "Score a decision, then write the spec →",
+  prds: "Spec approved? Break it into tasks →",
+  tasks: "Ship it. Then close the loop.",
+};
 
 export function SidebarNav() {
   const { user, loginWithGoogle, logout, loading } = useAuth();
@@ -164,6 +182,37 @@ export function SidebarNav() {
 
       {/* Scrollable middle: nav + documents */}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        {/* Phase indicator: Evidence · Argument · Verdict */}
+        <div className="px-5 pt-4 pb-3">
+          <div className="grid grid-cols-3">
+            {phaseSteps.map((step, i) => {
+              const isActive = phaseFor(activeView) === step.key;
+              return (
+                <div key={step.key} className="relative flex flex-col items-center">
+                  {i > 0 && (
+                    <span className="absolute left-0 right-1/2 top-1 h-px bg-muted-foreground/20" />
+                  )}
+                  {i < phaseSteps.length - 1 && (
+                    <span className="absolute left-1/2 right-0 top-1 h-px bg-muted-foreground/20" />
+                  )}
+                  <span
+                    className={`relative z-10 h-2 w-2 rounded-full ${
+                      isActive ? "bg-primary" : "bg-muted-foreground/20"
+                    }`}
+                  />
+                  <span
+                    className={`mt-1.5 text-[10px] font-medium uppercase tracking-[0.08em] ${
+                      isActive ? "text-primary" : "text-muted-foreground/40"
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Main Navigation */}
         <nav className="mt-3 space-y-4 px-3">
           {navGroups.map((group) => (
@@ -185,6 +234,12 @@ export function SidebarNav() {
             </div>
           ))}
         </nav>
+
+        {nextStepHints[activeView] && (
+          <p className="px-4 py-2 text-[11px] italic text-muted-foreground/50">
+            {nextStepHints[activeView]}
+          </p>
+        )}
 
         <div className="mt-4">
           <div className="px-6 py-2 flex items-center justify-between">
