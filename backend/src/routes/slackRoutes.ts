@@ -27,6 +27,27 @@ interface SlackEventCallback {
 
 type SlackEventPayload = SlackUrlVerification | SlackEventCallback;
 
+// Slack delivers events at-least-once; the same event_id can arrive multiple times even
+// with different timestamps (signature timestamp is per-delivery, not per-event). Dedupe
+// in memory for single-instance dev; switch to Redis when scaling out.
+const SEEN_EVENT_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const MAX_SEEN_EVENTS = 10_000;
+const seenEventIds = new Map<string, number>();
+
+function alreadyProcessed(eventId: string): boolean {
+  const now = Date.now();
+  const expiry = seenEventIds.get(eventId);
+  if (expiry && expiry > now) return true;
+
+  if (seenEventIds.size >= MAX_SEEN_EVENTS) {
+    // Drop the oldest entry (Map iteration is insertion-ordered).
+    const oldest = seenEventIds.keys().next().value;
+    if (oldest) seenEventIds.delete(oldest);
+  }
+  seenEventIds.set(eventId, now + SEEN_EVENT_TTL_MS);
+  return false;
+}
+
 function verifySlackSignature(
   signingSecret: string,
   timestamp: string,
@@ -100,6 +121,11 @@ export default async function slackRoutes(fastify: FastifyInstance) {
       if ((body as SlackEventCallback).type === 'event_callback') {
         const { event, team_id, event_id } = body as SlackEventCallback;
         if (event.bot_id) return;
+
+        if (event_id && alreadyProcessed(event_id)) {
+          request.log.debug({ event_id }, 'duplicate slack event_id; skipping');
+          return;
+        }
 
         request.log.info(
           { team_id, event_id, eventType: event.type, user: event.user },
