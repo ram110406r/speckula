@@ -162,42 +162,44 @@ export function SidebarNav() {
         </div>
       </div>
 
-      {/* Main Navigation */}
-      <nav className="mt-3 space-y-4 px-3">
-        {navGroups.map((group) => (
-          <div key={group.label} className="space-y-1">
-            <p className="px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">{group.label}</p>
-            {group.items.map((item) => {
-              const isActive = activeView === item.view;
-              return (
-                <button
-                  key={`${group.label}-${item.label}`}
-                  className={`relative flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors ${isActive ? "bg-card text-primary" : "text-foreground/70 hover:bg-card/60 hover:text-foreground"}`}
-                  onClick={() => setActiveView(item.view)}
-                >
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
+      {/* Scrollable middle: nav + documents */}
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        {/* Main Navigation */}
+        <nav className="mt-3 space-y-4 px-3">
+          {navGroups.map((group) => (
+            <div key={group.label} className="space-y-1">
+              <p className="px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">{group.label}</p>
+              {group.items.map((item) => {
+                const isActive = activeView === item.view;
+                return (
+                  <button
+                    key={`${group.label}-${item.label}`}
+                    className={`relative flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors ${isActive ? "bg-card text-primary" : "text-foreground/70 hover:bg-card/60 hover:text-foreground"}`}
+                    onClick={() => setActiveView(item.view)}
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
 
-      <div className="flex-1 flex flex-col min-h-0 mt-4">
-        <div className="px-6 py-2 flex items-center justify-between">
-          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">Documents</span>
-          <button 
-            onClick={handleNewDoc}
-            disabled={isCreating || !user}
-            className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-50 p-1"
-          >
-            {isCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto space-y-0.5 custom-scrollbar px-3 pb-2">
-          {documents.map((doc) => {
+        <div className="mt-4">
+          <div className="px-6 py-2 flex items-center justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">Documents</span>
+            <button
+              onClick={handleNewDoc}
+              disabled={isCreating || !user}
+              className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-50 p-1"
+            >
+              {isCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+
+          <div className="space-y-0.5 px-3 pb-2">
+            {documents.map((doc) => {
             const isActive = currentDocId === doc.id;
             return (
               <div
@@ -223,9 +225,10 @@ export function SidebarNav() {
             );
           })}
 
-          {user && documents.length === 0 && !isCreating && (
-            <p className="px-3 py-3 text-xs text-muted-foreground">No documents yet.</p>
-          )}
+            {user && documents.length === 0 && !isCreating && (
+              <p className="px-3 py-3 text-xs text-muted-foreground">No documents yet.</p>
+            )}
+          </div>
         </div>
       </div>
 
