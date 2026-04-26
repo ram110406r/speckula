@@ -19,12 +19,13 @@ import {
   strategicGuidanceAction,
   generatePRDFromDecisionAction,
   generateOpportunityScore,
+  submitOutcomeFeedback,
   type DecisionSuggestion,
   type StrategicGuidance,
 } from "@/lib/ai/actions";
 import { generateLearningInsight } from "@/lib/ai/learningEngine";
 import { calculateScore, type OpportunityScoreData } from "@/lib/ai/scoreEngine";
-import { updateScore } from "@/lib/ai/scoreEvolution";
+import { updateScore, type OpportunityScoreState } from "@/lib/ai/scoreEvolution";
 import { getScoreHistory, recordScoreHistory, type OpportunityScoreHistoryEntry } from "@/lib/ai/scoreHistory";
 import { ScoreCard } from "@/components/decision/ScoreCard";
 import { BreakdownChart } from "@/components/decision/BreakdownChart";
@@ -45,8 +46,19 @@ const priorityColors = {
 };
 
 interface ScoredDecision extends DecisionSuggestion {
+  decisionId: string;
   scoreBreakdown: OpportunityScoreData;
   score: number;
+}
+
+interface FeedbackCardState {
+  expected: string;
+  actual: string;
+  submitting: boolean;
+  submitted: boolean;
+  insight?: string;
+  confidenceBefore?: number;
+  confidenceAfter?: number;
 }
 
 export function DecisionView() {
@@ -71,6 +83,84 @@ export function DecisionView() {
   const [actualValue, setActualValue] = React.useState("");
   const [isGeneratingPRDFor, setIsGeneratingPRDFor] = React.useState<string | null>(null);
   const [prdPreview, setPrdPreview] = React.useState<{ title: string; content: string; decision: DecisionSuggestion } | null>(null);
+  const [feedbackByCard, setFeedbackByCard] = React.useState<Record<string, FeedbackCardState>>({});
+
+  const getFeedbackState = (decisionId: string): FeedbackCardState =>
+    feedbackByCard[decisionId] ?? { expected: "", actual: "", submitting: false, submitted: false };
+
+  const updateFeedbackState = (decisionId: string, patch: Partial<FeedbackCardState>) => {
+    setFeedbackByCard((prev) => ({
+      ...prev,
+      [decisionId]: { ...getFeedbackState(decisionId), ...patch },
+    }));
+  };
+
+  const handleSubmitFeedback = async (decision: ScoredDecision, success: boolean) => {
+    const state = getFeedbackState(decision.decisionId);
+    if (state.submitting || state.submitted) return;
+    if (!state.expected.trim() || !state.actual.trim()) return;
+
+    updateFeedbackState(decision.decisionId, { submitting: true });
+
+    const currentScore: OpportunityScoreState = {
+      impact: decision.scoreBreakdown.impact,
+      effort: decision.scoreBreakdown.effort,
+      confidence: decision.scoreBreakdown.confidence,
+      demand: decision.scoreBreakdown.demand,
+      score: decision.score,
+    };
+    const previousConfidence = currentScore.confidence;
+
+    try {
+      const { updatedScore, insight } = await submitOutcomeFeedback(
+        decision.decisionId,
+        {
+          decisionId: decision.decisionId,
+          success,
+          expected: {
+            target_value: state.expected.trim(),
+            metric: "",
+            timeframe: "",
+          },
+          actual: {
+            value: state.actual.trim(),
+            metric: "",
+            observedAt: new Date().toISOString(),
+          },
+        },
+        currentScore
+      );
+
+      setScoredSuggestions((prev) =>
+        prev.map((d) =>
+          d.decisionId === decision.decisionId
+            ? {
+                ...d,
+                score: updatedScore.score,
+                scoreBreakdown: {
+                  ...d.scoreBreakdown,
+                  impact: updatedScore.impact,
+                  effort: updatedScore.effort,
+                  confidence: updatedScore.confidence,
+                  demand: updatedScore.demand,
+                },
+              }
+            : d
+        )
+      );
+
+      updateFeedbackState(decision.decisionId, {
+        submitting: false,
+        submitted: true,
+        insight,
+        confidenceBefore: previousConfidence,
+        confidenceAfter: updatedScore.confidence,
+      });
+    } catch (error) {
+      console.error("Outcome feedback failed:", error);
+      updateFeedbackState(decision.decisionId, { submitting: false });
+    }
+  };
 
   React.useEffect(() => {
     if (currentDocId) {
@@ -179,11 +269,16 @@ export function DecisionView() {
           const scoreValue = calculateScore(breakdown);
           return {
             ...decision,
+            decisionId:
+              typeof crypto !== "undefined" && crypto.randomUUID
+                ? crypto.randomUUID()
+                : `${currentDocId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             scoreBreakdown: breakdown,
             score: scoreValue,
           } satisfies ScoredDecision;
         })
       );
+      setFeedbackByCard({});
 
       setScoredSuggestions(scored.sort((left, right) => right.score - left.score));
 
@@ -270,8 +365,16 @@ export function DecisionView() {
     try {
       const insight = await generateLearningInsight(
         JSON.stringify({ expected: expected.expected, actual: actual.actual, comparison: nextComparison }),
-        expected.expected,
-        actual.actual
+        {
+          target_value: String(expected.expected.target_value),
+          metric: expected.expected.metric,
+          timeframe: expected.expected.timeframe,
+        },
+        {
+          value: String(actual.actual.value),
+          metric: actual.actual.metric,
+          observedAt: new Date(actual.actual.timestamp).toISOString(),
+        }
       );
       setLearningInsight(insight);
       setOutcomeLoop({
@@ -490,6 +593,70 @@ export function DecisionView() {
                     {isGeneratingPRDFor === `${s.title}-${i}` ? "Generating PRD…" : "Convert to PRD"}
                   </Button>
                 </div>
+
+                {s.score > 0 && (() => {
+                  const fb = getFeedbackState(s.decisionId);
+                  const canSubmit = fb.expected.trim().length > 0 && fb.actual.trim().length > 0 && !fb.submitting;
+                  return (
+                    <div className="px-5 pb-5 pt-3 border-t border-border/60 space-y-3">
+                      <span className="block text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+                        How did this go?
+                      </span>
+
+                      {fb.submitted ? (
+                        <div className="space-y-2">
+                          {fb.insight && (
+                            <p className="text-xs text-foreground leading-relaxed bg-muted/40 p-2.5 rounded-md whitespace-pre-wrap">
+                              {fb.insight}
+                            </p>
+                          )}
+                          {fb.confidenceBefore !== undefined && fb.confidenceAfter !== undefined && (
+                            <div className="text-xs text-muted-foreground">
+                              Confidence {fb.confidenceBefore} → <span className="text-foreground font-medium">{fb.confidenceAfter}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <Input
+                            value={fb.expected}
+                            onChange={(e) => updateFeedbackState(s.decisionId, { expected: e.target.value })}
+                            placeholder="Expected: 20% retention lift"
+                            disabled={fb.submitting}
+                          />
+                          <Input
+                            value={fb.actual}
+                            onChange={(e) => updateFeedbackState(s.decisionId, { actual: e.target.value })}
+                            placeholder="Actual: 8% lift"
+                            disabled={fb.submitting}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-xs"
+                              onClick={() => handleSubmitFeedback(s, true)}
+                              disabled={!canSubmit}
+                            >
+                              {fb.submitting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                              Shipped & worked
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-xs"
+                              onClick={() => handleSubmitFeedback(s, false)}
+                              disabled={!canSubmit}
+                            >
+                              {fb.submitting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                              Didn&apos;t pan out
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>

@@ -1,6 +1,5 @@
 import { callAI } from "./learningEngineSupport";
-import type { ActualOutcome } from "./actualOutcome";
-import type { ExpectedOutcome } from "./expectedOutcome";
+import type { ActualOutcome, ExpectedOutcome } from "./outcomeTypes";
 
 export async function generateLearningInsight(context: string, expected: ExpectedOutcome, actual: ActualOutcome) {
   const prompt = `

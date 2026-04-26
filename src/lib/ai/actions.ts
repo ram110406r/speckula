@@ -10,7 +10,11 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import type { ExtractedEntities, HierarchicalContext, ThinkingGap } from "./aiContext";
 import type { ProgressState } from "./progressTracker";
-import { clampScoreValue } from "./scoreEngine";
+import { calculateScore, clampScoreValue } from "./scoreEngine";
+import { updateConfidenceScore, persistOutcomeFeedback } from "./scoreFeedback";
+import { generateLearningInsight } from "./learningEngine";
+import type { OutcomeFeedback } from "./outcomeTypes";
+import type { OpportunityScoreState } from "./scoreEvolution";
 
 export interface ProactiveInsight {
   title: string;
@@ -1066,4 +1070,20 @@ export const importFromSlack = async (
     insightsCount: insights.length,
     messageCount: result.metadata.messageCount,
   };
+};
+
+export const submitOutcomeFeedback = async (
+  decisionId: string,
+  feedback: OutcomeFeedback,
+  currentScore: OpportunityScoreState
+): Promise<{ updatedScore: OpportunityScoreState; insight: string }> => {
+  const adjusted = updateConfidenceScore(currentScore, feedback.success);
+  const recalculated = calculateScore(adjusted);
+  const updatedScore: OpportunityScoreState = { ...adjusted, score: recalculated };
+
+  await persistOutcomeFeedback(feedback, updatedScore);
+
+  const insight = await generateLearningInsight(decisionId, feedback.expected, feedback.actual);
+
+  return { updatedScore, insight };
 };
