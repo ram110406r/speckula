@@ -56,6 +56,7 @@ interface FeedbackCardState {
   actual: string;
   submitting: boolean;
   submitted: boolean;
+  shipped: boolean;
   insight?: string;
   confidenceBefore?: number;
   confidenceAfter?: number;
@@ -86,7 +87,7 @@ export function DecisionView() {
   const [feedbackByCard, setFeedbackByCard] = React.useState<Record<string, FeedbackCardState>>({});
 
   const getFeedbackState = (decisionId: string): FeedbackCardState =>
-    feedbackByCard[decisionId] ?? { expected: "", actual: "", submitting: false, submitted: false };
+    feedbackByCard[decisionId] ?? { expected: "", actual: "", submitting: false, submitted: false, shipped: false };
 
   const updateFeedbackState = (decisionId: string, patch: Partial<FeedbackCardState>) => {
     setFeedbackByCard((prev) => ({
@@ -597,13 +598,30 @@ export function DecisionView() {
                 {s.score > 0 && (() => {
                   const fb = getFeedbackState(s.decisionId);
                   const canSubmit = fb.expected.trim().length > 0 && fb.actual.trim().length > 0 && !fb.submitting;
-                  return (
-                    <div className="px-5 pb-5 pt-3 border-t border-border/60 space-y-3">
-                      <span className="block text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
-                        How did this go?
-                      </span>
 
-                      {fb.submitted ? (
+                  // State A — not yet shipped: whisper-style "Mark as shipped" button.
+                  if (!fb.shipped && !fb.submitted) {
+                    return (
+                      <div className="px-5 pb-5 pt-3 border-t border-border/60">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="w-full text-xs text-muted-foreground/50 hover:text-foreground"
+                          onClick={() => updateFeedbackState(s.decisionId, { shipped: true })}
+                        >
+                          Mark as shipped
+                        </Button>
+                      </div>
+                    );
+                  }
+
+                  // State C — submitted: show AI insight and confidence delta.
+                  if (fb.submitted) {
+                    return (
+                      <div className="px-5 pb-5 pt-3 border-t border-border/60 space-y-3">
+                        <span className="block text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+                          How did this go?
+                        </span>
                         <div className="space-y-2">
                           {fb.insight && (
                             <p className="text-xs text-foreground leading-relaxed bg-muted/40 p-2.5 rounded-md whitespace-pre-wrap">
@@ -616,44 +634,56 @@ export function DecisionView() {
                             </div>
                           )}
                         </div>
-                      ) : (
-                        <>
-                          <Input
-                            value={fb.expected}
-                            onChange={(e) => updateFeedbackState(s.decisionId, { expected: e.target.value })}
-                            placeholder="Expected: 20% retention lift"
-                            disabled={fb.submitting}
-                          />
-                          <Input
-                            value={fb.actual}
-                            onChange={(e) => updateFeedbackState(s.decisionId, { actual: e.target.value })}
-                            placeholder="Actual: 8% lift"
-                            disabled={fb.submitting}
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="flex-1 text-xs"
-                              onClick={() => handleSubmitFeedback(s, true)}
-                              disabled={!canSubmit}
-                            >
-                              {fb.submitting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-                              Shipped & worked
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="flex-1 text-xs"
-                              onClick={() => handleSubmitFeedback(s, false)}
-                              disabled={!canSubmit}
-                            >
-                              {fb.submitting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-                              Didn&apos;t pan out
-                            </Button>
-                          </div>
-                        </>
-                      )}
+                      </div>
+                    );
+                  }
+
+                  // State B — shipped, awaiting feedback.
+                  const shippedDate = new Date().toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  });
+                  return (
+                    <div className="px-5 pb-5 pt-3 border-t border-border/60 space-y-3">
+                      <span className="block text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+                        How did this go?
+                      </span>
+                      <p className="text-[11px] text-muted-foreground/50 mb-2">Shipped on {shippedDate}</p>
+                      <Input
+                        value={fb.expected}
+                        onChange={(e) => updateFeedbackState(s.decisionId, { expected: e.target.value })}
+                        placeholder="Expected: 20% retention lift"
+                        disabled={fb.submitting}
+                      />
+                      <Input
+                        value={fb.actual}
+                        onChange={(e) => updateFeedbackState(s.decisionId, { actual: e.target.value })}
+                        placeholder="Actual: 8% lift"
+                        disabled={fb.submitting}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-xs"
+                          onClick={() => handleSubmitFeedback(s, true)}
+                          disabled={!canSubmit}
+                        >
+                          {fb.submitting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                          Shipped & worked
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-xs"
+                          onClick={() => handleSubmitFeedback(s, false)}
+                          disabled={!canSubmit}
+                        >
+                          {fb.submitting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                          Didn&apos;t pan out
+                        </Button>
+                      </div>
                     </div>
                   );
                 })()}
