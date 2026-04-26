@@ -13,6 +13,7 @@ import {
   Loader2,
   Compass,
   Share2,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -51,6 +52,12 @@ const navGroups: { label: string; items: GroupedNavItem[] }[] = [
     label: "Share",
     items: [
       { icon: Share2, label: "Public Cases", view: "platform" },
+    ],
+  },
+  {
+    label: "Connect",
+    items: [
+      { icon: MessageSquare, label: "Slack", view: "slack" },
     ],
   },
 ];

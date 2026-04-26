@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 import { LandingPage } from "./LandingPage";
 import { DecisionView } from "../views/DecisionView";
 import { PlatformView } from "../views/PlatformView";
+import { SlackView } from "../views/SlackView";
 import { Loader2 } from "lucide-react";
 
 function formatRelativeActivity(value: unknown): string | null {
@@ -61,6 +62,7 @@ export function Shell() {
       case "tasks": return <TasksView />;
       case "decisions": return <DecisionView />;
       case "platform": return <PlatformView />;
+      case "slack": return <SlackView />;
       default: return <Editor />;
     }
   };

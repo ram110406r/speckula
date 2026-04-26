@@ -1,16 +1,19 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  getDocs, 
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
   deleteDoc,
   query,
   where,
-  orderBy, 
+  orderBy,
   serverTimestamp,
   addDoc,
-  type Timestamp
+  limit as firestoreLimit,
+  onSnapshot,
+  type Timestamp,
+  type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./config";
 
@@ -466,6 +469,82 @@ export const inviteWorkspaceMember = async (workspaceId: string, member: Workspa
     logFirestorePermissionHint("inviteWorkspaceMember", error);
     throw error;
   }
+};
+
+// ── Slack Messages ────────────────────────────────────────────────────────
+export interface SlackMessage {
+  id: string;
+  teamId: string;
+  channelId: string | null;
+  userId: string | null;
+  text: string;
+  slackTs: string;
+  threadTs: string | null;
+  eventType: string;
+  eventId?: string;
+  ownerUserId?: string;
+  source?: "event" | "backfill";
+  createdAt: Timestamp | null;
+}
+
+export interface SlackWorkspace {
+  teamId: string;
+  teamName: string;
+  botUserId: string;
+  installedBy: string;
+  scope: string;
+  selectedChannels: string[];
+  backfillCompleted: boolean;
+  installedAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+  lastBackfillAt?: Timestamp | null;
+}
+
+export const subscribeToSlackWorkspaces = (
+  userId: string,
+  onUpdate: (workspaces: SlackWorkspace[]) => void
+): Unsubscribe => {
+  const q = query(
+    collection(db, "users", userId, "slackWorkspaces"),
+    orderBy("installedAt", "desc")
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const workspaces = snapshot.docs.map((d) => d.data()) as SlackWorkspace[];
+      onUpdate(workspaces);
+    },
+    (error) => {
+      logFirestorePermissionHint("subscribeToSlackWorkspaces", error);
+    }
+  );
+};
+
+export const subscribeToSlackMessages = (
+  ownerUserId: string,
+  onUpdate: (messages: SlackMessage[]) => void,
+  options: { limit?: number; teamId?: string; channelId?: string } = {}
+): Unsubscribe => {
+  const { limit = 100, teamId, channelId } = options;
+  const constraints: Parameters<typeof query>[1][] = [
+    where("ownerUserId", "==", ownerUserId),
+  ];
+  if (teamId) constraints.push(where("teamId", "==", teamId));
+  if (channelId) constraints.push(where("channelId", "==", channelId));
+  constraints.push(orderBy("slackTs", "desc"));
+  constraints.push(firestoreLimit(limit));
+
+  const q = query(collection(db, "slackMessages"), ...constraints);
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as SlackMessage[];
+      onUpdate(messages);
+    },
+    (error) => {
+      logFirestorePermissionHint("subscribeToSlackMessages", error);
+    }
+  );
 };
 
 

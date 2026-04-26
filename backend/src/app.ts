@@ -3,6 +3,8 @@ import cors from '@fastify/cors';
 import aiRoutes from './routes/aiRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import importRoutes from './routes/importRoutes.js';
+import slackRoutes from './routes/slackRoutes.js';
+import slackOAuthRoutes from './routes/slackOAuthRoutes.js';
 
 export const createServer = async () => {
   const fastify = Fastify({
@@ -34,6 +36,8 @@ export const createServer = async () => {
   await fastify.register(aiRoutes, { prefix: '/ai' });
   await fastify.register(chatRoutes, { prefix: '/ai' });
   await fastify.register(importRoutes, { prefix: '/import' });
+  await fastify.register(slackRoutes, { prefix: '/slack' });
+  await fastify.register(slackOAuthRoutes, { prefix: '/auth/slack' });
 
   return fastify;
 };

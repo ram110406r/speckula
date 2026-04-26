@@ -1,5 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createHmac, timingSafeEqual } from 'crypto';
+import { FieldValue } from 'firebase-admin/firestore';
+import { getFirebaseFirestore } from '../lib/firebaseAdmin.js';
 
 interface SlackUrlVerification {
   type: 'url_verification';
@@ -104,7 +106,52 @@ export default async function slackRoutes(fastify: FastifyInstance) {
           'slack event received'
         );
 
-        // TODO: persist event / dispatch to handler
+        try {
+          const firestore = getFirebaseFirestore();
+
+          // Multi-tenant: look up which Buildcase user owns this Slack workspace.
+          const installSnap = await firestore.doc(`slackInstallations/${team_id}`).get();
+          if (!installSnap.exists) {
+            request.log.warn({ team_id }, 'no installation record for incoming team_id; skipping');
+            return;
+          }
+          const ownerUserId = (installSnap.data() as { ownerUserId: string }).ownerUserId;
+
+          // Only persist messages from channels the owner has explicitly selected.
+          const wsSnap = await firestore.doc(`users/${ownerUserId}/slackWorkspaces/${team_id}`).get();
+          if (!wsSnap.exists) return;
+          const selectedChannels = (wsSnap.data() as { selectedChannels?: string[] }).selectedChannels ?? [];
+          if (event.channel && selectedChannels.length > 0 && !selectedChannels.includes(event.channel)) {
+            request.log.debug(
+              { team_id, channel: event.channel, ownerUserId },
+              'channel not in selected list; skipping'
+            );
+            return;
+          }
+
+          const slackTs = event.ts ?? `${Date.now() / 1000}`;
+          // Use teamId + slackTs as deterministic doc id for natural dedup on
+          // Slack's at-least-once delivery.
+          const docId = `${team_id}_${slackTs}`;
+          await firestore.collection('slackMessages').doc(docId).set(
+            {
+              teamId: team_id,
+              channelId: event.channel ?? null,
+              userId: event.user ?? null,
+              text: event.text ?? '',
+              slackTs,
+              threadTs: event.thread_ts ?? null,
+              eventType: event.type,
+              eventId: event_id,
+              ownerUserId,
+              source: 'event',
+              createdAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (error) {
+          request.log.error({ err: error }, 'failed to persist slack event to firestore');
+        }
       }
     }
   );

@@ -13,6 +13,8 @@ async function startServer() {
   try {
     // Initialize Firebase Admin eagerly so credential problems surface at
     // startup instead of as opaque 401s on the first authenticated request.
+    // In development we only warn — non-Firebase routes (e.g. /slack) should
+    // still boot when credentials aren't configured locally.
     try {
       getFirebaseApp();
     } catch (error) {
@@ -20,7 +22,10 @@ async function startServer() {
       console.error('\n[startup] Firebase Admin failed to initialize:');
       console.error(`  ${message}\n`);
       console.error('Fix backend/.env and restart. Required keys: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY (PEM, with literal \\n separators).');
-      process.exit(1);
+      if (NODE_ENV === 'production') {
+        process.exit(1);
+      }
+      console.warn('[startup] Continuing in development mode — authenticated routes will return 401 until Firebase env is set.\n');
     }
 
     // Create Fastify server

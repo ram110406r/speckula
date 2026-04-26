@@ -38,6 +38,13 @@ service cloud.firestore {
       match /tasks/{id} {
         allow read, write: if isAuthenticated() && isOwner(userId);
       }
+
+      // Connected Slack workspaces (metadata only — no tokens stored here).
+      // User reads their own; backend (Admin SDK) writes via callback/channels routes.
+      match /slackWorkspaces/{teamId} {
+        allow read: if isAuthenticated() && isOwner(userId);
+        allow write: if false;
+      }
     }
 
     // ── Public Profiles ────────────────────────────────────
@@ -72,6 +79,19 @@ service cloud.firestore {
       allow read: if isAuthenticated() && request.auth.uid == userId;
       allow create: if isAuthenticated() && request.auth.uid == userId;
       allow update, delete: if isOwner(userId);
+    }
+
+    // ── Slack Messages ──────────────────────────────────────
+    // Backend (Admin SDK) writes; only the owning user can read their workspace's messages.
+    match /slackMessages/{docId} {
+      allow read: if isAuthenticated() && resource.data.ownerUserId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // ── Slack Installations ─────────────────────────────────
+    // Encrypted bot tokens. Frontend never reads these.
+    match /slackInstallations/{teamId} {
+      allow read, write: if false;
     }
   }
 }
