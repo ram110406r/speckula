@@ -409,7 +409,7 @@ Only return the JSON, no other text.`;
     decisionId: string
   ) {
     const prompt = `
-You are evaluating a product decision. Rate its confidence level and provide reasoning.
+You are a senior product manager doing ruthless prioritization. Score this decision honestly. Inflated scores destroy trust — most real decisions land between 40 and 70 on a final 0-100 score, NOT 90-100. Do not be generous.
 
 Decision: ${decisionTitle}
 
@@ -417,18 +417,39 @@ Description: ${description}
 
 Context: ${context}
 
-Provide:
-1. Confidence score (0.0 to 1.0)
-2. Key reasoning points
-3. Potential risks
-4. Recommended next steps
+Score the decision on four dimensions, each as an integer from 1 to 10. Use these calibration anchors strictly:
 
-Return JSON:
+impact — how significantly does this move a key product metric?
+  9-10: moves a core retention or revenue metric by more than 20%
+  5-6:  noticeable improvement, hard to attribute directly
+  1-2:  cosmetic or edge-case improvement
+
+effort — how much engineering + design work is required? (higher = more effort)
+  9-10: requires new infrastructure or more than 3 months of work
+  5-6:  2-6 weeks of focused engineering
+  1-2:  config change or less than 1 week of work
+
+confidence — how much evidence supports this decision?
+  9-10: validated by multiple user interviews and quantitative data
+  5-6:  some qualitative signal, no hard data
+  1-2:  assumption with no validation
+
+demand — how clearly and frequently do users request or need this?
+  9-10: top requested feature, mentioned unprompted by more than 30% of users
+  5-6:  comes up when prompted, moderate signal
+  1-2:  rarely mentioned, mostly internal assumption
+
+Be ruthlessly honest. If evidence is thin, confidence and demand should be low — that is the whole point of this exercise. Vague descriptions deserve low confidence. Big-sounding ideas with no validation deserve low impact.
+
+Return ONLY this JSON, with integer values 1-10 for all four dimensions:
 {
-  "confidenceScore": 0.75,
-  "reasoning": "Clear reasoning...",
-  "risks": ["risk1"],
-  "nextSteps": ["step1"]
+  "impact": 4,
+  "effort": 6,
+  "confidence": 3,
+  "demand": 4,
+  "reasoning": "One short paragraph defending these scores against the anchors above.",
+  "risks": ["short risk", "short risk"],
+  "nextSteps": ["short next step", "short next step"]
 }`;
 
     const result = await this.callGroq(
@@ -442,15 +463,30 @@ Return JSON:
     try {
       const evaluation = JSON.parse(result.content);
 
+      const clamp = (raw: unknown): number => {
+        const n = Math.round(Number(raw));
+        if (!Number.isFinite(n)) return 0;
+        return Math.max(1, Math.min(10, n));
+      };
+      const impact = clamp(evaluation.impact);
+      const effort = clamp(evaluation.effort);
+      const confidence = clamp(evaluation.confidence);
+      const demand = clamp(evaluation.demand);
+      const risks: string[] = Array.isArray(evaluation.risks) ? evaluation.risks : [];
+      const nextSteps: string[] = Array.isArray(evaluation.nextSteps) ? evaluation.nextSteps : [];
+      const reasoning: string = typeof evaluation.reasoning === "string" ? evaluation.reasoning : "";
+
       const stored = await db.decisionReasoning.create({
         data: {
           decisionId,
           projectId,
           userId,
           prompt,
-          reasoning: evaluation.reasoning,
-          confidenceScore: evaluation.confidenceScore,
-          confidenceReasoning: evaluation.risks.join("; "),
+          reasoning,
+          // Schema's confidenceScore is a Float in the 0-1 range; normalize the
+          // 1-10 confidence dimension into that scale for storage.
+          confidenceScore: confidence / 10,
+          confidenceReasoning: risks.join("; "),
           modelUsed: result.modelUsed,
           tokensUsed: result.tokensUsed,
         },
@@ -458,7 +494,15 @@ Return JSON:
 
       return {
         decision: stored,
-        evaluation,
+        evaluation: {
+          impact,
+          effort,
+          confidence,
+          demand,
+          reasoning,
+          risks,
+          nextSteps,
+        },
         tokensUsed: result.tokensUsed,
       };
     } catch (error) {

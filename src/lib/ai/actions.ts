@@ -483,30 +483,58 @@ Return JSON:
   };
 };
 
-export const generateOpportunityScore = async (context: string): Promise<OpportunityScoreResult> => {
-  const prompt = `
-You are a senior product manager.
-
-Evaluate the idea based on:
-* Impact
-* Effort
-* Confidence
-* Demand
-
-Return JSON:
-{
-  "impact": number (0-10),
-  "effort": number (0-10),
-  "confidence": number (0-10),
-  "demand": number (0-10),
-  "reasoning": "short explanation"
+interface ScoreDecisionResponse {
+  impact?: unknown;
+  effort?: unknown;
+  confidence?: unknown;
+  demand?: unknown;
+  reasoning?: unknown;
+  risks?: unknown;
+  nextSteps?: unknown;
 }
 
-Be strict. Penalize vague ideas. Reward validated problems.
+export const generateOpportunityScore = async (context: string): Promise<OpportunityScoreResult> => {
+  const prompt = `
+You are a senior product manager doing ruthless prioritization. Score this decision honestly. Inflated scores destroy trust — most real decisions land between 40 and 70 on the final 0-100 score, NOT 90-100. Do not be generous.
+
+Score the decision on four dimensions, each as an integer from 1 to 10. Use these calibration anchors strictly:
+
+impact — how significantly does this move a key product metric?
+  9-10: moves a core retention or revenue metric by more than 20%
+  5-6:  noticeable improvement, hard to attribute directly
+  1-2:  cosmetic or edge-case improvement
+
+effort — how much engineering + design work is required? (higher = more effort)
+  9-10: requires new infrastructure or more than 3 months of work
+  5-6:  2-6 weeks of focused engineering
+  1-2:  config change or less than 1 week of work
+
+confidence — how much evidence supports this decision?
+  9-10: validated by multiple user interviews and quantitative data
+  5-6:  some qualitative signal, no hard data
+  1-2:  assumption with no validation
+
+demand — how clearly and frequently do users request or need this?
+  9-10: top requested feature, mentioned unprompted by more than 30% of users
+  5-6:  comes up when prompted, moderate signal
+  1-2:  rarely mentioned, mostly internal assumption
+
+Be ruthlessly honest. If evidence is thin, confidence and demand should be low. Vague descriptions deserve low confidence. Big-sounding ideas with no validation deserve low impact.
+
+Return ONLY this JSON, with integer values 1-10 for all four dimensions:
+{
+  "impact": 4,
+  "effort": 6,
+  "confidence": 3,
+  "demand": 4,
+  "reasoning": "One short paragraph defending these scores against the anchors above.",
+  "risks": ["short risk", "short risk"],
+  "nextSteps": ["short next step", "short next step"]
+}
 `;
 
   const res = await callAI(prompt, context);
-  const parsed = parseJsonPayload(res) as Partial<OpportunityScoreResult>;
+  const parsed = parseJsonPayload(res) as ScoreDecisionResponse;
 
   const impact = clampScoreValue(Number(parsed.impact ?? 0));
   const effort = clampScoreValue(Number(parsed.effort ?? 0));
