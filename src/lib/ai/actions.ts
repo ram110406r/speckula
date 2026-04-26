@@ -1100,6 +1100,110 @@ export const importFromSlack = async (
   };
 };
 
+export interface CaseBriefData {
+  title: string;
+  context: string;
+  evidence: string[];
+  insights: string[];
+  decision: string;
+  scoring: {
+    impact: number;
+    effort: number;
+    confidence: number;
+    demand: number;
+    score: number;
+    reasoning: string;
+  };
+  risks: string[];
+  verdict: { recommendation: "Build" | "Delay" | "Validate"; rationale: string };
+}
+
+interface CaseBriefDecisionInput {
+  title: string;
+  justification: string;
+  userStory: string;
+  tradeoffs: string;
+  priority: "high" | "medium" | "low";
+  impact: number;
+  effort: number;
+  confidence: number;
+  demand: number;
+  score: number;
+  reasoning?: string;
+}
+
+export const generateCaseBriefAction = async (
+  decision: CaseBriefDecisionInput,
+  docContent: unknown
+): Promise<CaseBriefData> => {
+  const sourceNotes = tipTapToText(docContent).trim() || "(no source notes provided)";
+  const prompt = `You are drafting a one-page decision brief that will be shared with engineering leadership and external readers. The brief must be specific, evidence-cited, and persuasive — not corporate filler.
+
+Decision under review:
+Title: ${decision.title}
+Justification (raw): ${decision.justification}
+User story: ${decision.userStory}
+Trade-offs: ${decision.tradeoffs}
+Stated priority: ${decision.priority}
+Scores — impact ${decision.impact}/10, effort ${decision.effort}/10, confidence ${decision.confidence}/10, demand ${decision.demand}/10, composite ${decision.score}/100.
+
+Use the source notes below as the only basis for evidence and insights. Do not invent data.
+
+Source notes:
+${sourceNotes}
+
+Return ONLY this JSON, no prose, no markdown fences:
+{
+  "title": "Sharp decision statement, 8-12 words, no buzzwords.",
+  "context": "One paragraph (2-3 sentences). Name the user and the friction. Cite something specific from the notes.",
+  "evidence": ["3-5 bullets. Each is one short sentence drawn from the source notes. Quote phrases when possible."],
+  "insights": ["2-4 bullets. Non-obvious patterns or contradictions in the evidence. No restatement of evidence."],
+  "decision": "One paragraph stating exactly what is being built or prioritized.",
+  "risks": ["2-4 bullets of unknowns and assumptions, written as terse statements."],
+  "verdict": {
+    "recommendation": "Build" | "Delay" | "Validate",
+    "rationale": "One short sentence justifying the recommendation against the evidence and scores."
+  }
+}`;
+
+  const raw = await callAI(prompt, sourceNotes);
+  const parsed = parseJsonPayload(raw) as Partial<CaseBriefData> & {
+    verdict?: { recommendation?: unknown; rationale?: unknown };
+  };
+
+  const stringArray = (input: unknown): string[] =>
+    Array.isArray(input)
+      ? input.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim())
+      : [];
+
+  const allowedRecs = new Set<"Build" | "Delay" | "Validate">(["Build", "Delay", "Validate"]);
+  const recCandidate = typeof parsed.verdict?.recommendation === "string" ? parsed.verdict.recommendation : "";
+  const recommendation: "Build" | "Delay" | "Validate" = (allowedRecs as Set<string>).has(recCandidate)
+    ? (recCandidate as "Build" | "Delay" | "Validate")
+    : "Validate";
+
+  return {
+    title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim() : decision.title,
+    context: typeof parsed.context === "string" ? parsed.context.trim() : "",
+    evidence: stringArray(parsed.evidence),
+    insights: stringArray(parsed.insights),
+    decision: typeof parsed.decision === "string" ? parsed.decision.trim() : "",
+    scoring: {
+      impact: decision.impact,
+      effort: decision.effort,
+      confidence: decision.confidence,
+      demand: decision.demand,
+      score: decision.score,
+      reasoning: decision.reasoning ?? "",
+    },
+    risks: stringArray(parsed.risks),
+    verdict: {
+      recommendation,
+      rationale: typeof parsed.verdict?.rationale === "string" ? parsed.verdict.rationale.trim() : "",
+    },
+  };
+};
+
 export const submitOutcomeFeedback = async (
   decisionId: string,
   feedback: OutcomeFeedback,

@@ -196,8 +196,8 @@ export function SidebarNav() {
                     <span className="absolute left-1/2 right-0 top-1 h-px bg-muted-foreground/20" />
                   )}
                   <span
-                    className={`relative z-10 h-2 w-2 rounded-full ${
-                      isActive ? "bg-primary" : "bg-muted-foreground/20"
+                    className={`relative z-10 h-2.5 w-2.5 rounded-full ring-2 ring-sidebar ${
+                      isActive ? "bg-primary" : "bg-muted-foreground/25"
                     }`}
                   />
                   <span
@@ -216,14 +216,18 @@ export function SidebarNav() {
         {/* Main Navigation */}
         <nav className="mt-3 space-y-4 px-3">
           {navGroups.map((group) => (
-            <div key={group.label} className="space-y-1">
-              <p className="px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">{group.label}</p>
+            <div key={group.label} className="space-y-0.5">
+              <p className="px-3 mb-1 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground/60">{group.label}</p>
               {group.items.map((item) => {
                 const isActive = activeView === item.view;
                 return (
                   <button
                     key={`${group.label}-${item.label}`}
-                    className={`relative flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors ${isActive ? "bg-card text-primary" : "text-foreground/70 hover:bg-card/60 hover:text-foreground"}`}
+                    className={`relative flex h-9 w-full items-center gap-2.5 rounded-lg pl-3 pr-3 text-left text-sm transition-colors ${
+                      isActive
+                        ? "bg-card text-primary before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-full before:bg-primary"
+                        : "text-foreground/70 hover:bg-card/60 hover:text-foreground"
+                    }`}
                     onClick={() => setActiveView(item.view)}
                   >
                     <item.icon className="h-4 w-4 shrink-0" />

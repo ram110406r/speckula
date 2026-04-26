@@ -180,3 +180,109 @@
 .tiptap strong {
   @apply font-semibold;
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Case brief: serif body, sans UI labels, generous spacing                   */
+/* ────────────────────────────────────────────────────────────────────────── */
+.case-brief-article {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  color: var(--foreground);
+}
+
+.case-brief-meta {
+  @apply text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground mb-3;
+  font-family: var(--font-sans), "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.case-brief-paragraph {
+  @apply text-[16px] leading-[1.7];
+  color: var(--foreground);
+}
+
+.case-brief-bullets {
+  @apply space-y-2 list-disc pl-5 text-[16px] leading-[1.7];
+  color: var(--foreground);
+}
+
+.case-brief-evidence {
+  @apply space-y-2 list-none pl-4 border-l-2 border-border/70 text-[15px] leading-[1.7];
+  color: rgba(35, 38, 43, 0.85);
+}
+
+.dark .case-brief-evidence {
+  color: rgba(227, 226, 230, 0.85);
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Animations                                                                 */
+/* ────────────────────────────────────────────────────────────────────────── */
+@keyframes bc-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bc-pushback-flash {
+  0%   { background-color: rgba(220, 38, 38, 0.12); }
+  100% { background-color: transparent; }
+}
+
+@keyframes bc-brief-expand {
+  from { opacity: 0; transform: scale(0.98) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.animate-fade-up {
+  animation: bc-fade-up 220ms ease-out both;
+}
+
+.animate-pushback-flash {
+  animation: bc-pushback-flash 900ms ease-out 1;
+}
+
+.animate-brief-expand {
+  animation: bc-brief-expand 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-pushback-flash,
+  .animate-brief-expand {
+    animation: none;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Print: case brief only, sans UI chrome                                     */
+/* ────────────────────────────────────────────────────────────────────────── */
+@media print {
+  body {
+    background: #ffffff !important;
+    background-image: none !important;
+    color: #111111 !important;
+  }
+  body > *:not(:has([data-print-region])) {
+    /* fallback for older browsers handled below */
+  }
+  /* Hide everything that isn't inside the print region */
+  body * {
+    visibility: hidden !important;
+  }
+  [data-print-region],
+  [data-print-region] * {
+    visibility: visible !important;
+  }
+  [data-print-region] {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+  }
+  .case-brief-article {
+    font-family: ui-serif, Georgia, "Times New Roman", serif !important;
+  }
+  .case-brief-paragraph,
+  .case-brief-bullets,
+  .case-brief-evidence {
+    color: #1a1a1a !important;
+  }
+}

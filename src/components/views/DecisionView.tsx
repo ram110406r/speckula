@@ -20,8 +20,10 @@ import {
   generatePRDFromDecisionAction,
   generateOpportunityScore,
   submitOutcomeFeedback,
+  generateCaseBriefAction,
   type DecisionSuggestion,
   type StrategicGuidance,
+  type CaseBriefData,
 } from "@/lib/ai/actions";
 import { generateLearningInsight } from "@/lib/ai/learningEngine";
 import { calculateScore, type OpportunityScoreData } from "@/lib/ai/scoreEngine";
@@ -39,6 +41,7 @@ import { getExpectedOutcome, setExpectedOutcome, type ExpectedOutcomeRecord } fr
 import { getActualOutcome, recordActualOutcome, type ActualOutcomeRecord } from "@/lib/ai/actualOutcome";
 import { updateConfidenceScore } from "@/lib/ai/scoreFeedback";
 import { evaluateDecisionHealth, evaluatePushback, type HealthStatus, type PushbackAction } from "@/lib/ai/decisionHealth";
+import { CaseBriefDialog } from "@/components/decision/CaseBriefDialog";
 
 const priorityColors = {
   high: "text-primary border-primary/20 bg-primary/5",
@@ -107,6 +110,13 @@ export function DecisionView() {
   const [isGeneratingPRDFor, setIsGeneratingPRDFor] = React.useState<string | null>(null);
   const [prdPreview, setPrdPreview] = React.useState<{ title: string; content: string; decision: DecisionSuggestion } | null>(null);
   const [feedbackByCard, setFeedbackByCard] = React.useState<Record<string, FeedbackCardState>>({});
+  const [briefDialog, setBriefDialog] = React.useState<{
+    open: boolean;
+    loading: boolean;
+    data: CaseBriefData | null;
+    error: string | null;
+    decisionId: string | null;
+  }>({ open: false, loading: false, data: null, error: null, decisionId: null });
 
   const getFeedbackState = (decisionId: string): FeedbackCardState =>
     feedbackByCard[decisionId] ?? { expected: "", actual: "", submitting: false, submitted: false, shipped: false };
@@ -116,6 +126,40 @@ export function DecisionView() {
       ...prev,
       [decisionId]: { ...getFeedbackState(decisionId), ...patch },
     }));
+  };
+
+  const handleGenerateCaseBrief = async (decision: ScoredDecision) => {
+    if (!user || !currentDocId) return;
+    setBriefDialog({ open: true, loading: true, data: null, error: null, decisionId: decision.decisionId });
+    try {
+      const doc = await getDocument(user.uid, currentDocId);
+      const data = await generateCaseBriefAction(
+        {
+          title: decision.title,
+          justification: decision.justification,
+          userStory: decision.userStory,
+          tradeoffs: decision.tradeoffs,
+          priority: decision.priority,
+          impact: decision.scoreBreakdown.impact,
+          effort: decision.scoreBreakdown.effort,
+          confidence: decision.scoreBreakdown.confidence,
+          demand: decision.scoreBreakdown.demand,
+          score: decision.score,
+          reasoning: decision.scoreBreakdown.reasoning,
+        },
+        doc?.content
+      );
+      setBriefDialog({ open: true, loading: false, data, error: null, decisionId: decision.decisionId });
+    } catch (error) {
+      console.error("Case brief generation failed:", error);
+      setBriefDialog({
+        open: true,
+        loading: false,
+        data: null,
+        error: error instanceof Error ? error.message : "Failed to draft brief.",
+        decisionId: decision.decisionId,
+      });
+    }
   };
 
   const handlePushbackCta = (action: PushbackAction) => {
@@ -569,29 +613,35 @@ export function DecisionView() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {scoredSuggestions.map((s, i) => (
-              <div key={i} className="flex flex-col bg-background border border-border rounded-xl overflow-hidden hover:border-primary/30 transition-colors">
+            {scoredSuggestions.map((s, i) => {
+              const health = evaluateDecisionHealth(s);
+              const healthStyle = healthStyles[health.status];
+              const pushbacks = evaluatePushback(s);
+              const isBriefLoading =
+                briefDialog.open &&
+                briefDialog.loading &&
+                briefDialog.decisionId === s.decisionId;
+              return (
+              <div
+                key={i}
+                className="flex flex-col bg-background border border-border rounded-xl overflow-hidden hover:border-primary/30 transition-colors animate-fade-up"
+              >
                 <div className="p-5 flex-1">
-                  <div className="flex items-center justify-between mb-3 text-xs">
-                    <span className={`px-2 py-0.5 rounded border ${priorityColors[s.priority]}`}>
+                  <div className="flex items-center justify-between gap-2 mb-4">
+                    <span
+                      className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs ${healthStyle.pill}`}
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${healthStyle.dot}`} />
+                      <span className="font-semibold">{healthLabel[health.status]}</span>
+                      <span className="font-mono tabular-nums opacity-90">({s.score})</span>
+                      <span className="opacity-70">— {health.reason}</span>
+                    </span>
+                    <span className={`shrink-0 px-2 py-0.5 rounded border text-[11px] uppercase tracking-[0.06em] ${priorityColors[s.priority]}`}>
                       {s.priority}
                     </span>
-                    <span className="rounded border border-primary/20 bg-primary/5 px-2 py-0.5 text-primary font-medium">
-                      Score {s.score}
-                    </span>
                   </div>
-                  {(() => {
-                    const health = evaluateDecisionHealth(s);
-                    const styles = healthStyles[health.status];
-                    return (
-                      <div className={`mb-3 flex items-center gap-2 rounded-md border px-2 py-1 text-xs ${styles.pill}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${styles.dot}`} />
-                        <span className="font-medium">{healthLabel[health.status]}</span>
-                        <span className="opacity-75">— {health.reason}</span>
-                      </div>
-                    );
-                  })()}
-                  <h3 className="text-sm font-semibold mb-3 leading-snug">
+
+                  <h3 className="text-lg font-semibold leading-tight tracking-[-0.01em] mb-3">
                     {s.title}
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed mb-4 border-l-2 border-primary/15 pl-3">
@@ -605,63 +655,69 @@ export function DecisionView() {
                     <span className="block text-[10px] uppercase tracking-[0.06em] mb-1 text-muted-foreground">User story</span>
                     {s.userStory}
                   </div>
-                  {(() => {
-                    const pushbacks = evaluatePushback(s);
-                    if (pushbacks.length === 0) return null;
-                    return (
-                      <div className="space-y-2">
-                        {pushbacks.map((pb) => {
-                          const isAlert = pb.severity === "alert";
-                          const pillCls = isAlert
-                            ? "border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-300"
-                            : "border-amber-500/40 bg-amber-500/5 text-amber-800 dark:text-amber-200";
-                          const Icon = isAlert ? AlertCircle : AlertTriangle;
-                          return (
-                            <div key={pb.id} className={`rounded-md border px-3 py-2 text-xs ${pillCls}`}>
-                              <div className="flex items-start gap-2">
-                                <Icon className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                                <p className="flex-1 leading-relaxed">{pb.message}</p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handlePushbackCta(pb.cta.action)}
-                                className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium hover:underline underline-offset-2"
-                              >
-                                {pb.cta.label}
-                                <ArrowRight className="h-3 w-3" />
-                              </button>
+                  {pushbacks.length > 0 && (
+                    <div className="space-y-2">
+                      {pushbacks.map((pb) => {
+                        const isAlert = pb.severity === "alert";
+                        const accentCls = isAlert
+                          ? "border-l-red-500 bg-red-500/[0.04] text-red-800 dark:text-red-200"
+                          : "border-l-amber-500 bg-amber-500/[0.04] text-amber-900 dark:text-amber-200";
+                        const Icon = isAlert ? AlertCircle : AlertTriangle;
+                        return (
+                          <div
+                            key={pb.id}
+                            className={`rounded-md border-l-2 border-y border-r border-border/40 px-3 py-2 text-xs shadow-sm animate-pushback-flash ${accentCls}`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <Icon className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                              <p className="flex-1 leading-relaxed font-medium">{pb.message}</p>
                             </div>
-                          );
-                        })}
+                            <button
+                              type="button"
+                              onClick={() => handlePushbackCta(pb.cta.action)}
+                              className="mt-1.5 ml-5 inline-flex items-center gap-1 text-[11px] font-medium hover:underline underline-offset-2"
+                            >
+                              {pb.cta.label}
+                              <ArrowRight className="h-3 w-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Compact analytical scoring row */}
+                <div className="px-5 py-3 bg-muted/20 border-t border-border/60">
+                  <dl className="grid grid-cols-4 gap-x-4">
+                    {([
+                      ["Impact", s.scoreBreakdown.impact],
+                      ["Effort", s.scoreBreakdown.effort],
+                      ["Confidence", s.scoreBreakdown.confidence],
+                      ["Demand", s.scoreBreakdown.demand],
+                    ] as const).map(([label, value]) => (
+                      <div key={label} className="flex flex-col items-end">
+                        <dt className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground self-start">{label}</dt>
+                        <dd className="font-mono text-sm tabular-nums text-foreground">{value}</dd>
                       </div>
-                    );
-                  })()}
+                    ))}
+                  </dl>
                 </div>
-                <div className="px-5 py-3 bg-muted/20 border-t border-border/60 flex items-center justify-between text-xs">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground">Impact</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-block h-1.5 w-16 bg-border/60 rounded-full overflow-hidden">
-                        <span className="block h-full bg-primary" style={{ width: `${s.impact * 10}%` }} />
-                      </span>
-                      <span className="font-medium">{s.impact}/10</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1 items-end">
-                    <span className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground">Effort</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-medium">{s.effort}/10</span>
-                      <span className="inline-block h-1.5 w-16 bg-border/60 rounded-full overflow-hidden">
-                        <span className="block h-full bg-muted-foreground/60" style={{ width: `${s.effort * 10}%` }} />
-                      </span>
-                    </div>
-                  </div>
-                </div>
+
                 <div className="px-5 pb-5 pt-3 space-y-2">
                   <Button
                     size="sm"
-                    variant="outline"
-                    className="w-full text-xs"
+                    className="w-full text-xs font-medium"
+                    onClick={() => handleGenerateCaseBrief(s)}
+                    disabled={isBriefLoading}
+                  >
+                    {isBriefLoading ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Sparkles className="mr-1.5 h-3 w-3" />}
+                    Generate Case Brief
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="w-full text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => convertDecisionToPRD(s, i)}
                     disabled={isGeneratingPRDFor === `${s.title}-${i}`}
                   >
@@ -762,10 +818,19 @@ export function DecisionView() {
                   );
                 })()}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      <CaseBriefDialog
+        open={briefDialog.open}
+        loading={briefDialog.loading}
+        data={briefDialog.data}
+        error={briefDialog.error}
+        onClose={() => setBriefDialog((prev) => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }
