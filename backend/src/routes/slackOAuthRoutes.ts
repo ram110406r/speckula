@@ -46,7 +46,7 @@ const verifyState = (state: string): { userId: string } | null => {
 };
 
 // ─── Token retrieval helper used by other routes ───────────────────────────
-const getDecryptedBotToken = async (userId: string, teamId: string): Promise<string> => {
+export const getDecryptedBotToken = async (userId: string, teamId: string): Promise<string> => {
   const firestore = getFirebaseFirestore();
   const snap = await firestore.doc(`users/${userId}/slackWorkspaces/${teamId}`).get();
   if (!snap.exists) throw new Error('workspace not connected');

@@ -4,14 +4,24 @@ import { z } from 'zod';
 import { extract } from '@extractus/article-extractor';
 import striptags from 'striptags';
 import { verifyFirebaseAuth } from '../lib/firebaseAuth.js';
+import { getDecryptedBotToken } from './slackOAuthRoutes.js';
+import { fetchChannelHistory } from '../lib/slackApi.js';
 
 import pdfParse from 'pdf-parse';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const URL_FETCH_TIMEOUT_MS = 10_000;
+const SLACK_DEFAULT_LIMIT = 200;
+const SLACK_MAX_LIMIT = 1000;
 
 const urlImportSchema = z.object({
   url: z.string().url(),
+});
+
+const slackImportSchema = z.object({
+  teamId: z.string().min(1),
+  channelId: z.string().min(1),
+  messageCount: z.number().int().positive().max(SLACK_MAX_LIMIT).optional(),
 });
 
 const replyError = (reply: FastifyReply, status: number, message: string) => {
@@ -213,6 +223,95 @@ export default async function importRoutes(fastify: FastifyInstance) {
         fastify.log.error(error);
         replyError(reply, 422, 'Could not extract readable content from this URL.');
       }
+    }
+  );
+
+  fastify.post<{ Body: z.infer<typeof slackImportSchema> }>(
+    '/slack',
+    async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) {
+        return replyError(reply, 401, 'Unauthorized');
+      }
+
+      let body: z.infer<typeof slackImportSchema>;
+      try {
+        body = slackImportSchema.parse(request.body);
+      } catch {
+        return replyError(reply, 400, 'teamId and channelId are required.');
+      }
+
+      const limit = body.messageCount ?? SLACK_DEFAULT_LIMIT;
+
+      let token: string;
+      try {
+        token = await getDecryptedBotToken(userId, body.teamId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'workspace not connected';
+        const status = /not connected|missing|mismatch/i.test(message) ? 404 : 500;
+        return replyError(reply, status, message);
+      }
+
+      let messages;
+      try {
+        messages = await fetchChannelHistory(token, body.channelId, { limit });
+      } catch (err) {
+        fastify.log.error({ err }, 'slack history fetch failed');
+        return replyError(reply, 502, 'Could not fetch Slack channel history.');
+      }
+
+      // Slack returns newest-first; reverse to chronological so the LLM reads
+      // the conversation forwards.
+      const ordered = [...messages].reverse();
+
+      const lines: string[] = [];
+      let bytes = 0;
+      let included = 0;
+      let truncated = false;
+
+      for (const msg of ordered) {
+        if (msg.bot_id) continue;
+        const text = (msg.text ?? '').trim();
+        if (!text) continue;
+
+        const tsSeconds = Number.parseFloat(msg.ts);
+        const iso = Number.isFinite(tsSeconds)
+          ? new Date(tsSeconds * 1000).toISOString()
+          : msg.ts;
+        const sender = msg.user ?? 'unknown';
+        // Strip control chars except \n (\x0A) so multi-line messages stay legible.
+        const sanitized = text.replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, '');
+        const line = `[${iso}] @${sender}: ${sanitized}`;
+        const lineBytes = Buffer.byteLength(line, 'utf-8') + 1;
+
+        if (bytes + lineBytes > MAX_FILE_BYTES) {
+          truncated = true;
+          break;
+        }
+        lines.push(line);
+        bytes += lineBytes;
+        included += 1;
+      }
+
+      if (lines.length === 0) {
+        return replyError(reply, 422, 'No readable messages found in this channel.');
+      }
+
+      const content = lines.join('\n');
+
+      reply.code(200).send({
+        ok: true,
+        data: {
+          content,
+          metadata: {
+            source: 'slack',
+            channelId: body.channelId,
+            teamId: body.teamId,
+            messageCount: included,
+            ...(truncated ? { truncated: true } : {}),
+          },
+        },
+      });
     }
   );
 }

@@ -11,6 +11,7 @@ import {
   Lock,
   Download,
   Trash2,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -20,6 +21,8 @@ import {
   type SlackMessage,
   type SlackWorkspace,
 } from "@/lib/firebase/db";
+import { importFromSlack } from "@/lib/ai/actions";
+import { useAppStore } from "@/store/useAppStore";
 
 interface SlackChannel {
   id: string;
@@ -56,6 +59,8 @@ export function SlackView() {
   const [showChannelPicker, setShowChannelPicker] = useState(false);
   const [pickerSelection, setPickerSelection] = useState<Set<string>>(new Set());
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [analyzingChannelId, setAnalyzingChannelId] = useState<string | null>(null);
+  const setActiveView = useAppStore((s) => s.setActiveView);
 
   // Subscribe to user's connected workspaces
   useEffect(() => {
@@ -196,6 +201,29 @@ export function SlackView() {
       setStatusMessage(`Backfill failed: ${(err as Error).message}`);
     } finally {
       setBackfilling(false);
+    }
+  };
+
+  const handleAnalyzeChannel = async (channel: SlackChannel) => {
+    if (!user || !activeTeamId || analyzingChannelId) return;
+    setAnalyzingChannelId(channel.id);
+    setStatusMessage(`Ingesting #${channel.name} and generating insights…`);
+    try {
+      const { insightsCount, messageCount } = await importFromSlack(
+        user.uid,
+        activeTeamId,
+        channel.id,
+        channel.name
+      );
+      setShowChannelPicker(false);
+      setStatusMessage(
+        `Ingested ${messageCount} message${messageCount === 1 ? "" : "s"} from #${channel.name} — ${insightsCount} insight${insightsCount === 1 ? "" : "s"} extracted.`
+      );
+      setActiveView("insights");
+    } catch (err) {
+      setStatusMessage(`Analyze failed: ${(err as Error).message}`);
+    } finally {
+      setAnalyzingChannelId(null);
     }
   };
 
@@ -367,27 +395,48 @@ export function SlackView() {
                 <ul>
                   {channels.map((ch) => {
                     const checked = pickerSelection.has(ch.id);
+                    const isAnalyzing = analyzingChannelId === ch.id;
+                    const otherAnalyzing = analyzingChannelId !== null && !isAnalyzing;
                     return (
                       <li key={ch.id}>
-                        <button
-                          onClick={() => togglePick(ch.id)}
-                          className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${
+                        <div
+                          className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm ${
                             checked ? "bg-muted" : ""
                           }`}
                         >
-                          <span
-                            className={`flex h-4 w-4 items-center justify-center rounded border ${
-                              checked ? "border-primary bg-primary text-primary-foreground" : "border-border"
-                            }`}
+                          <button
+                            type="button"
+                            onClick={() => togglePick(ch.id)}
+                            className="flex flex-1 items-center gap-2 text-left hover:opacity-80"
                           >
-                            {checked && <Check className="h-3 w-3" />}
-                          </span>
-                          {ch.is_private ? <Lock className="h-3 w-3" /> : <Hash className="h-3 w-3" />}
-                          <span className="flex-1 truncate">{ch.name}</span>
-                          {!ch.is_member && (
-                            <span className="text-[10px] text-muted-foreground">not joined</span>
-                          )}
-                        </button>
+                            <span
+                              className={`flex h-4 w-4 items-center justify-center rounded border ${
+                                checked ? "border-primary bg-primary text-primary-foreground" : "border-border"
+                              }`}
+                            >
+                              {checked && <Check className="h-3 w-3" />}
+                            </span>
+                            {ch.is_private ? <Lock className="h-3 w-3" /> : <Hash className="h-3 w-3" />}
+                            <span className="flex-1 truncate">{ch.name}</span>
+                            {!ch.is_member && (
+                              <span className="text-[10px] text-muted-foreground">not joined</span>
+                            )}
+                          </button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs"
+                            disabled={otherAnalyzing}
+                            onClick={() => handleAnalyzeChannel(ch)}
+                          >
+                            {isAnalyzing ? (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            ) : (
+                              <Sparkles className="mr-1 h-3 w-3" />
+                            )}
+                            Analyze
+                          </Button>
+                        </div>
                       </li>
                     );
                   })}

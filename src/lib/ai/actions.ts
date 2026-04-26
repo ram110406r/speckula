@@ -1,5 +1,13 @@
 import { auth } from "../firebase/config";
-import { saveInsight, savePRD, saveTask } from "../firebase/db";
+import {
+  createDocument,
+  getUserDocuments,
+  saveDocument,
+  saveInsight,
+  savePRD,
+  saveTask,
+} from "../firebase/db";
+import { useAppStore } from "@/store/useAppStore";
 import type { ExtractedEntities, HierarchicalContext, ThinkingGap } from "./aiContext";
 import type { ProgressState } from "./progressTracker";
 import { clampScoreValue } from "./scoreEngine";
@@ -977,4 +985,85 @@ Return JSON with revised priorities:
     console.error("[intelligentPrioritizeAction] Failed to re-prioritize:", e);
     return tasks;
   }
+};
+
+interface SlackImportResult {
+  content: string;
+  metadata: {
+    source: "slack";
+    teamId: string;
+    channelId: string;
+    messageCount: number;
+    truncated?: boolean;
+  };
+}
+
+// Wrap raw text into the minimal TipTap document shape so it survives both the
+// editor renderer and tipTapToText() in extractInsightsAction.
+function textToTipTap(text: string) {
+  const paragraphs = text.split(/\n+/).filter((line) => line.length > 0);
+  return {
+    type: "doc",
+    content: paragraphs.map((line) => ({
+      type: "paragraph",
+      content: [{ type: "text", text: line }],
+    })),
+  };
+}
+
+export const importFromSlack = async (
+  userId: string,
+  teamId: string,
+  channelId: string,
+  channelName?: string
+): Promise<{ docId: string; insightsCount: number; messageCount: number }> => {
+  const maxAttempts = 2;
+  let result: SlackImportResult | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const token = await getAuthToken(attempt > 0);
+    const response = await fetch("/api/import/slack", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ teamId, channelId }),
+    });
+
+    if (response.status === 401 && attempt === 0) continue;
+
+    const envelope = (await response.json().catch(() => null)) as
+      | BackendEnvelope<SlackImportResult>
+      | null;
+    if (!response.ok || !envelope?.ok || envelope.data === undefined) {
+      const message = envelope?.error || `Slack import failed (${response.status})`;
+      throw new Error(message);
+    }
+    result = envelope.data;
+    break;
+  }
+
+  if (!result) throw new Error("Slack import failed.");
+
+  const title = channelName ? `Slack #${channelName}` : `Slack channel ${channelId}`;
+  const docContent = textToTipTap(result.content);
+
+  const docId = await createDocument(userId, title);
+  await saveDocument(userId, docId, { title, content: docContent });
+
+  // Refresh the sidebar's document list and select the new doc so the user
+  // sees it after we land them on the insights view.
+  const docs = await getUserDocuments(userId);
+  const store = useAppStore.getState();
+  store.setDocuments(docs);
+  store.setCurrentDocId(docId);
+
+  const insights = await extractInsightsAction(userId, docContent, docId);
+
+  return {
+    docId,
+    insightsCount: insights.length,
+    messageCount: result.metadata.messageCount,
+  };
 };
