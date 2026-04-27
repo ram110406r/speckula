@@ -27,7 +27,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
+      <head>
+        {/* Theme bootstrap must run before paint to avoid FOUC. Lives in <head>
+            (not <body>) because React 19 logs a warning when re-rendering a
+            <script dangerouslySetInnerHTML> inside a component subtree on the
+            client, even though the script is only ever executed during SSR. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(() => {
@@ -40,6 +44,8 @@ export default function RootLayout({
             })();`,
           }}
         />
+      </head>
+      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </AuthProvider>
