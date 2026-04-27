@@ -43,6 +43,12 @@ export interface DecisionSuggestion {
   effort: number;
   userStory: string;
   tradeoffs: string;
+  // Structured intelligence layer (v3.0). Optional so legacy decisions
+  // persisted before the prompt upgrade still type-check.
+  summary?: string;
+  keyInsight?: string;
+  recommendation?: string;
+  risks?: string[];
 }
 
 export interface StrategicGuidance {
@@ -697,30 +703,85 @@ export const strategicGuidanceAction = async (docContent: unknown): Promise<Stra
 
 export const suggestDirectionAction = async (userId: string, docContent: unknown): Promise<DecisionSuggestion[]> => {
   const context = tipTapToText(docContent);
-  const prompt = `Based on these product notes, suggest what we should build next. 
-  Extract 3 potential features/directions. 
-  Format as a JSON array of objects with keys: 
-  - title (The feature name)
-  - justification (Why we should build it, data-backed)
-  - priority (high, medium, low)
-  - impact (1-10 score)
-  - effort (1-10 score)
-  - userStory (The primary user story for this feature)
-  - tradeoffs (Trade-offs or limitations of this approach, e.g. "High effort but future-proof" or "Quick win but limited scope")`;
-  
+  const prompt = `You are an AI Product Manager. Based on these product notes, propose 3 distinct decisions the team could make next.
+
+For each decision, return a JSON object with EXACTLY these keys:
+- title: one-line decision title (max 80 chars, no trailing period)
+- summary: 1-2 sentences. What the decision is, in plain language.
+- justification: paragraph explaining why this is worth doing, grounded in the notes.
+- userStory: "As a [specific user], I want to [action], so that [outcome]."
+- tradeoffs: paragraph naming the real cost or constraint.
+- why: array of 3 short bullets — the strongest reasons to pick this. Each bullet < 100 chars.
+- risks: array of 2 short bullets — the most likely failure modes. Each bullet < 100 chars.
+- keyInsight: ONE contrarian or non-obvious insight that a typical PM would miss. Specific, not generic.
+- recommendation: ONE sentence prescribing the next concrete action. Starts with a verb.
+- impact: integer 1-10 (10 = moves a core metric materially)
+- effort: integer 1-10 (10 = months of work)
+- priority: "high" | "medium" | "low"
+
+Hard rules:
+- Be specific. "Improve user experience" is not an insight or a recommendation.
+- Risks must be falsifiable, not generic ("users won't engage" is generic; "Slack integration breaks for workspaces with >500 channels" is specific).
+- If the notes are too thin to support a claim, lower the impact and priority — do not invent evidence.
+
+Return ONLY a JSON array of 3 objects. No prose, no markdown fences.`;
+
   const result = await callAI(prompt, context);
   try {
     const suggestions = parseJsonPayload(result);
     if (!Array.isArray(suggestions)) {
       throw new Error("Direction response was not an array.");
     }
-    
-    return suggestions as DecisionSuggestion[];
+    return suggestions.map(normalizeDecisionSuggestion);
   } catch (e) {
     console.error("[suggestDirectionAction] Failed to parse decision JSON:", e);
     throw e;
   }
 };
+
+const PRIORITY_VALUES = ["high", "medium", "low"] as const;
+
+function normalizeDecisionSuggestion(raw: unknown): DecisionSuggestion {
+  const item = (raw ?? {}) as Record<string, unknown>;
+
+  const str = (key: string, fallback = ""): string => {
+    const value = item[key];
+    return typeof value === "string" ? value.trim() : fallback;
+  };
+
+  const num = (key: string): number => {
+    const value = item[key];
+    const parsed = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(parsed) ? clampScoreValue(parsed) : 0;
+  };
+
+  const arr = (key: string): string[] => {
+    const value = item[key];
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter((entry) => entry.length > 0)
+      .slice(0, 5);
+  };
+
+  const priority = (PRIORITY_VALUES as readonly string[]).includes(item.priority as string)
+    ? (item.priority as DecisionSuggestion["priority"])
+    : "medium";
+
+  return {
+    title: str("title", "Untitled decision"),
+    justification: str("justification") || str("summary"),
+    priority,
+    impact: num("impact"),
+    effort: num("effort"),
+    userStory: str("userStory"),
+    tradeoffs: str("tradeoffs"),
+    summary: str("summary") || undefined,
+    keyInsight: str("keyInsight") || str("key_insight") || undefined,
+    recommendation: str("recommendation") || undefined,
+    risks: arr("risks").length > 0 ? arr("risks") : undefined,
+  };
+}
 
 export const processEditorAction = async (userId: string, selectedText: string, action: 'improve' | 'expand' | 'challenge') => {
   const prompts = {

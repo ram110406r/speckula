@@ -1,5 +1,5 @@
 import React from "react";
-import { Lightbulb, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Lightbulb, TrendingUp, TrendingDown, Minus, AlertTriangle, Target } from "lucide-react";
 import type { OpportunityScoreHistoryEntry } from "@/lib/ai/scoreHistory";
 
 interface DecisionHeaderCardProps {
@@ -12,6 +12,8 @@ interface DecisionHeaderCardProps {
   priority?: "high" | "medium" | "low";
   title?: string;
   history: OpportunityScoreHistoryEntry[];
+  keyInsight?: string;
+  recommendation?: string;
 }
 
 type StrengthBand = "strong" | "moderate" | "risky";
@@ -57,7 +59,10 @@ export function DecisionHeaderCard({
   priority,
   title,
   history,
+  keyInsight,
+  recommendation,
 }: DecisionHeaderCardProps) {
+  const overcommitWarning = priority === "high" && confidence < 5;
   const { label, pillCls, dotCls } = bandFromScore(score);
   const visibleHistory = history.slice(-12);
   const previousScore = visibleHistory.length > 1 ? visibleHistory[visibleHistory.length - 2].score : null;
@@ -113,18 +118,68 @@ export function DecisionHeaderCard({
         </div>
       )}
 
+      {(keyInsight || recommendation) && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {keyInsight && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] p-3">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.06em] font-semibold text-red-700 dark:text-red-300">
+                <AlertTriangle className="h-3 w-3" />
+                Key Insight
+              </div>
+              <p className="mt-1.5 text-sm leading-relaxed text-red-900/90 dark:text-red-100/90">
+                {keyInsight}
+              </p>
+            </div>
+          )}
+          {recommendation && (
+            <div className="rounded-lg border border-primary/25 bg-primary/[0.05] p-3">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.06em] font-semibold text-primary">
+                <Target className="h-3 w-3" />
+                Suggested Action
+              </div>
+              <p className="mt-1.5 text-sm leading-relaxed text-foreground/90">
+                {recommendation}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="my-5 h-px bg-border/60" />
 
       <dl className="grid grid-cols-4 gap-3">
-        {metrics.map(([label, value]) => (
-          <div key={label} className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2">
-            <dt className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground">{label}</dt>
-            <dd className="mt-0.5 font-mono text-sm font-semibold tabular-nums text-foreground">
-              {value}<span className="text-muted-foreground/60">/10</span>
-            </dd>
-          </div>
-        ))}
+        {metrics.map(([label, value]) => {
+          const isLowConfidence = label === "Confidence" && value < 5;
+          return (
+            <div
+              key={label}
+              className={`rounded-lg border px-3 py-2 ${
+                isLowConfidence
+                  ? "border-red-500/30 bg-red-500/[0.05]"
+                  : "border-border/40 bg-muted/20"
+              }`}
+            >
+              <dt className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground">{label}</dt>
+              <dd
+                className={`mt-0.5 font-mono text-sm font-semibold tabular-nums ${
+                  isLowConfidence ? "text-red-700 dark:text-red-300" : "text-foreground"
+                }`}
+              >
+                {value}<span className="text-muted-foreground/60">/10</span>
+              </dd>
+            </div>
+          );
+        })}
       </dl>
+
+      {overcommitWarning && (
+        <div className="mt-4 flex items-start gap-2 rounded-md border-l-2 border-l-red-500 bg-red-500/[0.04] px-3 py-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />
+          <p className="text-xs leading-relaxed font-medium text-red-800 dark:text-red-200">
+            High-priority decision with low confidence. Major product risk — validate before committing.
+          </p>
+        </div>
+      )}
 
       {visibleHistory.length > 1 && (
         <div className="mt-5">

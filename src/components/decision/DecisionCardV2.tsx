@@ -38,6 +38,7 @@ interface DecisionCardV2Props {
   priority: "high" | "medium" | "low";
   metrics: { impact: number; effort: number; confidence: number; demand: number };
   pushbacks?: Pushback[];
+  topRisk?: string;
   onPushbackCta?: (action: PushbackAction) => void;
   onGenerateBrief: () => void;
   onConvert: () => void;
@@ -54,6 +55,7 @@ export function DecisionCardV2({
   priority,
   metrics,
   pushbacks = [],
+  topRisk,
   onPushbackCta,
   onGenerateBrief,
   onConvert,
@@ -63,6 +65,7 @@ export function DecisionCardV2({
 }: DecisionCardV2Props) {
   const hs = healthStyles[health.status];
   const topPushback = pushbacks[0];
+  const overcommitWarning = priority === "high" && metrics.confidence < 5;
 
   return (
     <article className="flex flex-col rounded-2xl border border-border/60 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md animate-fade-up">
@@ -85,6 +88,22 @@ export function DecisionCardV2({
         <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
           {summary}
         </p>
+
+        {overcommitWarning && (
+          <div className="mt-3 flex items-start gap-2 rounded-md border-l-2 border-l-red-500 bg-red-500/[0.04] px-2.5 py-1.5 text-xs">
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-600" />
+            <p className="leading-relaxed font-medium text-red-800 dark:text-red-200">
+              You&apos;re likely overcommitting — validate first.
+            </p>
+          </div>
+        )}
+
+        {topRisk && !topPushback && (
+          <div className="mt-3 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+            <p className="line-clamp-2 leading-relaxed">{topRisk}</p>
+          </div>
+        )}
 
         {topPushback && (
           <div

@@ -536,6 +536,8 @@ export function DecisionView() {
             priority={scoredSuggestions[0]?.priority}
             title={scoredSuggestions[0]?.title}
             history={scoreHistory}
+            keyInsight={scoredSuggestions[0]?.keyInsight}
+            recommendation={scoredSuggestions[0]?.recommendation}
           />
         )}
 
@@ -890,7 +892,7 @@ function DecisionGrid({
                   <DecisionCardV2
                     key={decision.decisionId}
                     title={decision.title}
-                    summary={decision.justification}
+                    summary={decision.summary || decision.justification}
                     score={decision.score}
                     health={health}
                     priority={decision.priority}
@@ -901,6 +903,7 @@ function DecisionGrid({
                       demand: decision.scoreBreakdown.demand,
                     }}
                     pushbacks={pushbacks}
+                    topRisk={decision.risks?.[0]}
                     onPushbackCta={onPushbackCta}
                     onGenerateBrief={() => onGenerateBrief(decision)}
                     onConvert={() => onConvertToPRD(decision, index)}
