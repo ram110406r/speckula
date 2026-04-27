@@ -124,6 +124,7 @@ const userInsightsCollection = (userId: string) => collection(db, "users", userI
 const userDecisionsCollection = (userId: string) => collection(db, "users", userId, "decisions");
 const userPrdsCollection = (userId: string) => collection(db, "users", userId, "prds");
 const userTasksCollection = (userId: string) => collection(db, "users", userId, "tasks");
+const userPastRunsCollection = (userId: string) => collection(db, "users", userId, "pastRuns");
 const publicProfilesCollection = () => collection(db, "publicProfiles");
 const workspacesCollection = () => collection(db, "workspaces");
 
@@ -242,6 +243,51 @@ export const getDecisions = async (userId: string) => {
   } catch (error) {
     logFirestorePermissionHint("getDecisions", error);
     throw error;
+  }
+};
+
+// --- AUTONOMOUS-MODE PAST RUNS (lightweight memory) ---
+// Stores the user's recent autonomous runs so the next run can be primed with
+// "you've already explored these — push for sharper angles." Intentionally
+// minimal: we keep the idea text, top decision titles, and verdict. Full
+// decisions live elsewhere; we don't duplicate them here.
+
+export interface PastRunRecord {
+  id?: string;
+  idea: string;
+  topDecisions: string[];
+  verdictLabel: string;
+  verdictReason: string;
+  createdAt: Timestamp | null;
+}
+
+export const savePastRun = async (
+  userId: string,
+  data: Omit<PastRunRecord, "id" | "createdAt">
+) => {
+  try {
+    await addDoc(userPastRunsCollection(userId), {
+      ...data,
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    logFirestorePermissionHint("savePastRun", error);
+    // Memory is non-critical — never let a failure to remember block the run.
+  }
+};
+
+export const getRecentPastRuns = async (userId: string, max = 3): Promise<PastRunRecord[]> => {
+  try {
+    const q = query(
+      userPastRunsCollection(userId),
+      orderBy("createdAt", "desc"),
+      firestoreLimit(max)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as PastRunRecord[];
+  } catch (error) {
+    logFirestorePermissionHint("getRecentPastRuns", error);
+    return [];
   }
 };
 

@@ -49,6 +49,12 @@ export interface DecisionSuggestion {
   keyInsight?: string;
   recommendation?: string;
   risks?: string[];
+  // v1.1 autonomous-mode upgrade: hidden assumptions baked into the decision.
+  assumptions?: string[];
+  // v1.1: confidence is now requested from the AI directly so the agent can
+  // gate on it (reflection loop, verdict). Optional for backward-compat with
+  // decisions persisted before this field existed.
+  confidence?: number;
 }
 
 export interface StrategicGuidance {
@@ -701,28 +707,65 @@ export const strategicGuidanceAction = async (docContent: unknown): Promise<Stra
   }
 };
 
-export const suggestDirectionAction = async (userId: string, docContent: unknown): Promise<DecisionSuggestion[]> => {
+// Voice layer (v1.1): the persona prefix applied to every prompt that produces
+// user-facing PM judgment. Centralized so changing the tone is one edit.
+export const PM_VOICE_PROMPT = `You are a senior product manager with strong opinions and a low tolerance for fluff.
+
+Voice rules:
+- Be concise and direct. Short sentences.
+- Challenge weak ideas — say "this is thin" when it is.
+- Prioritize clarity over politeness.
+- Always guide toward action.
+- Never write generic statements like "improve user experience" or "engage users better."
+- If you would feel embarrassed defending a sentence in a product review, do not write it.`;
+
+export interface SuggestDirectionOptions {
+  // Optional refinement instruction injected after the base prompt. Used by
+  // the autonomous-mode reflection loop to ask for a stronger second pass.
+  refinement?: string;
+  // Optional memory of recent runs to discourage repeating weak patterns.
+  pastIdeas?: string[];
+}
+
+export const suggestDirectionAction = async (
+  userId: string,
+  docContent: unknown,
+  options: SuggestDirectionOptions = {}
+): Promise<DecisionSuggestion[]> => {
   const context = tipTapToText(docContent);
-  const prompt = `You are an AI Product Manager. Based on these product notes, propose 3 distinct decisions the team could make next.
+
+  const memoryBlock = options.pastIdeas && options.pastIdeas.length > 0
+    ? `\n\nThe user has explored these ideas recently. Avoid repeating the same weak framings — push for sharper angles:\n${options.pastIdeas.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}`
+    : "";
+
+  const refinementBlock = options.refinement
+    ? `\n\nReflection note — your previous attempt was weak. ${options.refinement} Be sharper this time.`
+    : "";
+
+  const prompt = `${PM_VOICE_PROMPT}
+
+Based on these product notes, propose 3 distinct decisions the team could make next.
 
 For each decision, return a JSON object with EXACTLY these keys:
 - title: one-line decision title (max 80 chars, no trailing period)
 - summary: 1-2 sentences. What the decision is, in plain language.
-- justification: paragraph explaining why this is worth doing, grounded in the notes.
+- justification: short paragraph (max 4 sentences). Why this is worth doing, grounded in the notes.
 - userStory: "As a [specific user], I want to [action], so that [outcome]."
-- tradeoffs: paragraph naming the real cost or constraint.
+- tradeoffs: short paragraph naming the real cost or constraint.
 - why: array of 3 short bullets — the strongest reasons to pick this. Each bullet < 100 chars.
 - risks: array of 2 short bullets — the most likely failure modes. Each bullet < 100 chars.
+- assumptions: array of 2-3 short bullets — the hidden assumptions this decision depends on. Each must be falsifiable. (e.g. "Users will pay $5/mo for this", not "users will love it")
 - keyInsight: ONE contrarian or non-obvious insight that a typical PM would miss. Specific, not generic.
 - recommendation: ONE sentence prescribing the next concrete action. Starts with a verb.
 - impact: integer 1-10 (10 = moves a core metric materially)
 - effort: integer 1-10 (10 = months of work)
+- confidence: integer 1-10 (10 = validated by multiple users + data; 1 = pure hunch)
 - priority: "high" | "medium" | "low"
 
 Hard rules:
 - Be specific. "Improve user experience" is not an insight or a recommendation.
-- Risks must be falsifiable, not generic ("users won't engage" is generic; "Slack integration breaks for workspaces with >500 channels" is specific).
-- If the notes are too thin to support a claim, lower the impact and priority — do not invent evidence.
+- Risks and assumptions must be falsifiable, not generic.
+- If the notes are too thin to support a claim, lower confidence and priority — do not invent evidence.${memoryBlock}${refinementBlock}
 
 Return ONLY a JSON array of 3 objects. No prose, no markdown fences.`;
 
@@ -768,6 +811,10 @@ function normalizeDecisionSuggestion(raw: unknown): DecisionSuggestion {
     ? (item.priority as DecisionSuggestion["priority"])
     : "medium";
 
+  const confidenceRaw = item.confidence;
+  const confidenceParsed = typeof confidenceRaw === "number" ? confidenceRaw : Number(confidenceRaw);
+  const confidence = Number.isFinite(confidenceParsed) ? clampScoreValue(confidenceParsed) : undefined;
+
   return {
     title: str("title", "Untitled decision"),
     justification: str("justification") || str("summary"),
@@ -780,6 +827,8 @@ function normalizeDecisionSuggestion(raw: unknown): DecisionSuggestion {
     keyInsight: str("keyInsight") || str("key_insight") || undefined,
     recommendation: str("recommendation") || undefined,
     risks: arr("risks").length > 0 ? arr("risks") : undefined,
+    assumptions: arr("assumptions").length > 0 ? arr("assumptions") : undefined,
+    confidence,
   };
 }
 
@@ -803,7 +852,9 @@ export const clarifyIdeaAction = async (
     ? `\n\nQuestions ALREADY asked in this session — do NOT repeat any of these:\n${alreadyAsked.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
     : "";
 
-  const prompt = `You are an AI Product Manager evaluating whether a raw product idea has enough information to make decisions. Decide if the idea is missing ONE critical piece of information that would block useful product reasoning.
+  const prompt = `${PM_VOICE_PROMPT}
+
+You are evaluating whether a raw product idea has enough information to make decisions. Decide if the idea is missing ONE critical piece of information that would block useful product reasoning.
 
 Idea:
 ${idea}
@@ -856,7 +907,9 @@ export const generateRoadmapAction = async (
     .map((d, i) => `${i + 1}. ${d.title} (priority: ${d.priority}, impact: ${d.impact})`)
     .join("\n");
 
-  const prompt = `You are an AI Product Manager writing a 3-phase roadmap to validate and ship the strongest direction.
+  const prompt = `${PM_VOICE_PROMPT}
+
+Write a 3-phase roadmap to validate and ship the strongest direction.
 
 Idea: ${idea}
 Strategic focus: ${strategicTheme}

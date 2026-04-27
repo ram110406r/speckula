@@ -38,6 +38,9 @@ service cloud.firestore {
       match /tasks/{id} {
         allow read, write: if isAuthenticated() && isOwner(userId);
       }
+      match /pastRuns/{id} {
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
 
       // Connected Slack workspaces (metadata only — no tokens stored here).
       // User reads their own; backend (Admin SDK) writes via callback/channels routes.

@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
-import { Bot, Send, Loader2, Sparkles, StopCircle, Zap, Brain, Target, AlertTriangle, CheckCircle2, Lightbulb, Map, Compass } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, StopCircle, Zap, Brain, Target, AlertTriangle, CheckCircle2, Lightbulb, Map, Compass, Flame, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/lib/firebase/AuthProvider";
 import {
   runAutonomousAgent,
   type AgentEvent,
@@ -16,6 +17,7 @@ import type {
   RoadmapPhase,
   ClarifyingQuestion,
 } from "@/lib/ai/actions";
+import type { Verdict, VerdictLabel } from "@/lib/ai/verdict";
 
 type ChatEntryInput =
   | { kind: "user"; text: string }
@@ -36,6 +38,7 @@ let entryCounter = 0;
 const nextEntryId = () => `entry-${++entryCounter}`;
 
 export function AutonomousModeView() {
+  const { user } = useAuth();
   const [idea, setIdea] = React.useState("");
   const [depth, setDepth] = React.useState<AgentDepth>("standard");
   const [chat, setChat] = React.useState<ChatEntry[]>([]);
@@ -43,6 +46,10 @@ export function AutonomousModeView() {
   const [decisions, setDecisions] = React.useState<DecisionSuggestion[]>([]);
   const [strategy, setStrategy] = React.useState<StrategicGuidance | null>(null);
   const [roadmap, setRoadmap] = React.useState<RoadmapPhase[]>([]);
+  const [topDecision, setTopDecision] = React.useState<DecisionSuggestion | null>(null);
+  const [assumptions, setAssumptions] = React.useState<string[]>([]);
+  const [verdict, setVerdict] = React.useState<Verdict | null>(null);
+  const [pastIdeas, setPastIdeas] = React.useState<string[]>([]);
   const [pendingQuestion, setPendingQuestion] = React.useState<ClarifyingQuestion | null>(null);
   const [answerText, setAnswerText] = React.useState("");
   const isRunning = agentState !== "idle" && agentState !== "stopped" && agentState !== "error" && agentState !== "output";
@@ -86,6 +93,19 @@ export function AutonomousModeView() {
           setRoadmap(event.roadmap);
           appendEntry({ kind: "system", text: `Drafted a ${event.roadmap.length}-phase roadmap.` });
           break;
+        case "topDecision":
+          setTopDecision(event.decision);
+          break;
+        case "assumptions":
+          setAssumptions(event.assumptions);
+          appendEntry({ kind: "system", text: `Surfaced ${event.assumptions.length} hidden assumption${event.assumptions.length === 1 ? "" : "s"}.` });
+          break;
+        case "verdict":
+          setVerdict(event.verdict);
+          break;
+        case "memoryLoaded":
+          setPastIdeas(event.pastIdeas);
+          break;
         case "error":
           appendEntry({ kind: "error", text: event.message });
           break;
@@ -105,6 +125,10 @@ export function AutonomousModeView() {
     setDecisions([]);
     setStrategy(null);
     setRoadmap([]);
+    setTopDecision(null);
+    setAssumptions([]);
+    setVerdict(null);
+    setPastIdeas([]);
     setPendingQuestion(null);
     setAnswerText("");
     setAgentState("understand_idea");
@@ -121,6 +145,7 @@ export function AutonomousModeView() {
         signal: controller.signal,
         emit: handleAgentEvent,
         alreadyAsked: [],
+        userId: user?.uid,
         awaitUserResponse: (question) =>
           new Promise<string>((resolve, reject) => {
             answerResolverRef.current = resolve;
@@ -135,7 +160,7 @@ export function AutonomousModeView() {
       answerResolverRef.current = null;
       answerRejecterRef.current = null;
     }
-  }, [idea, depth, isRunning, appendEntry, handleAgentEvent]);
+  }, [idea, depth, isRunning, appendEntry, handleAgentEvent, user?.uid]);
 
   const stop = React.useCallback(() => {
     abortRef.current?.abort();
@@ -165,6 +190,10 @@ export function AutonomousModeView() {
     setDecisions([]);
     setStrategy(null);
     setRoadmap([]);
+    setTopDecision(null);
+    setAssumptions([]);
+    setVerdict(null);
+    setPastIdeas([]);
     setPendingQuestion(null);
     setAnswerText("");
     setAgentState("idle");
@@ -272,7 +301,9 @@ export function AutonomousModeView() {
               <div className="flex items-start gap-2 mb-3">
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5" />
                 <div className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-                  <span className="font-semibold">Needs clarification:</span> {pendingQuestion.why}
+                  {pendingQuestion.why
+                    ? <><span className="font-semibold">Why this matters:</span> {pendingQuestion.why}</>
+                    : <span className="font-semibold">Awaiting your answer to proceed.</span>}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -303,6 +334,10 @@ export function AutonomousModeView() {
             decisions={decisions}
             strategy={strategy}
             roadmap={roadmap}
+            topDecision={topDecision}
+            assumptions={assumptions}
+            verdict={verdict}
+            pastIdeas={pastIdeas}
             isRunning={isRunning}
             depth={depth}
           />
@@ -363,12 +398,14 @@ function ChatBubble({ entry }: { entry: ChatEntry }) {
   if (entry.kind === "question") {
     return (
       <div className="rounded-2xl rounded-bl-md border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-sm leading-relaxed">
-        <div className="text-[10px] uppercase tracking-[0.06em] font-semibold text-amber-700 dark:text-amber-300 mb-1.5">
-          Clarifying question
+        <div className="text-[10px] uppercase tracking-[0.06em] font-semibold text-amber-700 dark:text-amber-300 mb-2">
+          I can&apos;t prioritize correctly without this
         </div>
-        <p className="text-foreground">{entry.question.question}</p>
+        <p className="text-foreground font-medium">→ {entry.question.question}</p>
         {entry.question.why && (
-          <p className="mt-1.5 text-xs text-muted-foreground">→ {entry.question.why}</p>
+          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground/70">Why this matters:</span> {entry.question.why}
+          </p>
         )}
       </div>
     );
@@ -392,19 +429,33 @@ interface StructuredOutputProps {
   decisions: DecisionSuggestion[];
   strategy: StrategicGuidance | null;
   roadmap: RoadmapPhase[];
+  topDecision: DecisionSuggestion | null;
+  assumptions: string[];
+  verdict: Verdict | null;
+  pastIdeas: string[];
   isRunning: boolean;
   depth: AgentDepth;
 }
 
-function StructuredOutput({ decisions, strategy, roadmap, isRunning, depth }: StructuredOutputProps) {
-  const empty = decisions.length === 0 && !strategy && roadmap.length === 0;
+function StructuredOutput({
+  decisions,
+  strategy,
+  roadmap,
+  topDecision,
+  assumptions,
+  verdict,
+  pastIdeas,
+  isRunning,
+  depth,
+}: StructuredOutputProps) {
+  const empty = decisions.length === 0 && !strategy && roadmap.length === 0 && !verdict;
   if (empty) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center px-8 text-muted-foreground/70">
         <Zap className="h-8 w-8 mb-3 opacity-40" />
         <p className="text-sm font-medium">Structured output appears here as the agent works.</p>
         <p className="text-xs mt-1 max-w-xs">
-          Decisions, strategy, and roadmap stream in stage by stage.
+          Decisions, assumptions, verdict, and roadmap stream in stage by stage.
         </p>
       </div>
     );
@@ -412,6 +463,20 @@ function StructuredOutput({ decisions, strategy, roadmap, isRunning, depth }: St
 
   return (
     <div className="p-6 space-y-8 max-w-2xl">
+      {pastIdeas.length > 0 && (
+        <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground/80">Memory:</span> primed with {pastIdeas.length} recent run{pastIdeas.length === 1 ? "" : "s"} to avoid repeating weak framings.
+        </div>
+      )}
+
+      {topDecision && (
+        <TopDecisionBanner decision={topDecision} />
+      )}
+
+      {verdict && (
+        <FinalVerdictBlock verdict={verdict} />
+      )}
+
       {decisions.length > 0 && (
         <SectionBlock icon={Compass} title="Decisions">
           <div className="space-y-3">
@@ -434,6 +499,24 @@ function StructuredOutput({ decisions, strategy, roadmap, isRunning, depth }: St
                 </li>
               ))}
           </ul>
+        </SectionBlock>
+      )}
+
+      {assumptions.length > 0 && (
+        <SectionBlock icon={AlertTriangle} title="Hidden Assumptions">
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.05] p-4">
+            <p className="text-[10px] uppercase tracking-[0.06em] text-amber-700 dark:text-amber-300 font-semibold mb-2">
+              These must be true for the plan to work
+            </p>
+            <ul className="space-y-1.5">
+              {assumptions.map((a, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-amber-900/90 dark:text-amber-100/90">
+                  <span className="text-amber-600 mt-0.5">•</span>
+                  <span>{a}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </SectionBlock>
       )}
 
@@ -526,6 +609,9 @@ function DecisionPreview({ decision }: { decision: DecisionSuggestion }) {
       <div className="flex gap-3 text-[10px] text-muted-foreground pt-1">
         <span><span className="font-mono tabular-nums text-foreground">{decision.impact}</span> impact</span>
         <span><span className="font-mono tabular-nums text-foreground">{decision.effort}</span> effort</span>
+        {typeof decision.confidence === "number" && (
+          <span><span className="font-mono tabular-nums text-foreground">{decision.confidence}</span> confidence</span>
+        )}
       </div>
       {decision.recommendation && (
         <div className="flex items-start gap-1.5 text-xs pt-1 border-t border-border/40 mt-2">
@@ -534,6 +620,79 @@ function DecisionPreview({ decision }: { decision: DecisionSuggestion }) {
         </div>
       )}
     </article>
+  );
+}
+
+function TopDecisionBanner({ decision }: { decision: DecisionSuggestion }) {
+  return (
+    <section className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/[0.08] via-primary/[0.04] to-transparent p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <Flame className="h-4 w-4 text-primary" />
+        <h3 className="text-[10px] uppercase tracking-[0.08em] font-semibold text-primary">Most Critical Decision</h3>
+      </div>
+      <h4 className="text-base font-semibold tracking-tight text-foreground leading-snug">{decision.title}</h4>
+      {decision.keyInsight && (
+        <div className="mt-3">
+          <p className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground mb-1">Why this matters</p>
+          <p className="text-sm leading-relaxed text-foreground/90">{decision.keyInsight}</p>
+        </div>
+      )}
+      {decision.recommendation && (
+        <div className="mt-3 flex items-start gap-1.5 text-sm border-t border-primary/20 pt-3">
+          <Target className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
+          <p className="text-foreground/90 leading-relaxed">{decision.recommendation}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const verdictStyles: Record<VerdictLabel, { icon: React.ElementType; label: string; cardCls: string; pillCls: string; iconCls: string }> = {
+  PROCEED: {
+    icon: ShieldCheck,
+    label: "Proceed",
+    cardCls: "border-emerald-500/30 bg-emerald-500/[0.06]",
+    pillCls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+    iconCls: "text-emerald-600",
+  },
+  VALIDATE_FIRST: {
+    icon: ShieldAlert,
+    label: "Validate first",
+    cardCls: "border-amber-500/40 bg-amber-500/[0.06]",
+    pillCls: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+    iconCls: "text-amber-600",
+  },
+  DO_NOT_BUILD: {
+    icon: ShieldX,
+    label: "Don't build yet",
+    cardCls: "border-red-500/40 bg-red-500/[0.06]",
+    pillCls: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
+    iconCls: "text-red-600",
+  },
+};
+
+function FinalVerdictBlock({ verdict }: { verdict: Verdict }) {
+  const style = verdictStyles[verdict.label];
+  const Icon = style.icon;
+  return (
+    <section className={`rounded-2xl border-2 p-5 ${style.cardCls}`}>
+      <div className="flex items-center gap-2 mb-3">
+        <span aria-hidden className="text-base">🚦</span>
+        <h3 className="text-[10px] uppercase tracking-[0.08em] font-semibold text-foreground/70">Final Verdict</h3>
+      </div>
+      <div className="flex items-center gap-3 mb-2">
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold ${style.pillCls}`}>
+          <Icon className={`h-3.5 w-3.5 ${style.iconCls}`} />
+          {style.label}
+        </span>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          confidence avg {verdict.averageConfidence.toFixed(1)}/10
+        </span>
+      </div>
+      <p className="text-sm leading-relaxed text-foreground/90">
+        <span className="font-medium">Reason:</span> {verdict.reason}
+      </p>
+    </section>
   );
 }
 
