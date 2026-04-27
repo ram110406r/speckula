@@ -783,6 +783,126 @@ function normalizeDecisionSuggestion(raw: unknown): DecisionSuggestion {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Autonomous mode actions
+// Power the agent loop in `lib/ai/autonomousAgent.ts`. Each is a single Groq
+// call returning narrowly-scoped JSON so the orchestrator can stay simple.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ClarifyingQuestion {
+  question: string;
+  why: string;
+}
+
+export const clarifyIdeaAction = async (
+  idea: string,
+  contextSoFar: string,
+  alreadyAsked: string[]
+): Promise<ClarifyingQuestion | null> => {
+  const askedList = alreadyAsked.length > 0
+    ? `\n\nQuestions ALREADY asked in this session — do NOT repeat any of these:\n${alreadyAsked.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+    : "";
+
+  const prompt = `You are an AI Product Manager evaluating whether a raw product idea has enough information to make decisions. Decide if the idea is missing ONE critical piece of information that would block useful product reasoning.
+
+Idea:
+${idea}
+
+Existing context gathered:
+${contextSoFar || "(none)"}
+${askedList}
+
+Critical = blocks decision-making. Examples of critical: target user segment, the specific problem being solved, the success metric. Examples of NOT critical: brand name, color scheme, exact pricing.
+
+If the idea is clear enough to proceed, return: {"clear": true}
+If ONE specific clarification would meaningfully unblock you, return: {"clear": false, "question": "...", "why": "one sentence on why this matters"}
+
+The question must be:
+- ONE question (not multi-part)
+- Specific and answerable in 1-2 sentences
+- Not a question you've already asked
+
+Return ONLY JSON, no prose.`;
+
+  const result = await callAI(prompt, "");
+  try {
+    const parsed = parseJsonPayload(result) as { clear?: boolean; question?: string; why?: string };
+    if (parsed.clear === true) return null;
+    if (typeof parsed.question === "string" && parsed.question.trim().length > 0) {
+      return {
+        question: parsed.question.trim(),
+        why: typeof parsed.why === "string" ? parsed.why.trim() : "",
+      };
+    }
+    return null;
+  } catch (e) {
+    console.error("[clarifyIdeaAction] Failed to parse JSON:", e);
+    return null;
+  }
+};
+
+export interface RoadmapPhase {
+  name: string;
+  goal: string;
+  deliverables: string[];
+}
+
+export const generateRoadmapAction = async (
+  idea: string,
+  decisions: DecisionSuggestion[],
+  strategicTheme: string
+): Promise<RoadmapPhase[]> => {
+  const decisionsList = decisions
+    .map((d, i) => `${i + 1}. ${d.title} (priority: ${d.priority}, impact: ${d.impact})`)
+    .join("\n");
+
+  const prompt = `You are an AI Product Manager writing a 3-phase roadmap to validate and ship the strongest direction.
+
+Idea: ${idea}
+Strategic focus: ${strategicTheme}
+
+Decisions on the table:
+${decisionsList}
+
+Return a 3-phase roadmap as a JSON array. Each phase moves the product from idea to validated ship.
+
+Each phase has:
+- name: short label (e.g. "Validate", "Build MVP", "Measure & iterate")
+- goal: ONE sentence stating the outcome of the phase. What is true at the end that wasn't true at the start?
+- deliverables: array of 2-4 specific, concrete deliverables. Not "research users" — "10 user interviews with [specific segment] focused on [specific question]"
+
+Hard rules:
+- Be specific. Avoid filler like "iterate based on feedback" — that is not a deliverable.
+- Phase 1 should always test the riskiest assumption from the decisions above, not build features.
+- Total scope across all 3 phases ≤ 12 weeks of work.
+
+Return ONLY a JSON array of 3 phase objects. No prose, no markdown fences.`;
+
+  const result = await callAI(prompt, "");
+  try {
+    const parsed = parseJsonPayload(result);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((raw): RoadmapPhase | null => {
+        const item = (raw ?? {}) as Record<string, unknown>;
+        const name = typeof item.name === "string" ? item.name.trim() : "";
+        const goal = typeof item.goal === "string" ? item.goal.trim() : "";
+        const deliverables = Array.isArray(item.deliverables)
+          ? item.deliverables
+              .map((d) => (typeof d === "string" ? d.trim() : ""))
+              .filter((d) => d.length > 0)
+              .slice(0, 6)
+          : [];
+        if (!name || !goal) return null;
+        return { name, goal, deliverables };
+      })
+      .filter((p): p is RoadmapPhase => p !== null);
+  } catch (e) {
+    console.error("[generateRoadmapAction] Failed to parse JSON:", e);
+    return [];
+  }
+};
+
 export const processEditorAction = async (userId: string, selectedText: string, action: 'improve' | 'expand' | 'challenge') => {
   const prompts = {
     improve: "Improve this text for clarity, flow, and professional product tone. Keep the same general meaning but make it sound like a senior PM wrote it.",

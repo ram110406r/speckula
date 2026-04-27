@@ -13,6 +13,7 @@ import { LandingPage } from "./LandingPage";
 import { DecisionView } from "../views/DecisionView";
 import { PlatformView } from "../views/PlatformView";
 import { SlackView } from "../views/SlackView";
+import { AutonomousModeView } from "../views/AutonomousModeView";
 import { Loader2 } from "lucide-react";
 
 function formatRelativeActivity(value: unknown): string | null {
@@ -70,6 +71,7 @@ export function Shell() {
       case "decisions": return <DecisionView />;
       case "platform": return <PlatformView />;
       case "slack": return <SlackView />;
+      case "autonomous": return <AutonomousModeView />;
       default: return <Editor />;
     }
   };

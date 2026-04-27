@@ -14,6 +14,7 @@ import {
   Compass,
   Share2,
   MessageSquare,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -28,6 +29,12 @@ interface GroupedNavItem {
 }
 
 const navGroups: { label: string; items: GroupedNavItem[] }[] = [
+  {
+    label: "Agent",
+    items: [
+      { icon: Bot, label: "Autonomous Mode", view: "autonomous" },
+    ],
+  },
   {
     label: "Evidence",
     items: [
