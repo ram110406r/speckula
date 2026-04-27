@@ -51,6 +51,11 @@ export function TipTapEditor() {
   const activeInlineHashRef = React.useRef("");
   const learningRef = React.useRef<InlineLearningState>({ acceptedSuggestions: [], dismissedSuggestions: [] });
   const isMountedRef = React.useRef(true);
+  // True while loadContent() is programmatically replacing editor content.
+  // Auto-save must ignore `update` events during this window — otherwise the
+  // setContent("") that clears the OLD doc fires the still-attached listener
+  // and flushes an empty document back to Firestore on cleanup.
+  const isLoadingContentRef = React.useRef(false);
 
   React.useEffect(() => {
     isMountedRef.current = true;
@@ -207,13 +212,17 @@ export function TipTapEditor() {
     if (!editor || !user || !currentDocId) return;
 
     const loadContent = async () => {
+      // Guard the auto-save listener BEFORE any setContent call so the OLD
+      // doc's effect (still subscribed until React reruns) doesn't see this
+      // clear as a user edit and flush empty content on cleanup.
+      isLoadingContentRef.current = true;
+      setIsLoadingContent(true);
       editor.commands.setContent("");
       setInlineSuggestion(null);
       setIsInlineThinking(false);
       activeInlineHashRef.current = "";
       dismissedInlineHashRef.current = "";
       setActiveContext("");
-      setIsLoadingContent(true);
       try {
         const doc = await getDocument(user.uid, currentDocId);
         if (doc) {
@@ -233,6 +242,7 @@ export function TipTapEditor() {
       } catch (error) {
         console.error("Error loading document:", error);
       } finally {
+        isLoadingContentRef.current = false;
         setIsLoadingContent(false);
       }
     };
@@ -456,6 +466,9 @@ export function TipTapEditor() {
     };
 
     const onUpdate = () => {
+      // Programmatic content swaps during doc-switch fire `update` too — those
+      // are not user edits and must not mark the doc dirty.
+      if (isLoadingContentRef.current) return;
       dirty = true;
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(flush, 2000);

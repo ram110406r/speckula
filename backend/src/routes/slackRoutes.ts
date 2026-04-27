@@ -39,10 +39,22 @@ function alreadyProcessed(eventId: string): boolean {
   const expiry = seenEventIds.get(eventId);
   if (expiry && expiry > now) return true;
 
+  // Stale entry for this id (or first sight): remove first so the re-set
+  // below moves it to the end of insertion order, keeping the eviction
+  // queue accurate as a recency queue.
+  if (expiry !== undefined) seenEventIds.delete(eventId);
+
   if (seenEventIds.size >= MAX_SEEN_EVENTS) {
-    // Drop the oldest entry (Map iteration is insertion-ordered).
-    const oldest = seenEventIds.keys().next().value;
-    if (oldest) seenEventIds.delete(oldest);
+    // Sweep TTL-expired entries before falling back to oldest-insertion
+    // eviction. Otherwise long-lived expired entries sit at the front of
+    // the map and we end up evicting fresh entries while stale ones leak.
+    for (const [key, exp] of seenEventIds) {
+      if (exp <= now) seenEventIds.delete(key);
+    }
+    if (seenEventIds.size >= MAX_SEEN_EVENTS) {
+      const oldest = seenEventIds.keys().next().value;
+      if (oldest) seenEventIds.delete(oldest);
+    }
   }
   seenEventIds.set(eventId, now + SEEN_EVENT_TTL_MS);
   return false;
