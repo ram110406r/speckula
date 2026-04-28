@@ -1,4 +1,24 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "slackMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerUserId", "order": "ASCENDING" },
+        { "fieldPath": "teamId", "order": "ASCENDING" },
+        { "fieldPath": "channelId", "order": "ASCENDING" },
+        { "fieldPath": "slackTs", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "slackMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerUserId", "order": "ASCENDING" },
+        { "fieldPath": "teamId", "order": "ASCENDING" },
+        { "fieldPath": "slackTs", "order": "DESCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }
