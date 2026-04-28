@@ -199,8 +199,26 @@ export const getUserDocuments = async (userId: string) => {
 
 // --- INSIGHTS ACTIONS ---
 
+// Stable fingerprint for insight-dedup. Insights with the same title+
+// description+sourceDocId are treated as duplicates and skipped on subsequent
+// saves so re-extraction doesn't pollute the user's collection.
+const insightFingerprint = (i: Pick<Insight, "title" | "description" | "category" | "sourceDocId">): string => {
+  const norm = (s?: string) => (s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  return `${norm(i.title)}::${norm(i.description)}::${norm(i.category)}::${i.sourceDocId ?? ""}`;
+};
+
 export const saveInsight = async (userId: string, data: Omit<Insight, "userId" | "createdAt">) => {
   try {
+    // Cheap dedup: pull the latest 50 and compare fingerprints. We don't
+    // need a perfect dedup — just to stop the most common case of the
+    // same auto-extraction running twice.
+    const recent = await getDocs(query(userInsightsCollection(userId), orderBy("createdAt", "desc"), firestoreLimit(50)));
+    const fp = insightFingerprint(data);
+    const seen = recent.docs.some((d) => {
+      const r = d.data() as Insight;
+      return insightFingerprint(r) === fp;
+    });
+    if (seen) return;
     await addDoc(userInsightsCollection(userId), { ...data, userId, createdAt: serverTimestamp() });
   } catch (error) {
     logFirestorePermissionHint("saveInsight", error);
@@ -221,14 +239,19 @@ export const getInsights = async (userId: string) => {
 
 // --- DECISION ACTIONS ---
 
-export const saveDecision = async (userId: string, data: Omit<DecisionRecord, "userId" | "createdAt" | "updatedAt">) => {
+// Returns the Firestore-assigned document id so callers can link in-memory
+// decision objects to the persisted record. Previously the function
+// discarded the ref, leaving outcome feedback to write under an ephemeral
+// client-only UUID that didn't match anything in Firestore.
+export const saveDecision = async (userId: string, data: Omit<DecisionRecord, "userId" | "createdAt" | "updatedAt">): Promise<string> => {
   try {
-    await addDoc(userDecisionsCollection(userId), {
+    const ref = await addDoc(userDecisionsCollection(userId), {
       ...data,
       userId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    return ref.id;
   } catch (error) {
     logFirestorePermissionHint("saveDecision", error);
     throw error;
@@ -406,11 +429,26 @@ export const initializeUser = async (userId: string) => {
       updatedAt: serverTimestamp(),
     }, { merge: true });
 
-    await setDoc(profileRef, {
-      userId,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    
+    // `published: false` keeps the auto-created profile out of the public
+    // read rule — the user must explicitly publish before strangers can
+    // enumerate the doc by UID. We use a guarded merge: only set the field
+    // if the doc doesn't already exist, so re-initialize never demotes a
+    // published profile back to private.
+    const profileSnap = await getDoc(profileRef);
+    if (!profileSnap.exists()) {
+      await setDoc(profileRef, {
+        userId,
+        published: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(profileRef, {
+        userId,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+
     console.log(`[initializeUser] Initialized user document for ${userId}`);
   } catch (error) {
     logFirestorePermissionHint("initializeUser", error);

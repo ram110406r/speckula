@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type AppView = 'editor' | 'insights' | 'prds' | 'tasks' | 'decisions' | 'platform' | 'slack' | 'autonomous';
 
@@ -41,7 +42,9 @@ interface ExpectedOutcomeState {
 interface ActualOutcomeState {
   metric: string;
   value: number;
-  timestamp: number;
+  // ISO timestamp; aligns with the canonical ActualOutcome type now that
+  // outcome data syncs to Firestore (no longer a JS millisecond timestamp).
+  observedAt: string;
 }
 
 interface OutcomeLoopState {
@@ -121,7 +124,7 @@ const initialOutcomeLoopState: OutcomeLoopState = {
   confidenceAfter: 0,
 };
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>()(persist((set) => ({
   ...initialState,
   toggleAiPanel: () => set((state) => ({ aiPanelOpen: !state.aiPanelOpen })),
   setActiveContext: (context) => set({ activeContext: context }),
@@ -175,4 +178,17 @@ export const useAppStore = create<AppState>((set) => ({
       return { dismissedHintsByDoc: next };
     }),
   resetState: () => set({ ...initialState, documents: [] }),
+}), {
+  name: 'buildcase-app-store-v1',
+  storage: createJSONStorage(() => (typeof window !== 'undefined' ? window.localStorage : (undefined as unknown as Storage))),
+  // Persist only the user-visible UI prefs and per-doc dismissed hints.
+  // Ephemeral runtime state (documents list, isSaving, pending* fields,
+  // strategicContext, taskDependencies, outcomeLoop) must NOT be cached
+  // across reloads — those are computed live from Firestore on mount.
+  partialize: (state) => ({
+    aiPanelOpen: state.aiPanelOpen,
+    activeView: state.activeView,
+    dismissedHintsByDoc: state.dismissedHintsByDoc,
+  }),
+  version: 1,
 }));

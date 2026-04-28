@@ -13,11 +13,16 @@ export interface Verdict {
   highRiskCount: number;
 }
 
+const isValidConfidence = (c: number | undefined): c is number =>
+  typeof c === "number" && Number.isFinite(c);
+
 const HIGH_RISK_RULE = (decision: DecisionSuggestion): boolean => {
-  // A decision is "high-risk" if it's high-priority but evidence is thin, OR
-  // it carries 3+ surfaced risks. Mirrors the bar a senior PM would apply.
-  const confidence = decision.confidence ?? 0;
-  if (decision.priority === "high" && confidence > 0 && confidence < 5) return true;
+  // A decision is "high-risk" if it's high-priority and confidence is
+  // explicitly below 5 (including 0 — a unanimous "no evidence" rating is
+  // the most high-risk state, not the missing-data state). Or 3+ risks.
+  if (decision.priority === "high" && isValidConfidence(decision.confidence) && decision.confidence < 5) {
+    return true;
+  }
   if ((decision.risks?.length ?? 0) >= 3) return true;
   return false;
 };
@@ -32,13 +37,13 @@ export function computeVerdict(decisions: DecisionSuggestion[]): Verdict {
     };
   }
 
+  // Keep ALL numeric confidence values, including 0. A unanimous-zero run
+  // should average 0, not be reported as "5". Only filter out values that
+  // are missing entirely.
   const confidenceValues = decisions
     .map((d) => d.confidence)
-    .filter((c): c is number => typeof c === "number" && c > 0);
+    .filter(isValidConfidence);
 
-  // Fall back to averaging impact when confidence wasn't returned by the model
-  // — better than treating absent confidence as zero, which would always force
-  // DO_NOT_BUILD on legacy data.
   const averageConfidence = confidenceValues.length > 0
     ? confidenceValues.reduce((sum, c) => sum + c, 0) / confidenceValues.length
     : 5;
@@ -84,7 +89,12 @@ export function pickTopDecision(decisions: DecisionSuggestion[]): DecisionSugges
   if (pool.length === 0) return null;
   return [...pool].sort((a, b) => {
     if (b.impact !== a.impact) return b.impact - a.impact;
-    return (a.confidence ?? 5) - (b.confidence ?? 5);
+    // Push decisions with missing confidence to the END (treat as the
+    // safest sort, not the middle), so we don't bias the top pick toward
+    // entries that simply omitted a confidence value.
+    const ac = isValidConfidence(a.confidence) ? a.confidence : Number.POSITIVE_INFINITY;
+    const bc = isValidConfidence(b.confidence) ? b.confidence : Number.POSITIVE_INFINITY;
+    return ac - bc;
   })[0];
 }
 
@@ -113,7 +123,7 @@ export function reflectionInstructionFor(decisions: DecisionSuggestion[]): strin
   if (decisions.length === 0) return null;
   const confidenceValues = decisions
     .map((d) => d.confidence)
-    .filter((c): c is number => typeof c === "number" && c > 0);
+    .filter(isValidConfidence);
   const avgConfidence = confidenceValues.length > 0
     ? confidenceValues.reduce((sum, c) => sum + c, 0) / confidenceValues.length
     : 10;
