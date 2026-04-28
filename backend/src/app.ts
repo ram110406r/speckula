@@ -65,13 +65,21 @@ export const createServer = async () => {
 
   fastify.setErrorHandler((error, _request, reply) => {
     fastify.log.error(error);
-    const status = error.statusCode && error.statusCode >= 400 ? error.statusCode : 500;
+    const status = (() => {
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        const code = (error as { statusCode?: unknown }).statusCode;
+        if (typeof code === 'number' && code >= 400) return code;
+      }
+      return 500;
+    })();
     // In production avoid leaking validation/Prisma internals; in dev
     // surface the full message so route bugs are debuggable.
     const message =
       process.env.NODE_ENV === 'production' && status >= 500
         ? 'Internal server error'
-        : error.message;
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
     reply.code(status).send({ ok: false, error: message });
   });
 
