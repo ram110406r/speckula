@@ -129,11 +129,14 @@ export function extractHierarchicalContext(text: string, cursorPos: number): Hie
 }
 
 export function extractEntities(sentence: string): ExtractedEntities {
+  // Use word boundaries so "user" doesn't match "userland" / "abusers" /
+  // "users" gets matched on its own (\b is a word boundary, so the token
+  // boundary handles plurals naturally without matching mid-word).
   return {
-    hasUser: /user/i.test(sentence),
-    hasMetric: /%|rate|conversion/i.test(sentence),
-    hasAction: /build|create|add/i.test(sentence),
-    hasProblem: /drop|issue|problem|fail/i.test(sentence),
+    hasUser: /\b(user|users|customer|customers)\b/i.test(sentence),
+    hasMetric: /%|\b(rate|conversion|retention|churn|metric|kpi|nps|dau|mau|wau|arr|mrr|ltv)\b/i.test(sentence),
+    hasAction: /\b(build|create|add|ship|launch|implement|design|prototype)\b/i.test(sentence),
+    hasProblem: /\b(drop|drops|drops?|issue|issues|problem|problems|fail|fails|failing|broken|stuck)\b/i.test(sentence),
   };
 }
 

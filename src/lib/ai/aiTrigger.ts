@@ -10,6 +10,11 @@ import { prioritizeSteps } from "./priorityEngine";
 import { extractEntities, detectGaps } from "./aiContext";
 
 interface TriggerParams {
+  // Session key — scopes all internal state (debounce timer, last-hash,
+  // request id) to this caller. Use the document id (or any unique
+  // string) so two editor instances / Strict-Mode double-mounts /
+  // doc switches don't share singletons.
+  sessionKey?: string;
   text: string;
   cursorPos: number;
   learning?: InlineLearningProfile;
@@ -22,11 +27,25 @@ const INLINE_AI_DEBOUNCE_MS = 800;
 const THINKING_PAUSE_MS = 1200;
 const MIN_CONTEXT_LENGTH = 40;
 
-let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-let requestId = 0;
-let lastHash = "";
-let lastEditAt = 0;
-let lastTextSnapshot = "";
+interface TriggerSessionState {
+  timeoutHandle: ReturnType<typeof setTimeout> | null;
+  requestId: number;
+  lastHash: string;
+  lastEditAt: number;
+  lastTextSnapshot: string;
+}
+
+const DEFAULT_KEY = "__default__";
+const sessions = new Map<string, TriggerSessionState>();
+
+const getSession = (key: string): TriggerSessionState => {
+  let s = sessions.get(key);
+  if (!s) {
+    s = { timeoutHandle: null, requestId: 0, lastHash: "", lastEditAt: 0, lastTextSnapshot: "" };
+    sessions.set(key, s);
+  }
+  return s;
+};
 
 function stableHash(value: string): string {
   let hash = 5381;
@@ -36,24 +55,36 @@ function stableHash(value: string): string {
   return (hash >>> 0).toString(16);
 }
 
-export function cancelAISuggestionTrigger() {
-  if (timeoutHandle) {
-    clearTimeout(timeoutHandle);
-    timeoutHandle = null;
+export function cancelAISuggestionTrigger(sessionKey?: string) {
+  // Cancel either a specific session, or all sessions (used on full unmount).
+  if (sessionKey) {
+    const s = sessions.get(sessionKey);
+    if (s) {
+      if (s.timeoutHandle) clearTimeout(s.timeoutHandle);
+      s.timeoutHandle = null;
+      s.requestId += 1;
+    }
+    return;
   }
-  requestId++;
+  for (const s of sessions.values()) {
+    if (s.timeoutHandle) clearTimeout(s.timeoutHandle);
+    s.timeoutHandle = null;
+    s.requestId += 1;
+  }
 }
 
 function isEndOfThought(text: string, pauseTime: number) {
   return text.endsWith(".") || text.endsWith("?") || text.endsWith("!") || text.endsWith("\n") || pauseTime > THINKING_PAUSE_MS;
 }
 
-export function triggerAISuggestion({ text, cursorPos, onSuggestion, onStart, onError }: TriggerParams) {
-  lastEditAt = Date.now();
-  lastTextSnapshot = text;
+export function triggerAISuggestion({ sessionKey, text, cursorPos, onSuggestion, onStart, onError }: TriggerParams) {
+  const key = sessionKey || DEFAULT_KEY;
+  const session = getSession(key);
+  session.lastEditAt = Date.now();
+  session.lastTextSnapshot = text;
 
-  if (timeoutHandle) {
-    clearTimeout(timeoutHandle);
+  if (session.timeoutHandle) {
+    clearTimeout(session.timeoutHandle);
   }
 
   const context = extractHierarchicalContext(text, cursorPos);
@@ -65,18 +96,18 @@ export function triggerAISuggestion({ text, cursorPos, onSuggestion, onStart, on
   const currentHash = stableHash(context.contextKey);
 
   const run = async () => {
-    const pauseTime = Date.now() - lastEditAt;
-    if (!isEndOfThought(lastTextSnapshot, pauseTime)) {
+    const pauseTime = Date.now() - session.lastEditAt;
+    if (!isEndOfThought(session.lastTextSnapshot, pauseTime)) {
       const remainingDelay = Math.max(0, THINKING_PAUSE_MS - pauseTime);
-      timeoutHandle = setTimeout(run, remainingDelay || INLINE_AI_DEBOUNCE_MS);
+      session.timeoutHandle = setTimeout(run, remainingDelay || INLINE_AI_DEBOUNCE_MS);
       return;
     }
 
-    if (currentHash === lastHash) {
+    if (currentHash === session.lastHash) {
       return;
     }
 
-    const activeRequest = ++requestId;
+    const activeRequest = ++session.requestId;
     onStart?.();
 
     try {
@@ -84,13 +115,13 @@ export function triggerAISuggestion({ text, cursorPos, onSuggestion, onStart, on
       const gaps = detectGaps(entities);
       const progress = updateProgress(context.block || context.sentence || text);
       const suggestion = await generateNextStepsWithSignals(context.block || context.sentence || text, entities, gaps, progress);
-      if (activeRequest !== requestId) return;
+      if (activeRequest !== session.requestId) return;
       if (!shouldShowNextSteps(suggestion)) {
         onSuggestion(null);
         return;
       }
 
-      lastHash = currentHash;
+      session.lastHash = currentHash;
       const prioritized = prioritizeSteps(suggestion.next_steps);
       onSuggestion({
         suggestion: {
@@ -101,11 +132,11 @@ export function triggerAISuggestion({ text, cursorPos, onSuggestion, onStart, on
         contextHash: currentHash,
       });
     } catch (error) {
-      if (activeRequest !== requestId) return;
+      if (activeRequest !== session.requestId) return;
       onError?.(error);
       onSuggestion(null);
     }
   };
 
-  timeoutHandle = setTimeout(run, INLINE_AI_DEBOUNCE_MS);
+  session.timeoutHandle = setTimeout(run, INLINE_AI_DEBOUNCE_MS);
 }
