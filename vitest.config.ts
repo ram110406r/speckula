@@ -8,8 +8,9 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'node',
+    environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['src/test/setup.ts'],
     env: {
       NEXT_PUBLIC_FIREBASE_API_KEY: 'test-api-key',
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'test.firebaseapp.com',
