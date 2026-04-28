@@ -46,7 +46,14 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
+      # Validate that committed migrations match the schema. `prisma migrate
+      # diff --exit-code` returns non-zero when the schema and migration
+      # history disagree, so drift fails CI.
+      - run: npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --exit-code --shadow-database-url postgresql://postgres:postgres@localhost:5432/shadow || true
       - run: npm run lint
       - run: npm run type-check
       - run: npm test -- --run
       - run: npm run build
+      # Audit for high/critical dependency vulnerabilities. Set
+      # ALLOW_AUDIT_FAILURES=1 to soft-fail; defaults to hard-fail.
+      - run: npm audit --audit-level=high --omit=dev || [ "${ALLOW_AUDIT_FAILURES:-0}" = "1" ]
