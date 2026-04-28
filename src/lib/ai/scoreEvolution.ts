@@ -1,4 +1,4 @@
-import type { OpportunityScoreBreakdown } from "./scoreEngine";
+import { calculateScore, clampScoreValue, type OpportunityScoreBreakdown } from "./scoreEngine";
 
 export interface OpportunityScoreState extends OpportunityScoreBreakdown {
   score: number;
@@ -11,32 +11,20 @@ export interface OpportunityScoreChanges {
   demand?: number;
 }
 
+// Apply per-dimension changes and recompute the composite score in one
+// step. Previously the function ignored its own input — `score: existing.score`
+// kept the old composite even after changing the underlying dimensions —
+// so callers had to remember to call calculateScore themselves. Now the
+// score is always derived, never stale.
 export function updateScore(existing: OpportunityScoreState, changes: OpportunityScoreChanges) {
-  const next: OpportunityScoreState = {
-    ...existing,
-    ...changes,
-    impact: changes.impact ?? existing.impact,
-    effort: changes.effort ?? existing.effort,
-    confidence: changes.confidence ?? existing.confidence,
-    demand: changes.demand ?? existing.demand,
-    score: existing.score,
+  const breakdown: OpportunityScoreBreakdown = {
+    impact: clampScoreValue(changes.impact ?? existing.impact),
+    effort: clampScoreValue(changes.effort ?? existing.effort),
+    confidence: clampScoreValue(changes.confidence ?? existing.confidence),
+    demand: clampScoreValue(changes.demand ?? existing.demand),
   };
-
-  if (changes.confidence !== undefined) {
-    next.confidence = Math.min(10, Math.max(0, changes.confidence));
-  }
-
-  if (changes.demand !== undefined) {
-    next.demand = Math.min(10, Math.max(0, changes.demand));
-  }
-
-  if (changes.effort !== undefined) {
-    next.effort = Math.min(10, Math.max(0, changes.effort));
-  }
-
-  if (changes.impact !== undefined) {
-    next.impact = Math.min(10, Math.max(0, changes.impact));
-  }
-
-  return next;
+  return {
+    ...breakdown,
+    score: calculateScore(breakdown),
+  } satisfies OpportunityScoreState;
 }
