@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx eslint *)",
+      "Bash(awk 'NR==370 || NR==371' /e/buildcase/backend/src/routes/importRoutes.ts)"
+    ]
+  }
+}

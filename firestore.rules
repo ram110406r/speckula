@@ -7,64 +7,150 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function workspaceData(workspaceId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)).data;
     }
 
     function isWorkspaceMember(workspaceId) {
-      return isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.memberIds;
+      return isAuthenticated() &&
+        request.auth.uid in workspaceData(workspaceId).memberIds;
+    }
+
+    function isWorkspaceOwner(workspaceId) {
+      return isAuthenticated() &&
+        request.auth.uid == workspaceData(workspaceId).ownerId;
+    }
+
+    // Members/memberIds/ownerId/createdBy/createdAt are workspace-membership
+    // controls — only the owner may modify them. Other fields (name, etc.)
+    // are editable by any member.
+    function workspaceMembershipFieldsUnchanged() {
+      return request.resource.data.memberIds == resource.data.memberIds &&
+             request.resource.data.members == resource.data.members &&
+             request.resource.data.ownerId == resource.data.ownerId;
     }
 
     // ── Users ──────────────────────────────────────────────
     match /users/{userId} {
-      allow read: if isAuthenticated() && isOwner(userId);
-      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
       allow update, delete: if isOwner(userId);
 
       // Buildcase documents — scoped per user
       match /documents/{docId} {
-        allow read, write: if isAuthenticated() && isOwner(userId);
+        allow read, write: if isOwner(userId);
       }
 
       // New Buildcase Sub-collections
       match /insights/{id} {
-        allow read, write: if isAuthenticated() && isOwner(userId);
+        allow read, write: if isOwner(userId);
       }
       match /decisions/{id} {
-        allow read, write: if isAuthenticated() && isOwner(userId);
+        allow read, write: if isOwner(userId);
+
+        // Outcome history lives under the decision so feedback never
+        // orphans against an ephemeral top-level decisions collection.
+        match /outcomes/{outcomeId} {
+          allow read, write: if isOwner(userId);
+        }
       }
       match /prds/{id} {
-        allow read, write: if isAuthenticated() && isOwner(userId);
+        allow read, write: if isOwner(userId);
       }
       match /tasks/{id} {
-        allow read, write: if isAuthenticated() && isOwner(userId);
+        allow read, write: if isOwner(userId);
       }
       match /pastRuns/{id} {
-        allow read, write: if isAuthenticated() && isOwner(userId);
+        allow read, write: if isOwner(userId);
+      }
+
+      // Expected/actual outcomes per doc — kept under the user so they sync
+      // across devices instead of living only in localStorage.
+      match /outcomes/{outcomeDocId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /scoreHistory/{historyDocId} {
+        allow read, write: if isOwner(userId);
       }
 
       // Connected Slack workspaces (metadata only — no tokens stored here).
       // User reads their own; backend (Admin SDK) writes via callback/channels routes.
       match /slackWorkspaces/{teamId} {
-        allow read: if isAuthenticated() && isOwner(userId);
+        allow read: if isOwner(userId);
         allow write: if false;
       }
     }
 
     // ── Public Profiles ────────────────────────────────────
+    // Only profiles a user has explicitly opted to publish are world-readable.
+    // Auto-created profile docs default `published: false` so signing up does
+    // not silently expose a user.
     match /publicProfiles/{userId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated() && isOwner(userId);
+      allow read: if (resource != null && resource.data.published == true) ||
+                     isOwner(userId);
+      allow create: if isOwner(userId) &&
+                       request.resource.data.userId == userId;
+      allow update: if isOwner(userId) &&
+                       request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner(userId);
     }
 
     // ── Public Cases ────────────────────────────────────────
     match /publicCases/{caseId} {
-      allow read: if resource.data.visibility == "public" || (isAuthenticated() && isOwner(resource.data.userId));
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
-      allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
+      allow read: if (resource != null && resource.data.visibility == "public") ||
+                     (resource != null && isOwner(resource.data.userId));
+
+      // On create: caller must be the listed owner, visibility must be a
+      // known enum value, and a publicly-visible case requires an
+      // expectedOutcome so it can be graded after launch.
+      allow create: if isAuthenticated() &&
+                       request.resource.data.userId == request.auth.uid &&
+                       request.resource.data.visibility in ["public", "private", "unlisted"] &&
+                       (
+                         request.resource.data.visibility != "public" ||
+                         (
+                           request.resource.data.expectedOutcome != null &&
+                           request.resource.data.expectedOutcome.metric is string &&
+                           request.resource.data.expectedOutcome.target_value is number &&
+                           request.resource.data.expectedOutcome.timeframe is string
+                         )
+                       );
+
+      // On update: owner only, immutable userId/createdAt, visibility stays
+      // bounded, and the expectedOutcome rule still applies if we're publishing.
+      allow update: if isOwner(resource.data.userId) &&
+                       request.resource.data.userId == resource.data.userId &&
+                       (
+                         !('createdAt' in resource.data) ||
+                         request.resource.data.createdAt == resource.data.createdAt
+                       ) &&
+                       request.resource.data.visibility in ["public", "private", "unlisted"] &&
+                       (
+                         request.resource.data.visibility != "public" ||
+                         (
+                           request.resource.data.expectedOutcome != null &&
+                           request.resource.data.expectedOutcome.metric is string &&
+                           request.resource.data.expectedOutcome.target_value is number &&
+                           request.resource.data.expectedOutcome.timeframe is string
+                         )
+                       );
+
+      allow delete: if isOwner(resource.data.userId);
 
       match /comments/{commentId} {
-        allow read: if get(/databases/$(database)/documents/publicCases/$(caseId)).data.visibility == "public" || (isAuthenticated() && request.auth.uid == resource.data.userId);
-        allow create: if isAuthenticated();
+        // Only allow comments on cases that are actually public — and only
+        // read comments on public cases or your own.
+        function caseIsPublic() {
+          return get(/databases/$(database)/documents/publicCases/$(caseId)).data.visibility == "public";
+        }
+        allow read: if caseIsPublic() ||
+                       (isAuthenticated() && resource != null && request.auth.uid == resource.data.userId);
+        allow create: if isAuthenticated() &&
+                         caseIsPublic() &&
+                         request.resource.data.userId == request.auth.uid;
         allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
       }
     }
@@ -72,16 +158,24 @@ service cloud.firestore {
     // ── Workspaces ──────────────────────────────────────────
     match /workspaces/{workspaceId} {
       allow read: if isWorkspaceMember(workspaceId);
-      allow create: if isAuthenticated();
-      allow update: if isWorkspaceMember(workspaceId);
-      allow delete: if isWorkspaceMember(workspaceId) && resource.data.members[0].userId == request.auth.uid;
+
+      // On create: caller must be the listed owner and a member.
+      allow create: if isAuthenticated() &&
+                       request.resource.data.ownerId == request.auth.uid &&
+                       request.auth.uid in request.resource.data.memberIds;
+
+      // Updates from non-owner members are allowed only if they don't touch
+      // membership fields. The owner can change anything.
+      allow update: if isWorkspaceOwner(workspaceId) ||
+                       (isWorkspaceMember(workspaceId) && workspaceMembershipFieldsUnchanged());
+
+      // Only the explicit ownerId may delete — never an array index.
+      allow delete: if isWorkspaceOwner(workspaceId);
     }
 
     // ── Settings ───────────────────────────────────────────
     match /settings/{userId} {
-      allow read: if isAuthenticated() && request.auth.uid == userId;
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update, delete: if isOwner(userId);
+      allow read, create, update, delete: if isOwner(userId);
     }
 
     // ── Slack Messages ──────────────────────────────────────
@@ -94,6 +188,13 @@ service cloud.firestore {
     // ── Slack Installations ─────────────────────────────────
     // Encrypted bot tokens. Frontend never reads these.
     match /slackInstallations/{teamId} {
+      allow read, write: if false;
+    }
+
+    // ── Slack Event Dedupe ──────────────────────────────────
+    // Backend-only; used by slackRoutes to dedupe at-least-once events
+    // across multi-replica deployments.
+    match /slackEventDedupe/{eventId} {
       allow read, write: if false;
     }
   }
