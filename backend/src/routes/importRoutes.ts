@@ -3,13 +3,15 @@ import multipart from '@fastify/multipart';
 import { z } from 'zod';
 import { extract } from '@extractus/article-extractor';
 import striptags from 'striptags';
-import { verifyFirebaseAuth } from '../lib/firebaseAuth.js';
+import { promises as dns } from 'node:dns';
+import { isIP } from 'node:net';
 import { getDecryptedBotToken } from './slackOAuthRoutes.js';
 import { fetchChannelHistory } from '../lib/slackApi.js';
 
 import pdfParse from 'pdf-parse';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_URL_BODY_BYTES = 5 * 1024 * 1024; // 5 MB cap on fetched HTML
 const URL_FETCH_TIMEOUT_MS = 10_000;
 const SLACK_DEFAULT_LIMIT = 200;
 const SLACK_MAX_LIMIT = 1000;
@@ -28,22 +30,70 @@ const replyError = (reply: FastifyReply, status: number, message: string) => {
   reply.code(status).send({ ok: false, error: message });
 };
 
-const isPrivateHost = (hostname: string): boolean => {
+// Returns true for IPs we must never SSRF to: loopback, private, link-local,
+// CGNAT, broadcast, IPv6 ULA / link-local / loopback / unspecified.
+const isBlockedIp = (ip: string): boolean => {
+  const v = isIP(ip);
+  if (v === 4) {
+    const parts = ip.split('.').map((p) => Number(p));
+    if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return true;
+    const [a, b] = parts;
+    if (a === 0) return true;                                     // 0.0.0.0/8
+    if (a === 10) return true;                                    // 10/8
+    if (a === 127) return true;                                   // 127/8 loopback
+    if (a === 169 && b === 254) return true;                      // 169.254/16 link-local + AWS metadata
+    if (a === 172 && b >= 16 && b <= 31) return true;             // 172.16-31/12
+    if (a === 192 && b === 168) return true;                      // 192.168/16
+    if (a === 100 && b >= 64 && b <= 127) return true;            // 100.64/10 CGNAT
+    if (a >= 224) return true;                                    // multicast/reserved/broadcast
+    return false;
+  }
+  if (v === 6) {
+    const lower = ip.toLowerCase();
+    if (lower === '::' || lower === '::1') return true;
+    if (lower.startsWith('fe80:') || lower.startsWith('fe80::')) return true;
+    // ULA fc00::/7 — fc00..fdff
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
+    // IPv4-mapped IPv6 (::ffff:127.0.0.1) — extract embedded v4 and recheck
+    const mapped = lower.match(/^::ffff:([0-9.]+)$/);
+    if (mapped && isIP(mapped[1]) === 4 && isBlockedIp(mapped[1])) return true;
+    return false;
+  }
+  // Not an IP literal at all — treat decimal/hex IPv4 encodings as blocked.
+  return true;
+};
+
+// SSRF guard: resolve the hostname and verify EVERY answer is a public IP.
+// String-only hostname checks miss DNS rebinding and decimal/hex IPv4
+// encodings; only DNS resolution + per-IP allow-list is safe.
+const assertPublicHost = async (hostname: string): Promise<void> => {
   const lower = hostname.toLowerCase();
-  if (lower === 'localhost' || lower === '127.0.0.1' || lower === '::1' || lower === '0.0.0.0') {
-    return true;
+  if (lower === 'localhost' || lower === 'localhost.localdomain') {
+    throw new Error('Private network URLs are not allowed.');
   }
-  // IPv4 private ranges
-  const ipv4 = lower.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const a = Number(ipv4[1]);
-    const b = Number(ipv4[2]);
-    if (a === 10) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 169 && b === 254) return true; // link-local
+  // If the host is already a literal IP, validate directly.
+  if (isIP(lower) !== 0) {
+    if (isBlockedIp(lower)) throw new Error('Private network URLs are not allowed.');
+    return;
   }
-  return false;
+  // Otherwise resolve A and AAAA and ensure all returned IPs are public.
+  let answers: string[] = [];
+  try {
+    const [a, aaaa] = await Promise.allSettled([
+      dns.resolve4(lower),
+      dns.resolve6(lower),
+    ]);
+    if (a.status === 'fulfilled') answers.push(...a.value);
+    if (aaaa.status === 'fulfilled') answers.push(...aaaa.value);
+  } catch {
+    /* fall through; below handles empty answers */
+  }
+  if (answers.length === 0) {
+    throw new Error('Could not resolve URL hostname.');
+  }
+  for (const ip of answers) {
+    if (isBlockedIp(ip)) throw new Error('Private network URLs are not allowed.');
+  }
 };
 
 const cleanPdfText = (raw: string): string => {
@@ -69,10 +119,8 @@ const cleanHtmlText = (raw: string): string => {
 };
 
 export default async function importRoutes(fastify: FastifyInstance) {
-  // Auth runs as onRequest (before preParsing) so multipart never starts
-  // streaming a body for an unauthenticated caller — otherwise we'd happily
-  // buffer up to MAX_FILE_BYTES before checking the bearer token.
-  fastify.addHook('onRequest', verifyFirebaseAuth);
+  // Auth and rate-limit are configured at the /import prefix scope in
+  // app.ts so multipart never streams a body for an unauthenticated caller.
 
   await fastify.register(multipart, {
     limits: {
@@ -153,37 +201,77 @@ export default async function importRoutes(fastify: FastifyInstance) {
         return replyError(reply, 400, 'Invalid or unreachable URL.');
       }
 
-      if (isPrivateHost(parsedUrl.hostname)) {
-        return replyError(reply, 400, 'Private network URLs are not allowed.');
+      try {
+        await assertPublicHost(parsedUrl.hostname);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Private network URLs are not allowed.';
+        return replyError(reply, 400, message);
       }
 
       const controller = new AbortController();
-      const startedAt = Date.now();
       const timeoutId = setTimeout(() => controller.abort(), URL_FETCH_TIMEOUT_MS);
-      const remaining = () => Math.max(0, URL_FETCH_TIMEOUT_MS - (Date.now() - startedAt));
 
       let html: string;
       try {
-        const response = await fetch(parsedUrl.toString(), {
-          headers: { 'User-Agent': 'Buildcase/1.0 (content import)' },
-          signal: controller.signal,
-        });
+        // Fetch with manual redirect — every redirect target's hostname must
+        // pass the same DNS-resolved public-IP check before we follow it.
+        let currentUrl = parsedUrl;
+        let response: Response | null = null;
+        for (let hop = 0; hop < 5; hop += 1) {
+          const r = await fetch(currentUrl.toString(), {
+            headers: { 'User-Agent': 'Buildcase/1.0 (content import)' },
+            signal: controller.signal,
+            redirect: 'manual',
+          });
+          if (r.status >= 300 && r.status < 400) {
+            const loc = r.headers.get('location');
+            if (!loc) {
+              return replyError(reply, 400, 'Could not fetch that URL.');
+            }
+            const next = new URL(loc, currentUrl);
+            if (next.protocol !== 'http:' && next.protocol !== 'https:') {
+              return replyError(reply, 400, 'Redirect to non-http(s) URL refused.');
+            }
+            await assertPublicHost(next.hostname);
+            currentUrl = next;
+            continue;
+          }
+          response = r;
+          break;
+        }
 
-        if (!response.ok) {
+        if (!response || !response.ok) {
           return replyError(reply, 400, 'Could not fetch that URL.');
         }
 
-        // Bound the body read by the same overall timeout — the fetch signal
-        // covers metadata, but slow streams could still hang past 10s.
-        html = await Promise.race<string>([
-          response.text(),
-          new Promise<string>((_, reject) =>
-            setTimeout(() => {
-              controller.abort();
-              reject(new DOMException('Body read timed out', 'AbortError'));
-            }, remaining())
-          ),
-        ]);
+        // Read the body with a hard byte cap to prevent unbounded memory
+        // growth, and stop early if it would exceed the limit.
+        const reader = response.body?.getReader();
+        if (!reader) {
+          html = '';
+        } else {
+          const chunks: Uint8Array[] = [];
+          let total = 0;
+          try {
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) {
+                total += value.byteLength;
+                if (total > MAX_URL_BODY_BYTES) {
+                  controller.abort();
+                  await reader.cancel().catch(() => undefined);
+                  return replyError(reply, 413, 'URL body too large.');
+                }
+                chunks.push(value);
+              }
+            }
+          } finally {
+            await reader.cancel().catch(() => undefined);
+          }
+          html = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf-8');
+        }
       } catch (error) {
         const isAbort = error instanceof Error && error.name === 'AbortError';
         if (isAbort) {
@@ -280,6 +368,7 @@ export default async function importRoutes(fastify: FastifyInstance) {
           : msg.ts;
         const sender = msg.user ?? 'unknown';
         // Strip control chars except \n (\x0A) so multi-line messages stay legible.
+        // eslint-disable-next-line no-control-regex
         const sanitized = text.replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, '');
         const line = `[${iso}] @${sender}: ${sanitized}`;
         const lineBytes = Buffer.byteLength(line, 'utf-8') + 1;

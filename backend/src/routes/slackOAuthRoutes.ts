@@ -1,7 +1,9 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
+import { z } from 'zod';
 import { getFirebaseFirestore } from '../lib/firebaseAdmin.js';
+import { verifyFirebaseAuth } from '../lib/firebaseAuth.js';
 import { encryptToken, decryptToken } from '../lib/tokenCrypto.js';
 import {
   exchangeOAuthCode,
@@ -68,19 +70,32 @@ const BOT_SCOPES = [
   'team:read',
 ].join(',');
 
+const channelsBodySchema = z.object({
+  teamId: z.string().min(1),
+  selectedChannels: z.array(z.string().min(1)).max(500),
+});
+
+const backfillBodySchema = z.object({
+  teamId: z.string().min(1),
+  limit: z.number().int().min(1).max(1000).optional(),
+});
+
+const teamIdQuerySchema = z.object({
+  teamId: z.string().min(1),
+});
+
 export default async function slackOAuthRoutes(fastify: FastifyInstance) {
-  // GET /auth/slack/install?userId=...
-  // User clicks "Connect Slack" on frontend, frontend navigates here.
-  // We sign a state token with their userId and redirect to Slack.
-  fastify.get(
+  // POST /auth/slack/install
+  // Authenticated. We derive userId from the verified ID token (never trust
+  // the client to tell us who they are), sign a state token, and return the
+  // OAuth URL for the frontend to redirect to.
+  fastify.post(
     '/install',
-    async (
-      request: FastifyRequest<{ Querystring: { userId?: string } }>,
-      reply: FastifyReply
-    ) => {
-      const { userId } = request.query;
+    { preHandler: verifyFirebaseAuth },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = request.userId;
       if (!userId) {
-        return reply.code(400).send({ ok: false, error: 'userId query param required' });
+        return reply.code(401).send({ ok: false, error: 'unauthorized' });
       }
       const clientId = process.env.SLACK_CLIENT_ID;
       const redirectUri = process.env.SLACK_REDIRECT_URI;
@@ -93,7 +108,7 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
       url.searchParams.set('scope', BOT_SCOPES);
       url.searchParams.set('redirect_uri', redirectUri);
       url.searchParams.set('state', state);
-      return reply.redirect(url.toString());
+      return { ok: true, authorizeUrl: url.toString() };
     }
   );
 
@@ -165,44 +180,48 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
     }
   );
 
-  // GET /auth/slack/channels?userId=...&teamId=...
-  // Lists channels from this user's connected workspace.
-  fastify.get(
+  // GET /auth/slack/channels?teamId=...
+  // Authenticated. Lists channels from the calling user's workspace.
+  fastify.get<{ Querystring: { teamId?: string } }>(
     '/channels',
-    async (
-      request: FastifyRequest<{ Querystring: { userId?: string; teamId?: string } }>,
-      reply: FastifyReply
-    ) => {
-      const { userId, teamId } = request.query;
-      if (!userId || !teamId) {
-        return reply.code(400).send({ ok: false, error: 'userId and teamId required' });
+    { preHandler: verifyFirebaseAuth },
+    async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) return reply.code(401).send({ ok: false, error: 'unauthorized' });
+      const parsed = teamIdQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(400).send({ ok: false, error: 'teamId required' });
       }
       try {
-        const token = await getDecryptedBotToken(userId, teamId);
+        const token = await getDecryptedBotToken(userId, parsed.data.teamId);
         const channels = await listChannels(token);
         return { ok: true, channels };
       } catch (err) {
         request.log.error({ err }, 'list channels failed');
-        return reply.code(500).send({ ok: false, error: (err as Error).message });
+        return reply.code(500).send({ ok: false, error: 'failed to list channels' });
       }
     }
   );
 
   // POST /auth/slack/channels
-  // Saves the user's selected channel IDs for a workspace.
+  // Authenticated. Saves the calling user's selected channel IDs.
   fastify.post(
     '/channels',
-    async (
-      request: FastifyRequest<{
-        Body: { userId: string; teamId: string; selectedChannels: string[] };
-      }>,
-      reply: FastifyReply
-    ) => {
-      const { userId, teamId, selectedChannels } = request.body;
-      if (!userId || !teamId || !Array.isArray(selectedChannels)) {
-        return reply.code(400).send({ ok: false, error: 'userId, teamId, selectedChannels required' });
+    { preHandler: verifyFirebaseAuth },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = request.userId;
+      if (!userId) return reply.code(401).send({ ok: false, error: 'unauthorized' });
+      const parsed = channelsBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ ok: false, error: 'invalid body', details: parsed.error.flatten() });
       }
+      const { teamId, selectedChannels } = parsed.data;
       const firestore = getFirebaseFirestore();
+      // Confirm the workspace doc actually belongs to this user before writing.
+      const wsSnap = await firestore.doc(`users/${userId}/slackWorkspaces/${teamId}`).get();
+      if (!wsSnap.exists) {
+        return reply.code(404).send({ ok: false, error: 'workspace not connected' });
+      }
       await firestore.doc(`users/${userId}/slackWorkspaces/${teamId}`).set(
         { selectedChannels, updatedAt: FieldValue.serverTimestamp() },
         { merge: true }
@@ -212,21 +231,19 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
   );
 
   // POST /auth/slack/backfill
-  // Pulls historical messages from the user's selected channels and writes them
-  // to slackMessages/{teamId}_{slackTs}. Idempotent (set with merge).
+  // Authenticated. Pulls history for the calling user's selected channels.
   fastify.post(
     '/backfill',
-    async (
-      request: FastifyRequest<{
-        Body: { userId: string; teamId: string; limit?: number };
-      }>,
-      reply: FastifyReply
-    ) => {
-      const { userId, teamId, limit: rawLimit = 100 } = request.body;
-      const limit = Math.min(Math.max(1, Number(rawLimit) || 100), 1000);
-      if (!userId || !teamId) {
-        return reply.code(400).send({ ok: false, error: 'userId and teamId required' });
+    { preHandler: verifyFirebaseAuth },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = request.userId;
+      if (!userId) return reply.code(401).send({ ok: false, error: 'unauthorized' });
+      const parsed = backfillBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ ok: false, error: 'invalid body', details: parsed.error.flatten() });
       }
+      const { teamId, limit: rawLimit = 100 } = parsed.data;
+      const limit = Math.min(Math.max(1, Number(rawLimit) || 100), 1000);
       try {
         const firestore = getFirebaseFirestore();
         const wsSnap = await firestore.doc(`users/${userId}/slackWorkspaces/${teamId}`).get();
@@ -282,24 +299,24 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
         return { ok: true, ingested: totalIngested, errors };
       } catch (err) {
         request.log.error({ err }, 'backfill failed');
-        return reply.code(500).send({ ok: false, error: (err as Error).message });
+        return reply.code(500).send({ ok: false, error: 'backfill failed' });
       }
     }
   );
 
-  // DELETE /auth/slack/disconnect?userId=...&teamId=...
-  // Removes workspace metadata + encrypted token. (Slack-side app stays installed
-  // until user removes it from their Slack workspace settings.)
-  fastify.delete(
+  // DELETE /auth/slack/disconnect?teamId=...
+  // Authenticated. Removes the calling user's workspace + encrypted token.
+  fastify.delete<{ Querystring: { teamId?: string } }>(
     '/disconnect',
-    async (
-      request: FastifyRequest<{ Querystring: { userId?: string; teamId?: string } }>,
-      reply: FastifyReply
-    ) => {
-      const { userId, teamId } = request.query;
-      if (!userId || !teamId) {
-        return reply.code(400).send({ ok: false, error: 'userId and teamId required' });
+    { preHandler: verifyFirebaseAuth },
+    async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) return reply.code(401).send({ ok: false, error: 'unauthorized' });
+      const parsed = teamIdQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(400).send({ ok: false, error: 'teamId required' });
       }
+      const { teamId } = parsed.data;
       const firestore = getFirebaseFirestore();
       await firestore.doc(`users/${userId}/slackWorkspaces/${teamId}`).delete();
       const tokenSnap = await firestore.doc(`slackInstallations/${teamId}`).get();

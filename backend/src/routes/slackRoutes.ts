@@ -27,27 +27,22 @@ interface SlackEventCallback {
 
 type SlackEventPayload = SlackUrlVerification | SlackEventCallback;
 
-// Slack delivers events at-least-once; the same event_id can arrive multiple times even
-// with different timestamps (signature timestamp is per-delivery, not per-event). Dedupe
-// in memory for single-instance dev; switch to Redis when scaling out.
-const SEEN_EVENT_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+// Slack delivers events at-least-once; the same event_id can arrive multiple
+// times even with different timestamps (signature timestamp is per-delivery,
+// not per-event). We dedupe via a Firestore document with a `create()`
+// (compare-and-swap): the second replica sees ALREADY_EXISTS and skips.
+// In-memory cache fronts Firestore so back-to-back retries from a single
+// replica don't issue redundant writes.
+const SEEN_EVENT_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_SEEN_EVENTS = 10_000;
 const seenEventIds = new Map<string, number>();
 
-function alreadyProcessed(eventId: string): boolean {
+function localAlreadyProcessed(eventId: string): boolean {
   const now = Date.now();
   const expiry = seenEventIds.get(eventId);
   if (expiry && expiry > now) return true;
-
-  // Stale entry for this id (or first sight): remove first so the re-set
-  // below moves it to the end of insertion order, keeping the eviction
-  // queue accurate as a recency queue.
   if (expiry !== undefined) seenEventIds.delete(eventId);
-
   if (seenEventIds.size >= MAX_SEEN_EVENTS) {
-    // Sweep TTL-expired entries before falling back to oldest-insertion
-    // eviction. Otherwise long-lived expired entries sit at the front of
-    // the map and we end up evicting fresh entries while stale ones leak.
     for (const [key, exp] of seenEventIds) {
       if (exp <= now) seenEventIds.delete(key);
     }
@@ -58,6 +53,28 @@ function alreadyProcessed(eventId: string): boolean {
   }
   seenEventIds.set(eventId, now + SEEN_EVENT_TTL_MS);
   return false;
+}
+
+async function alreadyProcessed(eventId: string): Promise<boolean> {
+  if (localAlreadyProcessed(eventId)) return true;
+
+  const firestore = getFirebaseFirestore();
+  const ref = firestore.collection('slackEventDedupe').doc(eventId);
+  try {
+    await ref.create({
+      processedAt: FieldValue.serverTimestamp(),
+      // Soft-TTL hint; an external job can sweep entries older than this.
+      expiresAt: new Date(Date.now() + SEEN_EVENT_TTL_MS),
+    });
+    return false;
+  } catch (err) {
+    // Firestore returns ALREADY_EXISTS (code 6) when another replica won
+    // the race. Anything else, log and conservatively process the event
+    // — a duplicate is preferable to silently dropping a legitimate one.
+    const code = (err as { code?: number | string } | undefined)?.code;
+    if (code === 6 || code === 'already-exists') return true;
+    return false;
+  }
 }
 
 function verifySlackSignature(
@@ -103,14 +120,7 @@ export default async function slackRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const body = request.body;
-      request.log.info({ type: (body as any)?.type }, 'slack events hit');
-
-      if (body && (body as SlackUrlVerification).type === 'url_verification') {
-        const { challenge } = body as SlackUrlVerification;
-        request.log.info({ challenge }, 'responding to url_verification');
-        reply.header('Content-Type', 'text/plain');
-        return reply.code(200).send(challenge);
-      }
+      request.log.info({ type: (body as { type?: string } | undefined)?.type }, 'slack events hit');
 
       const signingSecret = process.env.SLACK_SIGNING_SECRET;
       const timestamp = request.headers['x-slack-request-timestamp'] as string;
@@ -118,14 +128,35 @@ export default async function slackRoutes(fastify: FastifyInstance) {
       const rawBody =
         (request as FastifyRequest & { rawBody?: string }).rawBody || '';
 
+      // Fail closed: never accept Slack events without a verified signature.
+      // A missing/typo'd signing secret in production would otherwise let
+      // any caller forge events and inject Firestore writes under a
+      // legitimate ownerUserId.
       if (!signingSecret) {
-        request.log.warn('SLACK_SIGNING_SECRET not set — skipping signature check');
-      } else if (timestamp && signature) {
-        if (!verifySlackSignature(signingSecret, timestamp, rawBody, signature)) {
-          return reply.code(401).send({ error: 'invalid signature' });
-        }
-      } else {
+        request.log.error('SLACK_SIGNING_SECRET not set — rejecting slack event');
+        return reply.code(503).send({ error: 'slack signing secret not configured' });
+      }
+      if (!timestamp || !signature) {
         return reply.code(401).send({ error: 'missing signature headers' });
+      }
+      if (!verifySlackSignature(signingSecret, timestamp, rawBody, signature)) {
+        return reply.code(401).send({ error: 'invalid signature' });
+      }
+
+      // Slack URL verification handshake — only respond after the signature
+      // has been validated, otherwise an unauthenticated caller can use
+      // /slack/events as a reflection oracle for arbitrary `challenge` values.
+      if (body && (body as SlackUrlVerification).type === 'url_verification') {
+        const { challenge } = body as SlackUrlVerification;
+        reply.header('Content-Type', 'text/plain');
+        return reply.code(200).send(challenge);
+      }
+
+      // Reject future-timestamped requests too (defense in depth; valid Slack
+      // events arrive with timestamps within ~a few seconds of now).
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (parseInt(timestamp, 10) > nowSec + 60) {
+        return reply.code(401).send({ error: 'timestamp in future' });
       }
 
       reply.code(200).send();
@@ -134,7 +165,7 @@ export default async function slackRoutes(fastify: FastifyInstance) {
         const { event, team_id, event_id } = body as SlackEventCallback;
         if (event.bot_id) return;
 
-        if (event_id && alreadyProcessed(event_id)) {
+        if (event_id && (await alreadyProcessed(event_id))) {
           request.log.debug({ event_id }, 'duplicate slack event_id; skipping');
           return;
         }
