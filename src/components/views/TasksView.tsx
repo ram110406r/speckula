@@ -95,37 +95,40 @@ export function TasksView() {
       // Step 3: Intelligently prioritize
       const prioritizedTasks = await intelligentPrioritizeAction(tasksWithMetadata, deps);
       
-      // Step 4: Save all tasks to Firestore
-      const savedTaskIds: string[] = [];
-      const taskRefsToUpdate: Array<{ id: string; dependsOn: string[] }> = [];
-      
-      // First pass: Save all tasks without dependencies
+      // Step 4: Save all tasks to Firestore in two passes.
+      //
+      // First pass: persist every task with `dependsOn: []` so all of them
+      // exist before we reference each other. Forward dependencies (a task
+      // whose dep index is greater than its own position) require this —
+      // the previous one-pass approach silently dropped them because the
+      // dependent's persisted id wasn't yet known when we tried to read it.
+      const savedTaskIds: string[] = new Array(prioritizedTasks.length);
       for (let i = 0; i < prioritizedTasks.length; i++) {
         const task = prioritizedTasks[i];
-        const dep = deps.find(d => d.taskIndex === i);
-        
         const docRef = await saveTask(user.uid, {
           ...task,
           status: "todo",
           prdId: prd.id,
           sourceDocId: currentDocId ?? undefined,
-          dependsOn: []
+          dependsOn: [],
         });
-        
         savedTaskIds[i] = docRef.id;
-        
-        // Track dependencies for second pass
-        if (dep?.dependsOnIndices.length) {
-          taskRefsToUpdate.push({
-            id: docRef.id,
-            dependsOn: dep.dependsOnIndices.map(idx => savedTaskIds[idx]).filter(Boolean)
-          });
-        }
       }
-      
-      // Second pass: Update tasks with correct dependency IDs
-      for (const { id, dependsOn } of taskRefsToUpdate) {
-        await updateTask(user.uid, id, { dependsOn });
+
+      // Second pass: now that all ids are known, resolve dependencies in
+      // both directions. Bounds-check dep indices against tasks length so
+      // a model returning a stray index doesn't cause an "undefined" id
+      // to leak into Firestore.
+      for (let i = 0; i < prioritizedTasks.length; i++) {
+        const dep = deps.find((d) => d.taskIndex === i);
+        if (!dep?.dependsOnIndices?.length) continue;
+        const dependsOn = dep.dependsOnIndices
+          .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < prioritizedTasks.length && idx !== i)
+          .map((idx) => savedTaskIds[idx])
+          .filter(Boolean);
+        if (dependsOn.length > 0) {
+          await updateTask(user.uid, savedTaskIds[i], { dependsOn });
+        }
       }
 
       await fetchTasks();

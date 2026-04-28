@@ -94,11 +94,24 @@ export function SidebarNav() {
   const [isDarkMode, setIsDarkMode] = React.useState(false);
 
   React.useEffect(() => {
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = (isDark: boolean) => {
+      setIsDarkMode(isDark);
+      document.documentElement.classList.toggle("dark", isDark);
+    };
     const stored = window.localStorage.getItem("buildcase-theme");
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextIsDark = stored ? stored === "dark" : systemDark;
-    setIsDarkMode(nextIsDark);
-    document.documentElement.classList.toggle("dark", nextIsDark);
+    apply(stored ? stored === "dark" : mql.matches);
+
+    // Respond to OS theme changes when the user has no explicit override —
+    // otherwise the app drifts out of sync with the system after a session
+    // because the initial computation is one-shot.
+    const onChange = (event: MediaQueryListEvent) => {
+      const latestStored = window.localStorage.getItem("buildcase-theme");
+      if (latestStored) return;
+      apply(event.matches);
+    };
+    mql.addEventListener?.("change", onChange);
+    return () => mql.removeEventListener?.("change", onChange);
   }, []);
 
   const toggleTheme = () => {
@@ -108,29 +121,47 @@ export function SidebarNav() {
     window.localStorage.setItem("buildcase-theme", nextIsDark ? "dark" : "light");
   };
 
-  // Sync Documents from Firestore
+  const [docsError, setDocsError] = React.useState<string | null>(null);
+
+  // Sync Documents from Firestore. We use a `cancelled` flag rather than
+  // an AbortController because the firebase-js SDK's getDocs doesn't
+  // accept a signal — but we still need to drop a stale response that
+  // arrives after the user signs out and back in as a different account.
   useEffect(() => {
     if (!user) {
       setDocuments([]);
+      setDocsError(null);
       return;
     }
 
+    let cancelled = false;
     const fetchDocs = async () => {
       try {
         const docs = await getUserDocuments(user.uid);
+        if (cancelled) return;
         setDocuments(docs);
-        
-        // Auto-select first doc if none selected
+        setDocsError(null);
+
         if (docs.length > 0 && !currentDocId) {
           setCurrentDocId(docs[0].id);
         }
       } catch (error) {
+        if (cancelled) return;
         console.error("[SidebarNav] Failed to fetch documents:", error);
         setDocuments([]);
+        const message = error instanceof Error ? error.message : "";
+        setDocsError(
+          /permission-denied|insufficient permission/i.test(message)
+            ? "Couldn't load your documents — Firestore rules denied the read. Check that you're signed in to the right account."
+            : "Couldn't load your documents — try reloading."
+        );
       }
     };
 
     fetchDocs();
+    return () => {
+      cancelled = true;
+    };
   }, [user, setDocuments, currentDocId, setCurrentDocId]);
 
   const handleNewDoc = async () => {
@@ -291,8 +322,13 @@ export function SidebarNav() {
             );
           })}
 
-            {user && documents.length === 0 && !isCreating && (
+            {user && documents.length === 0 && !isCreating && !docsError && (
               <p className="px-3 py-3 text-xs text-muted-foreground">No documents yet.</p>
+            )}
+            {user && docsError && (
+              <p className="mx-2 my-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                {docsError}
+              </p>
             )}
           </div>
         </div>

@@ -155,7 +155,13 @@ export function TipTapEditor() {
   const acceptInlineSuggestion = React.useCallback(() => {
     if (!editor || !inlineSuggestion) return;
 
-    const suggestionText = (inlineSuggestion.suggestions ?? inlineSuggestion.next_steps)[0];
+    // Prefer `suggestions` (free-form completions) over `next_steps`
+    // (questions / planning prompts). We fall back to next_steps only
+    // when there is no completion available.
+    const candidates = inlineSuggestion.suggestions?.length
+      ? inlineSuggestion.suggestions
+      : inlineSuggestion.next_steps;
+    const suggestionText = candidates[0];
     if (!suggestionText) return;
 
     const replacement = inlineSuggestion.stage === "problem" || inlineSuggestion.stage === "metrics"
@@ -313,6 +319,7 @@ export function TipTapEditor() {
       updateInlinePosition();
 
       triggerAISuggestion({
+        sessionKey: currentDocId,
         text: fullText,
         cursorPos: cursorOffset,
         learning: getLearningProfile(),
@@ -350,7 +357,7 @@ export function TipTapEditor() {
     editor.on("selectionUpdate", requestInlineSuggestion);
 
     return () => {
-      cancelAISuggestionTrigger();
+      cancelAISuggestionTrigger(currentDocId);
       editor.off("update", requestInlineSuggestion);
       editor.off("selectionUpdate", requestInlineSuggestion);
     };
@@ -367,6 +374,16 @@ export function TipTapEditor() {
       }
 
       if (event.key === "Tab" && inlineSuggestion) {
+        // Don't hijack Tab when the cursor is inside a list — ProseMirror
+        // uses Tab/Shift-Tab there for indent/outdent and stealing it
+        // breaks list editing.
+        if (
+          editor.isActive("bulletList") ||
+          editor.isActive("orderedList") ||
+          editor.isActive("taskList")
+        ) {
+          return;
+        }
         event.preventDefault();
         acceptInlineSuggestion();
       }
@@ -380,11 +397,14 @@ export function TipTapEditor() {
   }, [editor, inlineSuggestion, isInlineThinking, dismissInlineSuggestion, acceptInlineSuggestion]);
 
   React.useEffect(() => {
-    if (!editor || !pendingInsertion) return;
+    // Wait until the editor is mounted AND any in-flight loadContent() has
+    // settled — otherwise we can insert into a doc whose content is about
+    // to be replaced.
+    if (!editor || !pendingInsertion || isLoadingContent) return;
 
     editor.chain().focus().insertContent(`\n\n${pendingInsertion}\n\n`).run();
     setPendingInsertion(null);
-  }, [editor, pendingInsertion, setPendingInsertion]);
+  }, [editor, pendingInsertion, setPendingInsertion, isLoadingContent]);
 
   React.useEffect(() => {
     if (!editor || !pendingImport || !currentDocId || isLoadingContent) return;
@@ -401,14 +421,19 @@ export function TipTapEditor() {
     const contentText = editor.getText().trim();
     if (contentText.length < 120) return;
 
-    const currentHash = contentText;
+    // FNV-1a 32-bit hash; we only need a stable short fingerprint, not crypto.
+    let h = 0x811c9dc5;
+    for (let i = 0; i < contentText.length; i += 1) {
+      h ^= contentText.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    const currentHash = `${(h >>> 0).toString(16)}:${contentText.length}`;
     if (lastExtractedHashRef.current === currentHash) return;
 
-    if (extractTimerRef.current) {
-      window.clearTimeout(extractTimerRef.current);
-    }
-
-    extractTimerRef.current = window.setTimeout(async () => {
+    // Local timer captured by this effect run. The cleanup clears it
+    // exclusively, avoiding the singleton-ref clobber pattern where a
+    // newer render would race-clear an older render's pending timer.
+    let timer: number | null = window.setTimeout(async () => {
       if (!isMountedRef.current) return;
       setIsAutoExtracting(true);
       try {
@@ -425,38 +450,48 @@ export function TipTapEditor() {
         if (isMountedRef.current) setIsAutoExtracting(false);
       }
     }, 4000);
+    extractTimerRef.current = timer;
 
     return () => {
-      if (extractTimerRef.current) {
-        window.clearTimeout(extractTimerRef.current);
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
       }
     };
   }, [editor, user, currentDocId, isLoadingContent]);
 
   // Debounced auto-save: triggers on editor edits, and flushes on unmount /
   // doc-switch so view changes don't drop unsaved content.
+  //
+  // Doc-switch race fix: we capture a snapshot of the editor JSON on every
+  // user-driven update into `pendingContentRef`, keyed by the docId at the
+  // moment of the update. The cleanup flush reads that snapshot — never
+  // `editor.getJSON()` directly — because by cleanup time the editor's
+  // current content may already belong to the next doc.
   React.useEffect(() => {
     if (!editor || !user || !currentDocId || isLoadingContent) return;
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
-    let dirty = false;
     let saving = false;
+    // The most recent user-edited content snapshot for THIS doc. null means
+    // no unsaved edits since this effect started.
+    let pendingSnapshot: { docId: string; content: object; title: string } | null = null;
 
     const flush = async () => {
-      if (!dirty || saving) return;
+      if (!pendingSnapshot || saving) return;
+      const snapshot = pendingSnapshot;
+      pendingSnapshot = null;
       saving = true;
-      dirty = false;
       if (isMountedRef.current) setIsSaving(true);
       try {
-        const latestDocs = useAppStore.getState().documents;
-        const currentDoc = latestDocs.find(d => d.id === currentDocId);
-        await saveDocument(user.uid, currentDocId, {
-          content: editor.getJSON(),
-          title: currentDoc?.title || "Untitled Document",
+        await saveDocument(user.uid, snapshot.docId, {
+          content: snapshot.content,
+          title: snapshot.title,
         });
       } catch (error) {
         console.error("Failed to auto-save:", error);
-        dirty = true;
+        // Reinstate the snapshot so the next flush retries.
+        pendingSnapshot = snapshot;
       } finally {
         saving = false;
         setTimeout(() => {
@@ -469,7 +504,13 @@ export function TipTapEditor() {
       // Programmatic content swaps during doc-switch fire `update` too — those
       // are not user edits and must not mark the doc dirty.
       if (isLoadingContentRef.current) return;
-      dirty = true;
+      const latestDocs = useAppStore.getState().documents;
+      const currentDoc = latestDocs.find(d => d.id === currentDocId);
+      pendingSnapshot = {
+        docId: currentDocId,
+        content: editor.getJSON(),
+        title: currentDoc?.title || "Untitled Document",
+      };
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(flush, 2000);
     };
@@ -482,9 +523,10 @@ export function TipTapEditor() {
         clearTimeout(saveTimer);
         saveTimer = null;
       }
-      // Flush any pending edits before unmount/doc-switch. Fire-and-forget;
-      // the Firestore SDK queues the write internally so it survives unmount.
-      if (dirty) void flush();
+      // Flush any pending edits captured for THIS doc before unmount/doc-switch.
+      // Fire-and-forget; the Firestore SDK queues the write internally so it
+      // survives unmount.
+      if (pendingSnapshot) void flush();
     };
   }, [editor, user, currentDocId, setIsSaving, isLoadingContent]);
 

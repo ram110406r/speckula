@@ -202,12 +202,12 @@ export function DecisionView() {
           decisionId: decision.decisionId,
           success,
           expected: {
-            target_value: state.expected.trim(),
+            target_value: Number(state.expected),
             metric: "",
             timeframe: "",
           },
           actual: {
-            value: state.actual.trim(),
+            value: Number(state.actual),
             metric: "",
             observedAt: new Date().toISOString(),
           },
@@ -347,29 +347,17 @@ export function DecisionView() {
       setLearningInsight(null);
       setComparison(null);
 
-      const scored = await Promise.all(
+      // Score each decision, then persist to Firestore and use the returned
+      // document id as the canonical decisionId. This way outcome feedback
+      // (written under users/{uid}/decisions/{id}/outcomes) actually
+      // attaches to a real persisted decision instead of an ephemeral UUID.
+      const scored: ScoredDecision[] = await Promise.all(
         data.map(async (decision) => {
           const breakdown = await generateOpportunityScore(`${decision.title}\n${decision.justification}\n${doc.content ? JSON.stringify(doc.content) : ""}`);
           const scoreValue = calculateScore(breakdown);
-          return {
-            ...decision,
-            decisionId:
-              typeof crypto !== "undefined" && crypto.randomUUID
-                ? crypto.randomUUID()
-                : `${currentDocId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            scoreBreakdown: breakdown,
-            score: scoreValue,
-          } satisfies ScoredDecision;
-        })
-      );
-      setFeedbackByCard({});
-
-      setScoredSuggestions(scored.sort((left, right) => right.score - left.score));
-
-      try {
-        await Promise.all(
-          scored.map((decision) =>
-            saveDecision(user.uid, {
+          let persistedId: string;
+          try {
+            persistedId = await saveDecision(user.uid, {
               title: decision.title,
               justification: decision.justification,
               priority: decision.priority,
@@ -378,12 +366,28 @@ export function DecisionView() {
               userStory: decision.userStory,
               tradeoffs: decision.tradeoffs,
               strategyTheme: guidance.theme,
-            })
-          )
-        );
-      } catch (persistError) {
-        console.error("Decision persistence failed:", persistError);
-      }
+            });
+          } catch (persistError) {
+            console.error("Decision persistence failed:", persistError);
+            // Fall back to a client-only id so the UI still renders;
+            // outcome feedback will fail later with a clear error rather
+            // than silently writing to a stale top-level path.
+            persistedId =
+              typeof crypto !== "undefined" && crypto.randomUUID
+                ? crypto.randomUUID()
+                : `${currentDocId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          }
+          return {
+            ...decision,
+            decisionId: persistedId,
+            scoreBreakdown: breakdown,
+            score: scoreValue,
+          } satisfies ScoredDecision;
+        })
+      );
+      setFeedbackByCard({});
+
+      setScoredSuggestions(scored.sort((left, right) => right.score - left.score));
     } catch (error) {
       console.error("Decision generation failed:", error);
       alert("AI decision engine failed to generate suggestions.");
@@ -447,19 +451,24 @@ export function DecisionView() {
     }
 
     try {
-      const insight = await generateLearningInsight(
-        JSON.stringify({ expected: expected.expected, actual: actual.actual, comparison: nextComparison }),
-        {
-          target_value: String(expected.expected.target_value),
+      const insight = await generateLearningInsight({
+        decisionLabel: scoreSummary?.reasoning?.slice(0, 80) || expected.expected.metric,
+        contextNarrative: JSON.stringify({
+          expected: expected.expected,
+          actual: actual.actual,
+          comparison: nextComparison,
+        }),
+        expected: {
           metric: expected.expected.metric,
+          target_value: Number(expected.expected.target_value),
           timeframe: expected.expected.timeframe,
         },
-        {
-          value: String(actual.actual.value),
+        actual: {
           metric: actual.actual.metric,
-          observedAt: new Date(actual.actual.timestamp).toISOString(),
-        }
-      );
+          value: Number(actual.actual.value),
+          observedAt: new Date().toISOString(),
+        },
+      });
       setLearningInsight(insight);
       setOutcomeLoop({
         expectedOutcome: expected.expected,

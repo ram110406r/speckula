@@ -23,6 +23,19 @@ import {
 } from "@/lib/firebase/db";
 import { importFromSlack } from "@/lib/ai/actions";
 import { useAppStore } from "@/store/useAppStore";
+import { auth } from "@/lib/firebase/config";
+
+async function authedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const current = auth.currentUser;
+  if (!current) throw new Error("not authenticated");
+  const token = await current.getIdToken();
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  if (init.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  return fetch(url, { ...init, headers });
+}
 
 interface SlackChannel {
   id: string;
@@ -89,7 +102,8 @@ export function SlackView() {
     }
     url.searchParams.delete("slack");
     url.searchParams.delete("teamId");
-    window.history.replaceState({}, "", url.pathname + (url.search ? "?" + url.searchParams : ""));
+    const remaining = url.searchParams.toString();
+    window.history.replaceState({}, "", url.pathname + (remaining ? `?${remaining}` : ""));
   }, []);
 
   const activeWorkspace = useMemo(
@@ -97,12 +111,16 @@ export function SlackView() {
     [workspaces, activeTeamId]
   );
 
-  // Subscribe to messages for the active workspace
+  // Subscribe to messages for the active workspace.
+  // Clear the message list immediately on team switch so the previous
+  // workspace's messages don't bleed into the new one until the new
+  // snapshot arrives (Firestore subscription latency).
   useEffect(() => {
     if (!user || !activeTeamId) {
       setMessages([]);
       return;
     }
+    setMessages([]);
     const unsub = subscribeToSlackMessages(
       user.uid,
       (msgs) => setMessages(msgs),
@@ -118,9 +136,16 @@ export function SlackView() {
     return map;
   }, [channels]);
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (!user) return;
-    window.location.href = `${API_BASE}/auth/slack/install?userId=${encodeURIComponent(user.uid)}`;
+    try {
+      const res = await authedFetch(`${API_BASE}/auth/slack/install`, { method: "POST" });
+      const json = (await res.json()) as { ok: boolean; authorizeUrl?: string; error?: string };
+      if (!json.ok || !json.authorizeUrl) throw new Error(json.error || "install init failed");
+      window.location.href = json.authorizeUrl;
+    } catch (err) {
+      setStatusMessage(`Could not start Slack install: ${(err as Error).message}`);
+    }
   };
 
   const handleOpenChannelPicker = async () => {
@@ -128,8 +153,8 @@ export function SlackView() {
     setShowChannelPicker(true);
     setChannelsLoading(true);
     try {
-      const res = await fetch(
-        `${API_BASE}/auth/slack/channels?userId=${encodeURIComponent(user.uid)}&teamId=${encodeURIComponent(activeTeamId)}`
+      const res = await authedFetch(
+        `${API_BASE}/auth/slack/channels?teamId=${encodeURIComponent(activeTeamId)}`
       );
       const json = (await res.json()) as { ok: boolean; channels?: SlackChannel[]; error?: string };
       if (!json.ok) throw new Error(json.error || "Failed to list channels");
@@ -156,11 +181,9 @@ export function SlackView() {
     if (!user || !activeTeamId) return;
     setSavingChannels(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/slack/channels`, {
+      const res = await authedFetch(`${API_BASE}/auth/slack/channels`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: user.uid,
           teamId: activeTeamId,
           selectedChannels: Array.from(pickerSelection),
         }),
@@ -181,10 +204,9 @@ export function SlackView() {
     setBackfilling(true);
     setStatusMessage("Fetching message history…");
     try {
-      const res = await fetch(`${API_BASE}/auth/slack/backfill`, {
+      const res = await authedFetch(`${API_BASE}/auth/slack/backfill`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.uid, teamId: activeTeamId, limit: 200 }),
+        body: JSON.stringify({ teamId: activeTeamId, limit: 200 }),
       });
       const json = (await res.json()) as {
         ok: boolean;
@@ -231,8 +253,8 @@ export function SlackView() {
     if (!user || !activeTeamId) return;
     if (!confirm(`Disconnect ${activeWorkspace?.teamName ?? "this workspace"}? Existing messages stay in your account.`)) return;
     try {
-      const res = await fetch(
-        `${API_BASE}/auth/slack/disconnect?userId=${encodeURIComponent(user.uid)}&teamId=${encodeURIComponent(activeTeamId)}`,
+      const res = await authedFetch(
+        `${API_BASE}/auth/slack/disconnect?teamId=${encodeURIComponent(activeTeamId)}`,
         { method: "DELETE" }
       );
       const json = (await res.json()) as { ok: boolean; error?: string };
