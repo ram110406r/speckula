@@ -1,8 +1,8 @@
 // Thin wrappers around the Slack Web API. Throws on `ok: false` so callers can
 // catch a single error instead of branching on response shape.
 
-interface SlackOk<T> { ok: true; }
-type SlackResponse<T> = (SlackOk<T> & T) | { ok: false; error: string };
+interface SlackOk { ok: true; }
+type SlackResponse<T> = (SlackOk & T) | { ok: false; error: string };
 
 const SLACK_API = 'https://slack.com/api';
 

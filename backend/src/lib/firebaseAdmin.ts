@@ -39,8 +39,9 @@ export const getFirebaseApp = (): App => {
     return firebaseApp;
   }
 
-  if (getApps().length > 0) {
-    firebaseApp = getApps()[0];
+  const existing = getApps();
+  if (existing.length > 0) {
+    firebaseApp = existing[0];
     return firebaseApp;
   }
 
