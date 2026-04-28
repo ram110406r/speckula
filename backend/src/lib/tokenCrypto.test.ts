@@ -1,5 +1,3 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-
 // Use a deterministic test key. Real prod values must be longer/randomer.
 const TEST_KEY = 'test-encryption-key-with-enough-entropy-1234567890abcdef';
 
