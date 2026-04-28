@@ -4,25 +4,51 @@
 export const dynamic = 'force-dynamic';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+const PROXY_TIMEOUT_MS = 30_000;
+
+// Allow-list of segments we are willing to forward to the backend. Prevents
+// path-traversal-style abuse if the dynamic segment is ever populated by an
+// untrusted source.
+const VALID_SEGMENT = /^[a-zA-Z0-9_-]+$/;
 
 async function forward(req: Request, segments: string[]) {
   const auth = req.headers.get('authorization');
+  if (!auth) {
+    return new Response(JSON.stringify({ ok: false, error: 'Authorization header required.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    });
+  }
+
+  if (segments.length === 0 || !segments.every((s) => VALID_SEGMENT.test(s))) {
+    return new Response(JSON.stringify({ ok: false, error: 'Invalid path.' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const body = req.method === 'GET' ? undefined : await req.text();
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+  req.signal.addEventListener('abort', () => controller.abort(), { once: true });
 
   try {
     const upstream = await fetch(`${BACKEND_URL}/ai/${segments.join('/')}`, {
       method: req.method,
       headers: {
         'Content-Type': 'application/json',
-        ...(auth ? { authorization: auth } : {}),
+        authorization: auth,
       },
       body,
+      signal: controller.signal,
     });
 
     return new Response(upstream.body, {
       status: upstream.status,
       headers: {
         'Content-Type': upstream.headers.get('content-type') ?? 'application/json',
+        'Cache-Control': 'no-store',
       },
     });
   } catch (error) {
@@ -31,6 +57,8 @@ async function forward(req: Request, segments: string[]) {
       status: 502,
       headers: { 'Content-Type': 'application/json' },
     });
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

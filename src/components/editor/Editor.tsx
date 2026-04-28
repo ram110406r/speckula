@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { TipTapEditor } from "./TipTapEditor";
 import { useAppStore } from "@/store/useAppStore";
 import { PanelRightOpen, PanelRightClose, CircleDashed, ShieldAlert, FlaskConical, HelpCircle, Link2 } from "lucide-react";
@@ -34,26 +34,36 @@ export function Editor() {
 
   const isEmptyCanvas = activeContext.trim().length === 0;
 
+  // Per-doc auto-save of the title. Tracks the last persisted value per doc
+  // so we don't write on every render and we don't ping-pong against the
+  // sidebar's optimistic updates. Debounced 600ms.
+  const lastSavedTitleRef = useRef<{ docId: string | null; title: string }>({ docId: null, title: "" });
   useEffect(() => {
     if (!user || !currentDocId || !currentDoc) return;
 
-    const normalizedTitle = currentDoc.title.trim() || "Untitled Document";
-    if (normalizedTitle === currentDoc.title.trim()) return;
+    const desiredTitle = currentDoc.title.trim() || "Untitled Document";
+    // First time we see this doc, seed the ref with whatever's already in
+    // the document so we don't immediately re-save on doc switch.
+    if (lastSavedTitleRef.current.docId !== currentDocId) {
+      lastSavedTitleRef.current = { docId: currentDocId, title: desiredTitle };
+      return;
+    }
+    if (desiredTitle === lastSavedTitleRef.current.title) return;
 
-    const handler = setTimeout(async () => {
+    const handler = window.setTimeout(async () => {
       try {
-        const title = normalizedTitle;
-        await saveDocument(user.uid, currentDocId, { title });
-        setDocuments(documents.map(d =>
-          d.id === currentDocId ? { ...d, title } : d
-        ));
+        await saveDocument(user.uid, currentDocId, { title: desiredTitle });
+        lastSavedTitleRef.current = { docId: currentDocId, title: desiredTitle };
       } catch (error) {
         console.error("Failed to save title:", error);
       }
-    }, 500);
+    }, 600);
 
-    return () => clearTimeout(handler);
-  }, [currentDoc?.title, currentDocId, currentDoc, documents, setDocuments, user]);
+    return () => window.clearTimeout(handler);
+    // Intentionally NOT depending on `documents` — that array changes on
+    // every keystroke (handleTitleChange writes through it) and would clear
+    // the timer before it can ever fire.
+  }, [currentDoc?.title, currentDocId, currentDoc, user]);
 
   const handleTitleChange = (newTitle: string) => {
     if (!currentDocId) return;

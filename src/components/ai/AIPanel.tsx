@@ -42,17 +42,36 @@ export function AIPanel() {
   const lastAnalyzedRef = React.useRef("");
   const lastAnalyzedAtRef = React.useRef(0);
   const analyzeTimerRef = React.useRef<number | null>(null);
+  // Aborts the in-flight proactive-analysis fetch when the doc changes.
+  // Without this, a slow analysis from doc A would land setSignals into doc B.
+  const analyzeAbortRef = React.useRef<AbortController | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const streamAbortRef = React.useRef<AbortController | null>(null);
   const isMountedRef = React.useRef(true);
   const messageIdRef = React.useRef(0);
   const nextMessageId = React.useCallback(() => `msg-${++messageIdRef.current}`, []);
 
+  // Hard daily cap on proactive analyze calls per browser (defence-in-depth
+  // against backend cost. The backend has its own per-user rate limit; this
+  // just prevents accidental local floods).
+  const ANALYZE_DAILY_CAP = 200;
+  const analyzeCountRef = React.useRef<{ date: string; n: number }>({ date: "", n: 0 });
+  const incrementAnalyzeCount = React.useCallback((): boolean => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (analyzeCountRef.current.date !== today) {
+      analyzeCountRef.current = { date: today, n: 0 };
+    }
+    if (analyzeCountRef.current.n >= ANALYZE_DAILY_CAP) return false;
+    analyzeCountRef.current.n += 1;
+    return true;
+  }, []);
+
   React.useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       streamAbortRef.current?.abort();
+      analyzeAbortRef.current?.abort();
     };
   }, []);
 
@@ -102,7 +121,9 @@ export function AIPanel() {
   React.useEffect(() => {
     setMessages([]);
     setInput("");
-    setSignals({ insights: [], suggestions: [], challenges: [] });
+    // Reset all four signal arrays — `decisions` was previously omitted,
+    // so stale decisions from the previous doc would render in the new one.
+    setSignals({ insights: [], suggestions: [], challenges: [], decisions: [] });
     setShowDetailedSignals(false);
     setFeatureDrafts({});
     setIsLoading(false);
@@ -116,6 +137,13 @@ export function AIPanel() {
       window.clearTimeout(analyzeTimerRef.current);
       analyzeTimerRef.current = null;
     }
+    // Abort any in-flight proactive analysis from the previous doc so its
+    // result can never land in the current panel state.
+    analyzeAbortRef.current?.abort();
+    analyzeAbortRef.current = null;
+    // Same for chat stream — partial output is now irrelevant.
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
   }, [currentDocId]);
 
   React.useEffect(() => {
@@ -139,19 +167,34 @@ export function AIPanel() {
     }
 
     analyzeTimerRef.current = window.setTimeout(async () => {
+      // Daily cap defence-in-depth against accidental local floods.
+      if (!incrementAnalyzeCount()) return;
+      const docAtLaunch = currentDocId;
+      // Replace any in-flight controller — the previous one is by
+      // definition stale because we just kicked off a fresh request.
+      analyzeAbortRef.current?.abort();
+      const controller = new AbortController();
+      analyzeAbortRef.current = controller;
       setIsAnalyzing(true);
       try {
         const boundedContext = activeContext.length > MAX_CONTEXT_CHARS
           ? activeContext.slice(-MAX_CONTEXT_CHARS)
           : activeContext;
-        const data = await analyzeThinkingSignalsAction(boundedContext);
+        const data = await analyzeThinkingSignalsAction(boundedContext, controller.signal);
+        // If the doc changed mid-flight, drop the result — even if we
+        // didn't get a chance to abort the network call in time.
+        if (controller.signal.aborted || docAtLaunch !== currentDocId || !isMountedRef.current) {
+          return;
+        }
         setSignals(data);
         lastAnalyzedRef.current = normalized;
         lastAnalyzedAtRef.current = Date.now();
       } catch (error) {
+        if ((error as { name?: string })?.name === "AbortError") return;
         console.error("Proactive analysis failed:", error);
       } finally {
-        setIsAnalyzing(false);
+        if (isMountedRef.current) setIsAnalyzing(false);
+        if (analyzeAbortRef.current === controller) analyzeAbortRef.current = null;
       }
     }, ANALYZE_DEBOUNCE_MS);
 
@@ -159,8 +202,9 @@ export function AIPanel() {
       if (analyzeTimerRef.current) {
         window.clearTimeout(analyzeTimerRef.current);
       }
+      analyzeAbortRef.current?.abort();
     };
-  }, [activeContext, user]);
+  }, [activeContext, user, currentDocId, incrementAnalyzeCount]);
 
   const dismissHint = (id: string) => {
     if (!currentDocId) return;
@@ -200,7 +244,10 @@ export function AIPanel() {
         title: decision.text,
         justification: decision.why,
         priority: "medium",
-        impact: Math.max(4, Math.min(8, decision.confidence)),
+        // Impact and confidence are independent dimensions; default impact
+        // to a neutral mid value rather than aliasing it to confidence.
+        // Callers can override later via the PRD editor.
+        impact: 5,
         effort: 5,
         userStory: `As a product team, we want to explore ${decision.text.toLowerCase()} so that we can validate whether it should become a roadmap item.`,
         tradeoffs: "Exploratory direction; validate before committing to delivery.",
@@ -247,7 +294,11 @@ export function AIPanel() {
       content: messageText.trim(),
     };
 
-    const conversation = [...messages, userMessage];
+    // Strip the error-sentinel placeholder before resending: otherwise the
+    // model sees its previous failure as part of conversation history.
+    const ERROR_SENTINEL = "⚠ The AI engine encountered an error. Please try again.";
+    const cleanHistory = messages.filter((m) => m.content !== ERROR_SENTINEL);
+    const conversation = [...cleanHistory, userMessage];
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
@@ -261,6 +312,8 @@ export function AIPanel() {
     streamAbortRef.current = controller;
 
     try {
+      // The backend prepends its own system prompt; we send only user/assistant
+      // history and rely on the optional `system` field for workspace context.
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -268,12 +321,10 @@ export function AIPanel() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          messages: [
-            ...(activeContext.trim()
-              ? [{ role: "system", content: `Current workspace context:\n${activeContext.trim()}` }]
-              : []),
-            ...conversation,
-          ].map((m) => ({
+          ...(activeContext.trim()
+            ? { system: `Use this workspace context as background only:\n${activeContext.trim()}` }
+            : {}),
+          messages: conversation.map((m) => ({
             role: m.role,
             content: m.content,
           })),
@@ -292,14 +343,47 @@ export function AIPanel() {
       if (!reader) throw new Error("No response body");
 
       let accumulated = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (controller.signal.aborted || !isMountedRef.current) break;
-        accumulated += decoder.decode(value, { stream: true });
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (controller.signal.aborted || !isMountedRef.current) {
+            // Cancel the underlying body so the connection can close
+            // promptly — the previous code only broke out of the loop,
+            // leaving the body to be GC'd much later.
+            await reader.cancel().catch(() => undefined);
+            break;
+          }
+          accumulated += decoder.decode(value, { stream: true });
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: accumulated } : m
+            )
+          );
+        }
+        // Flush any trailing multi-byte sequence buffered by the decoder.
+        const tail = decoder.decode();
+        if (tail) {
+          accumulated += tail;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: accumulated } : m
+            )
+          );
+        }
+      } finally {
+        await reader.cancel().catch(() => undefined);
+      }
+
+      // Empty assistant body == upstream finished without writing tokens.
+      // Replace the empty bubble with a friendly hint instead of leaving
+      // the user staring at a blank reply.
+      if (!accumulated.trim() && isMountedRef.current) {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, content: accumulated } : m
+            m.id === assistantId
+              ? { ...m, content: "(No response. Try again or rephrase your question.)" }
+              : m
           )
         );
       }
@@ -494,9 +578,9 @@ export function AIPanel() {
             ))}
 
           {showDetailedSignals && signals.decisions
-            ?.map((d, idx) => ({ d, id: `decision-${idx}` }))
+            ?.map((d, idx) => ({ d, idx, id: `decision-${idx}` }))
             .filter(({ id }) => !dismissed.has(id))
-            .map(({ d, id }, idx) => (
+            .map(({ d, idx, id }) => (
               <div key={id} className="rounded-md border border-primary/20 bg-white p-2.5 border-l-4 border-l-primary">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
