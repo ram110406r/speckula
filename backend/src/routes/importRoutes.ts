@@ -1,7 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import multipart from '@fastify/multipart';
 import { z } from 'zod';
-import { extract } from '@extractus/article-extractor';
 import striptags from 'striptags';
 import { promises as dns } from 'node:dns';
 import { isIP } from 'node:net';
@@ -15,6 +14,20 @@ const MAX_URL_BODY_BYTES = 5 * 1024 * 1024; // 5 MB cap on fetched HTML
 const URL_FETCH_TIMEOUT_MS = 10_000;
 const SLACK_DEFAULT_LIMIT = 200;
 const SLACK_MAX_LIMIT = 1000;
+
+type ArticleExtractor = (
+  html: string,
+  parserOptions?: unknown,
+  opts?: Record<string, unknown>
+) => Promise<{ title?: string; content?: string } | null>;
+let extractArticle: ArticleExtractor | null = null;
+const getArticleExtractor = async (): Promise<ArticleExtractor> => {
+  if (!extractArticle) {
+    const mod = await import('@extractus/article-extractor');
+    extractArticle = mod.extract as unknown as ArticleExtractor;
+  }
+  return extractArticle!;
+};
 
 const urlImportSchema = z.object({
   url: z.string().url(),
@@ -284,6 +297,7 @@ export default async function importRoutes(fastify: FastifyInstance) {
       }
 
       try {
+        const extract = await getArticleExtractor();
         const article = await extract(html, undefined, {
           headers: { 'User-Agent': 'Buildcase/1.0 (content import)' },
         });
