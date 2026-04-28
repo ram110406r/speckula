@@ -27,5 +27,11 @@ module.exports = {
         '@typescript-eslint/no-explicit-any': 'warn',
       },
     },
+    {
+      files: ['**/*.test.ts'],
+      env: {
+        jest: true,
+      },
+    },
   ],
 };
