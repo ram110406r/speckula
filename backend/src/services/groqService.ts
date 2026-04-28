@@ -224,7 +224,7 @@ export const groqService = {
         "totalRequests" = "APIUsage"."totalRequests" + 1,
         "totalTokens"   = "APIUsage"."totalTokens"   + ${totalTokens},
         "totalCost"     = "APIUsage"."totalCost"     + ${cost}
-    `.catch((error) => warnDbDegraded("aPIUsage.upsert", error));
+    `.catch((error: unknown) => warnDbDegraded("aPIUsage.upsert", error));
 
     return {
       content,
@@ -299,7 +299,7 @@ Return ONLY a JSON object with shape {"insights": [...]} containing exactly 4 it
           tokensUsed: result.tokensUsed,
         })),
         skipDuplicates: true,
-      }).catch((error) => warnDbDegraded("aIInsight.createMany", error));
+      }).catch((error: unknown) => warnDbDegraded("aIInsight.createMany", error));
     }
 
     return { insights: normalized, tokensUsed: result.tokensUsed };
@@ -431,7 +431,7 @@ Return ONLY a JSON object {"tasks": [...]} with exactly 5 items:
           tokensUsed: result.tokensUsed,
         })),
         skipDuplicates: true,
-      }).catch((error) => warnDbDegraded("aISuggestedTask.createMany", error));
+      }).catch((error: unknown) => warnDbDegraded("aISuggestedTask.createMany", error));
     }
 
     return { tasks: normalized, tokensUsed: result.tokensUsed };

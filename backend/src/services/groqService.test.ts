@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest';
 import { extractJsonArray } from './jsonExtract.js';
 
 describe('extractJsonArray', () => {
