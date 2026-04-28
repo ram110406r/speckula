@@ -2,12 +2,21 @@ import dotenv from 'dotenv';
 import createServer from './app';
 import { disconnectDb } from './lib/db';
 import { getFirebaseApp } from './lib/firebaseAdmin';
+import { validateEnv } from './lib/env';
 
 // Load environment variables
 dotenv.config();
 
-const PORT = parseInt(process.env.PORT || '3001', 10);
-const NODE_ENV = process.env.NODE_ENV || 'development';
+let env: ReturnType<typeof validateEnv>;
+try {
+  env = validateEnv();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+}
+
+const PORT = env.PORT;
+const NODE_ENV = env.NODE_ENV;
 
 async function startServer() {
   try {
