@@ -44,7 +44,7 @@ export function NodeCard({ insight, animationDelay = 0 }: NodeCardProps) {
     <article
       role="article"
       aria-label={`${cfg.label}: ${insight.title}`}
-      className="node-card-animate relative flex flex-col bg-[var(--signal-bg)] dark:bg-[var(--signal-surface)] rounded-lg border border-[var(--signal-border)] overflow-hidden transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-[var(--signal-accent)] hover:shadow-[0_8px_16px_rgba(212,115,61,0.12)]"
+      className="node-card-animate relative flex flex-col bg-card rounded-lg border border-border overflow-hidden transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_8px_16px_rgba(192,74,43,0.10)]"
       style={{ animationDelay: `${animationDelay}ms` }}
     >
       {/* Semantic top-border strip */}
@@ -62,34 +62,32 @@ export function NodeCard({ insight, animationDelay = 0 }: NodeCardProps) {
           </span>
         </div>
 
-        {/* Title – display font */}
-        <h2
-          className="text-[17px] font-semibold leading-snug tracking-[-0.01em] text-[var(--signal-text-primary)]"
-          style={{ fontFamily: "var(--font-display, Georgia, 'Times New Roman', serif)" }}
+          <h2
+          className="text-[17px] font-semibold leading-snug tracking-[-0.01em] text-foreground"
         >
           {insight.title}
         </h2>
 
         {/* Body */}
-        <p className="text-[14px] leading-[1.65] text-[var(--signal-text-secondary)] flex-1">
+        <p className="text-[14px] leading-[1.65] text-muted-foreground flex-1">
           {insight.description}
         </p>
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-4 border-t border-[#EFE8DD] dark:border-[var(--signal-border)] mt-auto">
-          <span className="font-mono text-[11px] text-[var(--signal-text-tertiary)] truncate max-w-[140px]">
+        <div className="flex items-center justify-between pt-4 border-t border-border mt-auto">
+          <span className="font-mono text-[11px] text-muted-foreground/60 truncate max-w-[140px]">
             From Research Document
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               aria-label="Save signal"
-              className="w-7 h-7 flex items-center justify-center rounded-full border border-[var(--signal-border)] text-[var(--signal-text-tertiary)] transition-all hover:border-[var(--signal-accent)] hover:text-[var(--signal-accent)] hover:bg-[var(--signal-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-accent)]/40"
+              className="w-7 h-7 flex items-center justify-center rounded-full border border-border text-muted-foreground/60 transition-all hover:border-primary/40 hover:text-primary hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <Bookmark className="h-3 w-3" />
             </button>
             <button
               aria-label="Expand signal"
-              className="w-7 h-7 flex items-center justify-center rounded-full border border-[var(--signal-border)] text-[var(--signal-text-tertiary)] transition-all hover:border-[var(--signal-accent)] hover:text-[var(--signal-accent)] hover:bg-[var(--signal-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-accent)]/40"
+              className="w-7 h-7 flex items-center justify-center rounded-full border border-border text-muted-foreground/60 transition-all hover:border-primary/40 hover:text-primary hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <ArrowUpRight className="h-3 w-3" />
             </button>
