@@ -1,19 +1,22 @@
 "use client";
 
-import React, { useEffect } from "react";
-import { Lightbulb, Plus, Sparkles, Tag, TrendingUp, Users, AlertCircle, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import React from "react";
+import { Loader2, Brain } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
 import { getInsights, getDocument, type Insight } from "@/lib/firebase/db";
 import { extractInsightsAction } from "@/lib/ai/actions";
+import { NodeCard } from "@/components/signals/NodeCard";
 
-const categoryConfig = {
-  "pain-point": { label: "Pain Point", icon: AlertCircle, color: "text-primary", bg: "bg-white border-primary/20 hover:border-primary/40" },
-  "opportunity": { label: "Opportunity", icon: TrendingUp, color: "text-primary", bg: "bg-white border-primary/10 hover:border-primary/30" },
-  "user-segment": { label: "User Segment", icon: Users, color: "text-muted-foreground", bg: "bg-white border-border/60 hover:border-primary/20" },
-  "pattern": { label: "Pattern", icon: Tag, color: "text-muted-foreground", bg: "bg-white border-border/60 hover:border-primary/20" },
-};
+type FilterKey = "all" | "pain-point" | "opportunity" | "user-segment" | "pattern";
+
+const FILTER_PILLS: { id: FilterKey; label: string }[] = [
+  { id: "all", label: "All Nodes" },
+  { id: "pain-point", label: "Pain Point" },
+  { id: "opportunity", label: "Opportunity" },
+  { id: "user-segment", label: "User Segment" },
+  { id: "pattern", label: "Pattern" },
+];
 
 export function InsightsView() {
   const { user } = useAuth();
@@ -21,7 +24,7 @@ export function InsightsView() {
   const [insights, setInsights] = React.useState<Insight[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isExtracting, setIsExtracting] = React.useState(false);
-  const [filter, setFilter] = React.useState<string>("all");
+  const [filter, setFilter] = React.useState<FilterKey>("all");
 
   const fetchInsights = React.useCallback(async () => {
     if (!user) return;
@@ -40,12 +43,12 @@ export function InsightsView() {
     }
   }, [user, currentDocId]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     fetchInsights();
   }, [fetchInsights]);
 
-  const categories = ["all", "pain-point", "opportunity", "user-segment", "pattern"];
-  const filtered = filter === "all" ? insights : insights.filter(i => i.category === filter);
+  const filtered: Insight[] =
+    filter === "all" ? insights : insights.filter((i) => i.category === filter);
 
   const handleExtract = async () => {
     if (!user || !currentDocId || isExtracting) return;
@@ -67,102 +70,169 @@ export function InsightsView() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background selection:bg-primary/10 transition-all duration-500">
-      {/* Header */}
-      <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0 bg-white/50">
-        <div className="flex items-center gap-3">
-          <Lightbulb className="h-4 w-4 text-primary" />
-          <h1 className="text-sm uppercase tracking-[0.05em] font-semibold">Intelligence Feed</h1>
-          <div className="h-4 w-px bg-border/40 mx-1" />
-          <span className="label-system text-[12px]">
-            {insights.length} nodes
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 label-system text-[12px] hover:text-primary hover:bg-transparent"
-            onClick={() => setActiveView("editor")}
-          >
-            <Plus className="mr-1.5 h-3 w-3" />
-            Manual Entry
-          </Button>
-          <Button
-            size="sm"
-            className="h-8 label-system text-[12px] bg-primary text-white hover:bg-primary/90 shadow-sm"
-            onClick={handleExtract}
-            disabled={isExtracting || !currentDocId}
-          >
-            {isExtracting ? (
-              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-            ) : (
-              <Sparkles className="mr-1.5 h-3 w-3" />
-            )}
-            {isExtracting ? "Processing..." : "Extract with AI"}
-          </Button>
-        </div>
+    <div
+      className="flex flex-col h-full transition-colors duration-300"
+      style={{ background: "var(--signal-bg)" }}
+    >
+      {/* Status bar */}
+      <div
+        className="flex items-center justify-between px-8 py-3.5 border-b shrink-0 bg-white dark:bg-[var(--signal-surface)]"
+        style={{ borderColor: "var(--signal-border)" }}
+      >
+        <span
+          className="font-mono text-[10px] uppercase tracking-[0.1em]"
+          style={{ color: "var(--signal-text-tertiary)" }}
+        >
+          EVIDENCE
+        </span>
+        <span
+          className="font-mono text-[10px]"
+          style={{ color: "var(--signal-text-tertiary)" }}
+        >
+          copilot for product managers
+        </span>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex items-center gap-2 px-8 py-4 shrink-0 bg-white/20">
-        {categories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setFilter(cat)}
-            className={`px-4 py-1.5 rounded-md label-system text-[12px] transition-all border ${
-              filter === cat
-                ? "bg-primary text-white border-primary"
-                : "bg-white border-border/60 hover:border-primary/40 hover:text-foreground"
-            }`}
-          >
-            {cat === "all" ? "All Nodes" : categoryConfig[cat as keyof typeof categoryConfig]?.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Insights Grid */}
+      {/* Scrollable content */}
       <div className="flex-1 overflow-auto p-8 custom-scrollbar">
+        {/* Feed header */}
+        <div className="flex items-start justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <Brain
+              className="h-7 w-7 shrink-0 mt-0.5"
+              style={{ color: "var(--signal-accent)" }}
+            />
+            <div>
+              <h1
+                className="text-[28px] font-semibold leading-none tracking-tight"
+                style={{
+                  fontFamily:
+                    "var(--font-display, Georgia, 'Times New Roman', serif)",
+                  color: "var(--signal-text-primary)",
+                }}
+              >
+                Intelligence Feed
+              </h1>
+              <span
+                className="font-mono text-[11px] uppercase tracking-[0.08em] mt-1 block"
+                style={{ color: "var(--signal-text-tertiary)" }}
+              >
+                {insights.length} {insights.length === 1 ? "Node" : "Nodes"}
+              </span>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              onClick={() => setActiveView("editor")}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-[4px] font-mono text-[12px] font-medium border transition-all hover:bg-[var(--signal-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-accent)]/40"
+              style={{
+                borderColor: "var(--signal-border)",
+                color: "var(--signal-text-primary)",
+                background: "white",
+              }}
+            >
+              + Manual Entry
+            </button>
+            <button
+              onClick={handleExtract}
+              disabled={isExtracting || !currentDocId}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-[4px] font-mono text-[12px] font-medium text-white transition-all hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-accent)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "var(--signal-accent)", borderColor: "var(--signal-accent)" }}
+            >
+              {isExtracting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <span className="text-[13px] leading-none">🔥</span>
+              )}
+              {isExtracting ? "Processing…" : "Extract with AI"}
+            </button>
+          </div>
+        </div>
+
+        {/* Filter pills */}
+        <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-1">
+          {FILTER_PILLS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setFilter(id)}
+              aria-current={filter === id ? "page" : undefined}
+              className="px-5 py-2 rounded-full font-mono text-[12px] font-medium whitespace-nowrap border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-accent)]/40"
+              style={
+                filter === id
+                  ? {
+                      background: "var(--signal-accent)",
+                      color: "#fff",
+                      borderColor: "var(--signal-accent)",
+                    }
+                  : {
+                      background: "white",
+                      color: "var(--signal-text-secondary)",
+                      borderColor: "var(--signal-border)",
+                    }
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Grid / states */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 gap-4">
-            <Loader2 className="h-6 w-6 animate-spin text-primary/20" />
-            <span className="label-system text-[12px] animate-pulse">Fetching Intelligence</span>
+            <Loader2
+              className="h-6 w-6 animate-spin"
+              style={{ color: "var(--signal-accent)" }}
+            />
+            <span
+              className="font-mono text-[11px] uppercase tracking-[0.08em] animate-pulse"
+              style={{ color: "var(--signal-text-tertiary)" }}
+            >
+              Fetching Intelligence
+            </span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-border/40 rounded-2xl max-w-2xl mx-auto">
-            <Lightbulb className="h-8 w-8 text-muted-foreground/20 mb-4" />
-            <p className="label-system text-[12px] mb-2">System Idle</p>
-            <p className="text-xs text-muted-foreground/60 max-w-sm">
-              Use the <span className="font-semibold text-foreground">Extract with AI</span> tool in the editor to populate this feed with structured product notes.
+          <div
+            className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed rounded-xl max-w-2xl mx-auto p-10"
+            style={{ borderColor: "var(--signal-border)" }}
+          >
+            <Brain
+              className="h-8 w-8 mb-4"
+              style={{ color: "var(--signal-text-tertiary)", opacity: 0.4 }}
+            />
+            <p
+              className="font-mono text-[11px] uppercase tracking-[0.08em] mb-2"
+              style={{ color: "var(--signal-text-secondary)" }}
+            >
+              System Idle
+            </p>
+            <p
+              className="text-[13px] leading-relaxed max-w-xs"
+              style={{ color: "var(--signal-text-tertiary)" }}
+            >
+              Use{" "}
+              <span
+                className="font-semibold"
+                style={{ color: "var(--signal-text-primary)" }}
+              >
+                Extract with AI
+              </span>{" "}
+              to populate this feed with structured product signals.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map(insight => {
-              const cfg = categoryConfig[insight.category] || categoryConfig["opportunity"];
-              const Icon = cfg.icon;
-              return (
-                <div
-                  key={insight.id}
-                  className={`group rounded-xl border p-6 space-y-4 cursor-default transition-all duration-300 shadow-sm hover:shadow-md ${cfg.bg}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Icon className={`h-3.5 w-3.5 shrink-0 ${cfg.color}`} />
-                    <span className="label-system text-[12px]">
-                      {cfg.label}
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-foreground leading-snug tracking-tight">{insight.title}</h3>
-                    <p className="text-xs text-muted-foreground leading-relaxed transition-all group-hover:text-foreground">{insight.description}</p>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filtered.map((insight, i) => (
+              <NodeCard
+                key={insight.id}
+                insight={insight}
+                animationDelay={i * 60}
+              />
+            ))}
           </div>
         )}
       </div>
     </div>
   );
 }
-

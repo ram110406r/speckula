@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Sora, IBM_Plex_Mono } from "next/font/google";
+import { Sora, IBM_Plex_Mono, Playfair_Display } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -16,6 +16,12 @@ const plexMono = IBM_Plex_Mono({
   variable: "--font-mono",
 });
 
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["500", "600", "700"],
+});
+
 export const metadata: Metadata = {
   title: "Buildcase - AI-Native Product Intelligence",
   description: "The AI-first workspace for product discovery and execution.",
@@ -28,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
+      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} ${playfair.variable} font-sans min-h-screen bg-background antialiased`}>
         {/* beforeInteractive — Next.js injects this into <head> in the server
             HTML before any JS loads, avoiding FOUC without triggering the
             React 19 "script inside component tree" warning. */}

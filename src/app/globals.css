@@ -5,6 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-display: var(--font-display);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans), "Avenir Next", "Segoe UI", sans-serif;
@@ -102,6 +103,49 @@
   --sidebar-accent-foreground: #C04A2B;
   --sidebar-border: #3A3B3E;
   --sidebar-ring: #C04A2B;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Signals / Intelligence Feed design tokens                                   */
+/* ────────────────────────────────────────────────────────────────────────── */
+:root {
+  --signal-pain-point: #D4733D;
+  --signal-pain-point-bg: rgba(212, 115, 61, 0.10);
+  --signal-opportunity: #C8556D;
+  --signal-opportunity-bg: rgba(200, 85, 109, 0.10);
+  --signal-pattern: #7B5E5C;
+  --signal-pattern-bg: rgba(123, 94, 92, 0.10);
+  --signal-user-segment: #8B7355;
+  --signal-user-segment-bg: rgba(139, 115, 85, 0.10);
+  --signal-bg: #FFFAF5;
+  --signal-surface: #FFF6ED;
+  --signal-border: #D9CCBF;
+  --signal-text-primary: #1A1511;
+  --signal-text-secondary: #6B6359;
+  --signal-text-tertiary: #9B8F80;
+  --signal-accent: #D4733D;
+}
+
+.dark {
+  --signal-bg: #1A1511;
+  --signal-surface: #231F1B;
+  --signal-border: #3D3530;
+  --signal-text-primary: #F5EFE8;
+  --signal-text-secondary: #B5A89E;
+  --signal-text-tertiary: #7A6F67;
+}
+
+@keyframes bc-node-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.node-card-animate {
+  animation: bc-node-in 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-card-animate { animation: none; }
 }
 
 @layer base {
