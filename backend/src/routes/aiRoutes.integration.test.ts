@@ -8,10 +8,9 @@ vi.mock('../lib/firebaseAdmin.js', () => ({
 }));
 
 vi.mock('../lib/firebaseAuth.js', () => ({
-  verifyFirebaseAuth: vi.fn(async (request: { userId?: string }, _reply: unknown, done: () => void) => {
+  verifyFirebaseAuth: vi.fn(async (request: { userId?: string }) => {
     // Inject a fake userId so rate-limit keying and requireUserId() both work.
     request.userId = 'test-user-123';
-    done();
   }),
 }));
 
@@ -36,18 +35,18 @@ vi.mock('../lib/db.js', () => {
 });
 
 // ── Groq SDK mock ─────────────────────────────────────────────────────────────
+const mockCreate = vi.fn().mockResolvedValue({
+  choices: [{ message: { content: '{"insights":[],"suggestions":[],"challenges":[],"decisions":[]}' } }],
+  usage: { prompt_tokens: 10, completion_tokens: 20 },
+});
+
 vi.mock('groq-sdk', () => {
+  // Must use a regular function (not arrow) so `new Groq()` works in Vitest v4.
   return {
-    default: vi.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: vi.fn().mockResolvedValue({
-            choices: [{ message: { content: '{"insights":[],"suggestions":[],"challenges":[],"decisions":[]}' } }],
-            usage: { prompt_tokens: 10, completion_tokens: 20 },
-          }),
-        },
-      },
-    })),
+    // eslint-disable-next-line prefer-arrow-callback
+    default: vi.fn(function MockGroq() {
+      return { chat: { completions: { create: mockCreate } } };
+    }),
   };
 });
 
@@ -74,7 +73,7 @@ describe('Protected AI routes — auth rejection', () => {
   beforeEach(async () => {
     // Override the auth mock to simulate a missing/invalid token.
     vi.mocked((await import('../lib/firebaseAuth.js')).verifyFirebaseAuth).mockImplementationOnce(
-      async (_req: unknown, reply: { code: (n: number) => { send: (b: unknown) => void } }, _done: () => void) => {
+      async (_req: unknown, reply: { code: (n: number) => { send: (b: unknown) => void } }) => {
         reply.code(401).send({ ok: false, error: 'unauthorized' });
       }
     );
