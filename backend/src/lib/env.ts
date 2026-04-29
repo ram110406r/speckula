@@ -36,6 +36,14 @@ const envSchema = z
       .transform((s) => (s ? parseInt(s, 10) : undefined))
       .refine((n) => n === undefined || (Number.isFinite(n) && n > 0), 'AI_CACHE_TTL_MINUTES must be a positive integer'),
 
+    // Daily token cap per user. Requests that would push a user over this
+    // limit are rejected with 429. Default 200 000 tokens ≈ $0.12/user/day.
+    DAILY_TOKEN_QUOTA: z
+      .string()
+      .optional()
+      .transform((s) => (s ? parseInt(s, 10) : 200_000))
+      .refine((n) => Number.isFinite(n) && n > 0, 'DAILY_TOKEN_QUOTA must be a positive integer'),
+
     RETENTION_DAYS: z
       .string()
       .optional()
