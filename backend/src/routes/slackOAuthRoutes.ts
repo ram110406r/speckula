@@ -197,6 +197,9 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
         const channels = await listChannels(token);
         return { ok: true, channels };
       } catch (err) {
+        if ((err as { code?: string })?.code === 'TOKEN_DECRYPT_FAILED') {
+          return reply.code(401).send({ ok: false, error: (err as Error).message });
+        }
         request.log.error({ err }, 'list channels failed');
         return reply.code(500).send({ ok: false, error: 'failed to list channels' });
       }
@@ -298,6 +301,9 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
 
         return { ok: true, ingested: totalIngested, errors };
       } catch (err) {
+        if ((err as { code?: string })?.code === 'TOKEN_DECRYPT_FAILED') {
+          return reply.code(401).send({ ok: false, error: (err as Error).message });
+        }
         request.log.error({ err }, 'backfill failed');
         return reply.code(500).send({ ok: false, error: 'backfill failed' });
       }

@@ -362,7 +362,10 @@ export default async function importRoutes(fastify: FastifyInstance) {
         token = await getDecryptedBotToken(userId, body.teamId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'workspace not connected';
-        const status = /not connected|missing|mismatch/i.test(message) ? 404 : 500;
+        const isDecryptFail = (err as { code?: string })?.code === 'TOKEN_DECRYPT_FAILED';
+        const status = isDecryptFail ? 401
+          : /not connected|missing|mismatch/i.test(message) ? 404
+          : 500;
         return replyError(reply, status, message);
       }
 

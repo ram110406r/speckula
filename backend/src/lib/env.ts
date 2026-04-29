@@ -57,7 +57,12 @@ const envSchema = z.object({
   SLACK_CLIENT_SECRET: z.string().optional(),
   SLACK_REDIRECT_URI: z.string().url().optional(),
   SLACK_SIGNING_SECRET: z.string().optional(),
-  SLACK_TOKEN_ENCRYPTION_KEY: z.string().optional(),
+  // 64-char hex (32 bytes). Required when Slack integration is enabled.
+  // Generate: node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"
+  ENCRYPTION_KEY_V1: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, 'ENCRYPTION_KEY_V1 must be exactly 64 hex characters (32 bytes)')
+    .optional(),
 
   // How many days to keep PromptLog / DecisionReasoning rows (default 60).
   RETENTION_DAYS: z.coerce.number().int().min(1).default(60),

@@ -1,46 +1,90 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
-// AES-256-GCM with a key derived from SLACK_TOKEN_ENCRYPTION_KEY (32 bytes after scrypt).
-// We never store plaintext bot tokens in Firestore — only the IV+ciphertext+authTag bundle.
+// AES-256-GCM with versioned key management.
+// Encrypted tokens are stored as JSON: { version, iv, authTag, ciphertext } — all hex.
+// Key rotation: add ENCRYPTION_KEY_V2, update CURRENT_VERSION; old tokens decrypt via keyMap.
 
 const ALGO = 'aes-256-gcm';
-const IV_LENGTH = 12;
-const AUTH_TAG_LENGTH = 16;
+const CURRENT_VERSION = 'v1';
 
-let cachedKey: Buffer | null = null;
-const getKey = (): Buffer => {
-  if (cachedKey) return cachedKey;
-  const secret = process.env.SLACK_TOKEN_ENCRYPTION_KEY;
-  if (!secret || secret.length < 16) {
+interface EncryptedPayload {
+  version: string;
+  iv: string;
+  authTag: string;
+  ciphertext: string;
+}
+
+export class TokenDecryptError extends Error {
+  readonly code = 'TOKEN_DECRYPT_FAILED' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'TokenDecryptError';
+  }
+}
+
+// Key lookup is lazy (no module-level caching) so test environments can swap
+// ENCRYPTION_KEY_V1 between tests without cache-busting module reimports.
+const getKey = (version: string): Buffer => {
+  const varName = `ENCRYPTION_KEY_${version.toUpperCase()}`;
+  const hex = process.env[varName];
+  if (!hex) {
     throw new Error(
-      'SLACK_TOKEN_ENCRYPTION_KEY must be set in backend/.env (>= 16 chars). Generate one with: openssl rand -base64 32'
+      `${varName} is not set. Generate with: ` +
+        `node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"`
     );
   }
-  cachedKey = scryptSync(secret, 'buildcase-slack', 32);
-  return cachedKey;
+  if (hex.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error(`${varName} must be exactly 64 hex characters (32 bytes).`);
+  }
+  return Buffer.from(hex, 'hex');
 };
 
 export const encryptToken = (plaintext: string): string => {
-  const key = getKey();
-  const iv = randomBytes(IV_LENGTH);
+  const key = getKey(CURRENT_VERSION);
+  const iv = randomBytes(12);
   const cipher = createCipheriv(ALGO, key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
+  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
-  return Buffer.concat([iv, authTag, encrypted]).toString('base64');
+  const payload: EncryptedPayload = {
+    version: CURRENT_VERSION,
+    iv: iv.toString('hex'),
+    authTag: authTag.toString('hex'),
+    ciphertext: ciphertext.toString('hex'),
+  };
+  return JSON.stringify(payload);
 };
 
-export const decryptToken = (payload: string): string => {
+export const decryptToken = (stored: string): string => {
+  // Parse the versioned JSON envelope.
+  let payload: EncryptedPayload;
   try {
-    const key = getKey();
-    const buf = Buffer.from(payload, 'base64');
-    const iv = buf.subarray(0, IV_LENGTH);
-    const authTag = buf.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
-    const ciphertext = buf.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
+    payload = JSON.parse(stored) as EncryptedPayload;
+  } catch {
+    // Old base64-binary format or any non-JSON payload — treat as unrecoverable.
+    throw new TokenDecryptError(
+      'Stored token format is unrecognised. Re-connect your Slack workspace to refresh.'
+    );
+  }
+
+  if (!payload.version || !payload.iv || !payload.authTag || !payload.ciphertext) {
+    throw new TokenDecryptError(
+      'Encrypted payload is missing required fields. Re-connect your Slack workspace.'
+    );
+  }
+
+  try {
+    const key = getKey(payload.version);
+    const iv = Buffer.from(payload.iv, 'hex');
+    const authTag = Buffer.from(payload.authTag, 'hex');
+    const ciphertext = Buffer.from(payload.ciphertext, 'hex');
     const decipher = createDecipheriv(ALGO, key, iv);
     decipher.setAuthTag(authTag);
-    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    return decrypted.toString('utf-8');
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf-8');
   } catch (err) {
-    throw new Error(`Failed to decrypt Slack bot token: ${(err as Error).message}`);
+    if (err instanceof TokenDecryptError) throw err;
+    // AES-GCM auth-tag mismatch = wrong key or tampered data.
+    throw new TokenDecryptError(
+      'Token decryption failed — encryption key may have changed. Re-connect your Slack workspace.'
+    );
   }
 };

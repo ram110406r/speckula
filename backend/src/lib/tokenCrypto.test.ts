@@ -1,24 +1,25 @@
-// Use a deterministic test key. Real prod values must be longer/randomer.
-const TEST_KEY = 'test-encryption-key-with-enough-entropy-1234567890abcdef';
+import { encryptToken, decryptToken, TokenDecryptError } from './tokenCrypto.js';
+
+// 64-char hex = 32 bytes, valid for AES-256.
+const TEST_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 describe('tokenCrypto', () => {
   let originalKey: string | undefined;
 
   beforeEach(() => {
-    originalKey = process.env.SLACK_TOKEN_ENCRYPTION_KEY;
-    process.env.SLACK_TOKEN_ENCRYPTION_KEY = TEST_KEY;
+    originalKey = process.env.ENCRYPTION_KEY_V1;
+    process.env.ENCRYPTION_KEY_V1 = TEST_KEY;
   });
 
   afterEach(() => {
     if (originalKey === undefined) {
-      delete process.env.SLACK_TOKEN_ENCRYPTION_KEY;
+      delete process.env.ENCRYPTION_KEY_V1;
     } else {
-      process.env.SLACK_TOKEN_ENCRYPTION_KEY = originalKey;
+      process.env.ENCRYPTION_KEY_V1 = originalKey;
     }
   });
 
-  it('round-trips a plaintext token', async () => {
-    const { encryptToken, decryptToken } = await import('./tokenCrypto.js');
+  it('round-trips a plaintext token', () => {
     const plaintext = 'xoxb-fake-bot-token-1234567890';
     const encrypted = encryptToken(plaintext);
 
@@ -27,31 +28,45 @@ describe('tokenCrypto', () => {
     expect(decryptToken(encrypted)).toBe(plaintext);
   });
 
-  it('produces different ciphertexts for the same plaintext (random IV)', async () => {
-    const { encryptToken } = await import('./tokenCrypto.js');
+  it('stores the payload as JSON with version/iv/authTag/ciphertext fields', () => {
+    const encrypted = encryptToken('xoxb-token');
+    const payload = JSON.parse(encrypted);
+    expect(payload).toHaveProperty('version', 'v1');
+    expect(payload).toHaveProperty('iv');
+    expect(payload).toHaveProperty('authTag');
+    expect(payload).toHaveProperty('ciphertext');
+  });
+
+  it('produces different ciphertexts for the same plaintext (random IV)', () => {
     const a = encryptToken('xoxb-token');
     const b = encryptToken('xoxb-token');
     expect(a).not.toBe(b);
   });
 
-  it('rejects tampered ciphertext', async () => {
-    const { encryptToken, decryptToken } = await import('./tokenCrypto.js');
+  it('rejects tampered ciphertext', () => {
     const encrypted = encryptToken('xoxb-token');
-    // Flip a byte mid-ciphertext.
-    const tampered = encrypted.slice(0, -2) + (encrypted.slice(-2) === 'AA' ? 'BB' : 'AA');
-    expect(() => decryptToken(tampered)).toThrow();
+    const payload = JSON.parse(encrypted) as { ciphertext: string };
+    const ct = payload.ciphertext;
+    payload.ciphertext = ct.slice(0, -2) + (ct.slice(-2) === 'aa' ? 'bb' : 'aa');
+    expect(() => decryptToken(JSON.stringify(payload))).toThrow(TokenDecryptError);
   });
 
-  it('throws when the key is missing', async () => {
-    delete process.env.SLACK_TOKEN_ENCRYPTION_KEY;
-    // Re-import so the module reads the env afresh.
-    const fresh = await import('./tokenCrypto?missing-key=' + Date.now());
-    expect(() => fresh.encryptToken('x')).toThrow();
+  it('throws TokenDecryptError for non-JSON payloads (old base64 format)', () => {
+    expect(() => decryptToken('xoxb-old-base64-format==')).toThrow(TokenDecryptError);
   });
 
-  it('throws when the key is too short', async () => {
-    process.env.SLACK_TOKEN_ENCRYPTION_KEY = 'short';
-    const fresh = await import('./tokenCrypto?short-key=' + Date.now());
-    expect(() => fresh.encryptToken('x')).toThrow();
+  it('throws when the key is missing', () => {
+    delete process.env.ENCRYPTION_KEY_V1;
+    expect(() => encryptToken('x')).toThrow('ENCRYPTION_KEY_V1 is not set');
+  });
+
+  it('throws when the key is wrong length', () => {
+    process.env.ENCRYPTION_KEY_V1 = 'short';
+    expect(() => encryptToken('x')).toThrow('64 hex characters');
+  });
+
+  it('throws when the key is not valid hex', () => {
+    process.env.ENCRYPTION_KEY_V1 = 'z'.repeat(64); // not valid hex
+    expect(() => encryptToken('x')).toThrow('64 hex characters');
   });
 });
