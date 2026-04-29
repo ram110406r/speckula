@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Sora, IBM_Plex_Mono } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/firebase/AuthProvider";
@@ -29,24 +28,23 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
-        {/* beforeInteractive — Next.js injects this into <head> in the server
-            HTML before any JS loads, avoiding FOUC without triggering the
-            React 19 "script inside component tree" warning. */}
-        <Script
-          id="theme-init"
-          strategy="beforeInteractive"
+      <head>
+        {/* Inline theme-init runs before any JS so the correct dark/light class
+            is applied immediately, preventing FOUC. Placed in <head> of a Server
+            Component so React 19 never sees it as a "script in component tree". */}
+        <script
           dangerouslySetInnerHTML={{
             __html: `(() => {
               try {
                 const stored = localStorage.getItem('buildcase-theme');
                 const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                const isDark = stored ? stored === 'dark' : systemDark;
-                document.documentElement.classList.toggle('dark', isDark);
-              } catch (_error) { /* localStorage unavailable (e.g. private browsing) */ }
+                document.documentElement.classList.toggle('dark', stored ? stored === 'dark' : systemDark);
+              } catch (_) {}
             })();`,
           }}
         />
+      </head>
+      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </AuthProvider>

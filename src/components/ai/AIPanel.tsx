@@ -175,6 +175,7 @@ export function AIPanel() {
       analyzeAbortRef.current?.abort();
       const controller = new AbortController();
       analyzeAbortRef.current = controller;
+      if (!isMountedRef.current) return;
       setIsAnalyzing(true);
       try {
         const boundedContext = activeContext.length > MAX_CONTEXT_CHARS
