@@ -14,29 +14,99 @@ import { DecisionView } from "../views/DecisionView";
 import { PlatformView } from "../views/PlatformView";
 import { SlackView } from "../views/SlackView";
 import { AutonomousModeView } from "../views/AutonomousModeView";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles, ChevronRight } from "lucide-react";
+import type { AppView } from "@/store/useAppStore";
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function formatRelativeActivity(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
-
   const maybeTimestamp = value as { toDate?: () => Date };
   const date = typeof maybeTimestamp.toDate === "function" ? maybeTimestamp.toDate() : null;
   if (!date) return null;
-
   const diffMs = Date.now() - date.getTime();
   const diffMin = Math.max(1, Math.floor(diffMs / 60000));
-  if (diffMin < 60) return `Updated ${diffMin}m ago`;
-
+  if (diffMin < 60) return `${diffMin}m ago`;
   const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `Updated ${diffHour}h ago`;
-
-  const diffDay = Math.floor(diffHour / 24);
-  return `Updated ${diffDay}d ago`;
+  if (diffHour < 24) return `${diffHour}h ago`;
+  return `${Math.floor(diffHour / 24)}d ago`;
 }
+
+// Phase breadcrumb ─────────────────────────────────────────────────────────────
+
+interface Phase {
+  label: string;
+  entry: AppView; // the view to navigate to on click
+  views: AppView[];
+}
+
+const PHASES: Phase[] = [
+  { label: "Evidence", entry: "editor", views: ["editor", "insights"] },
+  { label: "Argument", entry: "decisions", views: ["decisions"] },
+  { label: "Verdict", entry: "prds", views: ["prds", "tasks"] },
+];
+
+function PhaseBreadcrumb({
+  activeView,
+  setActiveView,
+}: {
+  activeView: AppView;
+  setActiveView: (v: AppView) => void;
+}) {
+  const activePhaseIndex = PHASES.findIndex((p) => p.views.includes(activeView));
+
+  return (
+    <nav
+      className="hidden sm:flex items-center gap-0.5"
+      aria-label="Workflow phases"
+    >
+      {PHASES.map((phase, i) => {
+        const isActive = i === activePhaseIndex;
+        const isPast = i < activePhaseIndex;
+        const isLast = i === PHASES.length - 1;
+
+        return (
+          <React.Fragment key={phase.label}>
+            <button
+              type="button"
+              onClick={() => setActiveView(phase.entry)}
+              className={`
+                px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150
+                ${
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : isPast
+                    ? "text-foreground/70 hover:text-foreground hover:bg-muted/50"
+                    : "text-muted-foreground hover:text-foreground/70 hover:bg-muted/30"
+                }
+              `}
+            >
+              <span className={`font-mono text-[10px] uppercase tracking-[0.06em] ${
+                isActive ? "font-semibold" : ""
+              }`}>
+                {phase.label}
+              </span>
+            </button>
+            {!isLast && (
+              <ChevronRight
+                className={`h-3 w-3 shrink-0 ${
+                  isPast ? "text-foreground/40" : "text-border"
+                }`}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ─── Shell ────────────────────────────────────────────────────────────────────
 
 export function Shell() {
   const { user, loading } = useAuth();
-  const { aiPanelOpen, activeView, documents, currentDocId } = useAppStore();
+  const { aiPanelOpen, toggleAiPanel, activeView, setActiveView, documents, currentDocId } =
+    useAppStore();
 
   if (loading) {
     return (
@@ -56,23 +126,16 @@ export function Shell() {
   const currentDoc = documents.find((doc) => doc.id === currentDocId);
   const activityText = formatRelativeActivity(currentDoc?.updatedAt);
 
-  const phaseLabel = (() => {
-    if (activeView === "editor" || activeView === "insights") return "Evidence";
-    if (activeView === "decisions") return "Argument";
-    if (activeView === "prds" || activeView === "tasks") return "Verdict";
-    return null;
-  })();
-
   const renderMainView = () => {
     switch (activeView) {
-      case "insights": return <InsightsView />;
-      case "prds": return <PRDsView />;
-      case "tasks": return <TasksView />;
-      case "decisions": return <DecisionView />;
-      case "platform": return <PlatformView />;
-      case "slack": return <SlackView />;
-      case "autonomous": return <AutonomousModeView />;
-      default: return <Editor />;
+      case "insights":    return <InsightsView />;
+      case "prds":        return <PRDsView />;
+      case "tasks":       return <TasksView />;
+      case "decisions":   return <DecisionView />;
+      case "platform":    return <PlatformView />;
+      case "slack":       return <SlackView />;
+      case "autonomous":  return <AutonomousModeView />;
+      default:            return <Editor />;
     }
   };
 
@@ -80,26 +143,54 @@ export function Shell() {
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden text-foreground selection:bg-primary/10">
-      <header className="shrink-0 border-b border-border/70 bg-card/95 backdrop-blur-md">
-        <div className="flex h-14 items-center gap-3 px-4 md:px-6">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-foreground">
-              {currentDoc?.title || (documents.length === 0 ? "No document selected" : "Untitled Document")}
+      {/* ── Top bar ── */}
+      <header className="relative z-30 shrink-0 border-b border-border/70 bg-card/95 backdrop-blur-md">
+        <div className="flex h-12 items-center gap-3 px-4 md:px-5">
+
+          {/* Left — document title + timestamp */}
+          <div className="min-w-0 flex-1 flex items-center gap-2">
+            <p className="truncate text-sm font-semibold tracking-tight text-foreground">
+              {currentDoc?.title ||
+                (documents.length === 0 ? "No document" : "Untitled")}
             </p>
+            {activityText && (
+              <span className="hidden md:inline shrink-0 text-[10px] text-muted-foreground/60 font-mono">
+                · {activityText}
+              </span>
+            )}
           </div>
 
-          {phaseLabel && (
-            <span className="hidden sm:inline rounded border border-primary/30 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-primary/70">
-              {phaseLabel}
-            </span>
-          )}
+          {/* Center — phase breadcrumb */}
+          <div className="absolute left-1/2 -translate-x-1/2">
+            <PhaseBreadcrumb activeView={activeView} setActiveView={setActiveView} />
+          </div>
 
-          {activityText && (
-            <span className="hidden sm:inline text-xs text-muted-foreground">{activityText}</span>
-          )}
+          {/* Right — actions */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            {activeView === "editor" && (
+              <button
+                type="button"
+                onClick={toggleAiPanel}
+                className={`
+                  inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium
+                  transition-all duration-150 border
+                  ${
+                    aiPanelOpen
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : "border-border/60 bg-transparent text-muted-foreground hover:border-primary/30 hover:text-primary hover:bg-primary/5"
+                  }
+                `}
+                aria-pressed={aiPanelOpen}
+              >
+                <Sparkles className="h-3 w-3" />
+                <span className="hidden sm:inline">Ask AI</span>
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
+      {/* ── Content ── */}
       <div
         className={
           showAIPanel

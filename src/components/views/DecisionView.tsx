@@ -41,6 +41,7 @@ import { getActualOutcome, recordActualOutcome, type ActualOutcomeRecord } from 
 import { updateConfidenceScore } from "@/lib/ai/scoreFeedback";
 import { evaluateDecisionHealth, evaluatePushback, type HealthStatus, type PushbackAction } from "@/lib/ai/decisionHealth";
 import { CaseBriefDialog } from "@/components/decision/CaseBriefDialog";
+import { FocusPanel, type FocusPanelData } from "@/components/decision/FocusPanel";
 
 type DecisionFilter = "all" | "strong" | "risky" | "recent";
 
@@ -124,6 +125,7 @@ export function DecisionView() {
   }>({ open: false, loading: false, data: null, error: null, decisionId: null });
   const [filter, setFilter] = React.useState<DecisionFilter>("all");
   const [searchTerm, setSearchTerm] = React.useState("");
+  const [focusPanelData, setFocusPanelData] = React.useState<FocusPanelData | null>(null);
 
   const getFeedbackState = (decisionId: string): FeedbackCardState =>
     feedbackByCard[decisionId] ?? { expected: "", actual: "", submitting: false, submitted: false, shipped: false };
@@ -669,6 +671,7 @@ export function DecisionView() {
             getFeedbackState={getFeedbackState}
             updateFeedbackState={updateFeedbackState}
             onSubmitFeedback={handleSubmitFeedback}
+            onFocusDecision={setFocusPanelData}
           />
         )}
       </div>
@@ -679,6 +682,42 @@ export function DecisionView() {
         data={briefDialog.data}
         error={briefDialog.error}
         onClose={() => setBriefDialog((prev) => ({ ...prev, open: false }))}
+      />
+
+      {/* Focus panel — slide-over with full decision detail */}
+      <FocusPanel
+        data={focusPanelData}
+        onClose={() => setFocusPanelData(null)}
+        onGenerateBrief={() => {
+          if (!focusPanelData) return;
+          const sd = scoredSuggestions.find((s) => s.decisionId === focusPanelData.decisionId);
+          if (sd) handleGenerateCaseBrief(sd);
+          setFocusPanelData(null);
+        }}
+        onConvert={() => {
+          if (!focusPanelData) return;
+          const idx = scoredSuggestions.findIndex((s) => s.decisionId === focusPanelData.decisionId);
+          if (idx !== -1) convertDecisionToPRD(scoredSuggestions[idx], idx);
+          setFocusPanelData(null);
+        }}
+        onPushbackCta={(action) => {
+          handlePushbackCta(action);
+          setFocusPanelData(null);
+        }}
+        isBriefLoading={
+          focusPanelData !== null &&
+          briefDialog.loading &&
+          briefDialog.decisionId === focusPanelData.decisionId
+        }
+        isConverting={
+          focusPanelData !== null &&
+          isGeneratingPRDFor !== null &&
+          scoredSuggestions.some(
+            (s, i) =>
+              s.decisionId === focusPanelData.decisionId &&
+              isGeneratingPRDFor === `${s.title}-${i}`
+          )
+        }
       />
     </div>
   );
@@ -698,6 +737,7 @@ interface DecisionGridProps {
   getFeedbackState: (decisionId: string) => FeedbackCardState;
   updateFeedbackState: (decisionId: string, patch: Partial<FeedbackCardState>) => void;
   onSubmitFeedback: (decision: ScoredDecision, success: boolean) => void;
+  onFocusDecision: (data: FocusPanelData) => void;
 }
 
 function DecisionGrid({
@@ -714,6 +754,7 @@ function DecisionGrid({
   getFeedbackState,
   updateFeedbackState,
   onSubmitFeedback,
+  onFocusDecision,
 }: DecisionGridProps) {
   // Annotate every decision with its evaluated health + pushbacks once, so
   // grouping, filtering, and rendering all share the same judgment.
@@ -918,6 +959,27 @@ function DecisionGrid({
                     onPushbackCta={onPushbackCta}
                     onGenerateBrief={() => onGenerateBrief(decision)}
                     onConvert={() => onConvertToPRD(decision, index)}
+                    onFocus={() =>
+                      onFocusDecision({
+                        decisionId: decision.decisionId,
+                        title: decision.title,
+                        summary: decision.summary || decision.justification,
+                        justification: decision.justification,
+                        userStory: decision.userStory,
+                        tradeoffs: decision.tradeoffs,
+                        priority: decision.priority,
+                        score: decision.score,
+                        impact: decision.scoreBreakdown.impact,
+                        effort: decision.scoreBreakdown.effort,
+                        confidence: decision.scoreBreakdown.confidence,
+                        demand: decision.scoreBreakdown.demand,
+                        reasoning: decision.scoreBreakdown.reasoning,
+                        health,
+                        pushbacks,
+                        keyInsight: decision.keyInsight,
+                        recommendation: decision.recommendation,
+                      })
+                    }
                     isBriefLoading={isBriefLoading}
                     isConverting={isConverting}
                     footer={renderFeedbackFooter(decision)}

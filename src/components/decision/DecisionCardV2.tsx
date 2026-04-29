@@ -1,34 +1,55 @@
 import React from "react";
 import { Sparkles, Loader2, ArrowRight, AlertTriangle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AIInsight } from "@/components/ui/AIInsight";
 import type { HealthStatus, Pushback, PushbackAction } from "@/lib/ai/decisionHealth";
 
-const healthStyles: Record<HealthStatus, { pillCls: string; dotCls: string; emoji: string; label: string }> = {
+// ─── Style maps ───────────────────────────────────────────────────────────────
+
+const HEALTH_STYLES: Record<
+  HealthStatus,
+  {
+    pillCls: string;
+    dotCls: string;
+    label: string;
+    scoreCls: string;
+    scoreBg: string;
+    topBorderCls: string;
+  }
+> = {
   healthy: {
     pillCls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
     dotCls: "bg-emerald-500",
-    emoji: "🟢",
     label: "Strong",
+    scoreCls: "text-emerald-700 dark:text-emerald-300",
+    scoreBg: "bg-emerald-500/10",
+    topBorderCls: "bg-emerald-500",
   },
   risky: {
     pillCls: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
     dotCls: "bg-amber-500",
-    emoji: "🟡",
     label: "Risky",
+    scoreCls: "text-amber-700 dark:text-amber-300",
+    scoreBg: "bg-amber-500/10",
+    topBorderCls: "bg-amber-500",
   },
   weak: {
     pillCls: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
     dotCls: "bg-red-500",
-    emoji: "🔴",
     label: "Weak",
+    scoreCls: "text-red-700 dark:text-red-300",
+    scoreBg: "bg-red-500/10",
+    topBorderCls: "bg-red-500",
   },
 };
 
-const priorityBadgeStyles: Record<"high" | "medium" | "low", string> = {
+const PRIORITY_CLS: Record<"high" | "medium" | "low", string> = {
   high: "border-primary/30 bg-primary/10 text-primary",
   medium: "border-border bg-muted/30 text-muted-foreground",
   low: "border-border/40 bg-transparent text-muted-foreground/70",
 };
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface DecisionCardV2Props {
   title: string;
@@ -42,10 +63,13 @@ interface DecisionCardV2Props {
   onPushbackCta?: (action: PushbackAction) => void;
   onGenerateBrief: () => void;
   onConvert: () => void;
+  onFocus?: () => void;
   isBriefLoading?: boolean;
   isConverting?: boolean;
   footer?: React.ReactNode;
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function DecisionCardV2({
   title,
@@ -59,98 +83,143 @@ export function DecisionCardV2({
   onPushbackCta,
   onGenerateBrief,
   onConvert,
+  onFocus,
   isBriefLoading = false,
   isConverting = false,
   footer,
 }: DecisionCardV2Props) {
-  const hs = healthStyles[health.status];
+  const hs = HEALTH_STYLES[health.status];
   const topPushback = pushbacks[0];
   const overcommitWarning = priority === "high" && metrics.confidence < 5;
 
+  // Derive inline AI insight message
+  let aiInsightMessage: string | null = null;
+  let aiInsightSeverity: "info" | "warning" | "danger" = "info";
+  if (overcommitWarning) {
+    aiInsightMessage = "You're likely overcommitting — confidence is below threshold for a high-priority call.";
+    aiInsightSeverity = "danger";
+  } else if (topPushback) {
+    aiInsightMessage = topPushback.message;
+    aiInsightSeverity = topPushback.severity === "alert" ? "danger" : "warning";
+  } else if (topRisk) {
+    aiInsightMessage = topRisk;
+    aiInsightSeverity = "warning";
+  }
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't trigger focus if a button inside was clicked
+    if ((e.target as HTMLElement).closest("button")) return;
+    onFocus?.();
+  };
+
   return (
-    <article className="flex flex-col rounded-2xl border border-border/60 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md animate-fade-up">
+    <article
+      onClick={handleCardClick}
+      className={`
+        group relative flex flex-col rounded-2xl border border-border/60 bg-white
+        shadow-sm transition-all duration-200 animate-fade-up overflow-hidden
+        ${onFocus ? "cursor-pointer hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5" : ""}
+      `}
+    >
+      {/* Semantic top strip (color = health status) */}
+      <div className={`h-[3px] w-full shrink-0 ${hs.topBorderCls}`} />
+
       <div className="p-5 flex-1">
-        <header className="flex items-center justify-between gap-2">
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${hs.pillCls}`}>
-            <span aria-hidden>{hs.emoji}</span>
-            <span>{hs.label}</span>
-            <span className="font-mono tabular-nums opacity-80">({score})</span>
-          </span>
-          <span className={`shrink-0 rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.06em] font-medium ${priorityBadgeStyles[priority]}`}>
+        {/* Header: score + health + priority */}
+        <header className="flex items-start justify-between gap-3">
+          {/* Score — large, prominent */}
+          <div className={`flex items-center gap-2.5 rounded-xl px-3 py-1.5 ${hs.scoreBg}`}>
+            <span
+              className={`font-mono text-2xl font-bold tabular-nums leading-none ${hs.scoreCls}`}
+            >
+              {score}
+            </span>
+            <div className="flex flex-col">
+              <span className={`text-[10px] font-semibold uppercase tracking-[0.06em] leading-none ${hs.scoreCls}`}>
+                {hs.label}
+              </span>
+              <span className="text-[9px] text-muted-foreground/60 mt-0.5">/ 100</span>
+            </div>
+          </div>
+
+          <span
+            className={`shrink-0 rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.06em] font-medium ${PRIORITY_CLS[priority]}`}
+          >
             {priority}
           </span>
         </header>
 
-        <h3 className="mt-3 line-clamp-2 text-base font-semibold leading-snug tracking-tight text-foreground">
+        {/* Title */}
+        <h3 className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
           {title}
         </h3>
 
-        <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+        {/* Summary */}
+        <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
           {summary}
         </p>
 
-        {overcommitWarning && (
-          <div className="mt-3 flex items-start gap-2 rounded-md border-l-2 border-l-red-500 bg-red-500/[0.04] px-2.5 py-1.5 text-xs">
-            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-600" />
-            <p className="leading-relaxed font-medium text-red-800 dark:text-red-200">
-              You&apos;re likely overcommitting — validate first.
-            </p>
+        {/* Inline AI insight */}
+        {aiInsightMessage && (
+          <div className="mt-3">
+            <AIInsight
+              message={aiInsightMessage}
+              severity={aiInsightSeverity}
+              actions={
+                topPushback && onPushbackCta
+                  ? [
+                      {
+                        label: topPushback.cta.label,
+                        onClick: () => onPushbackCta(topPushback.cta.action),
+                      },
+                    ]
+                  : overcommitWarning
+                  ? [{ label: "Add Evidence", onClick: () => onPushbackCta?.("add-evidence") }]
+                  : []
+              }
+            />
           </div>
         )}
 
-        {topRisk && !topPushback && (
-          <div className="mt-3 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
-            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
-            <p className="line-clamp-2 leading-relaxed">{topRisk}</p>
-          </div>
-        )}
-
-        {topPushback && (
-          <div
-            className={`mt-3 flex items-start gap-2 rounded-md border-l-2 px-3 py-2 text-xs ${
-              topPushback.severity === "alert"
-                ? "border-l-red-500 bg-red-500/[0.04] text-red-800 dark:text-red-200"
-                : "border-l-amber-500 bg-amber-500/[0.04] text-amber-900 dark:text-amber-200"
-            }`}
-          >
-            {topPushback.severity === "alert" ? (
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            )}
-            <div className="flex-1 leading-relaxed">
-              <p className="font-medium">{topPushback.message}</p>
-              {onPushbackCta && (
-                <button
-                  type="button"
-                  onClick={() => onPushbackCta(topPushback.cta.action)}
-                  className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium hover:underline underline-offset-2"
-                >
-                  {topPushback.cta.label}
-                  <ArrowRight className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          </div>
+        {/* Focus hint — only shows on hover when onFocus is wired */}
+        {onFocus && !aiInsightMessage && (
+          <p className="mt-3 text-[11px] text-muted-foreground/0 group-hover:text-muted-foreground/50 transition-colors duration-150 select-none">
+            Click to deep-dive →
+          </p>
         )}
       </div>
 
+      {/* Metrics strip */}
       <div className="px-5 py-3 bg-muted/15 border-t border-border/60">
         <dl className="grid grid-cols-4 gap-x-3">
-          {([
-            ["Impact", metrics.impact],
-            ["Effort", metrics.effort],
-            ["Confidence", metrics.confidence],
-            ["Demand", metrics.demand],
-          ] as const).map(([label, value]) => (
-            <div key={label} className="flex flex-col">
-              <dt className="text-[9px] uppercase tracking-[0.06em] text-muted-foreground">{label}</dt>
-              <dd className="font-mono text-xs tabular-nums text-foreground">{value}</dd>
-            </div>
-          ))}
+          {(
+            [
+              ["Impact", metrics.impact],
+              ["Effort", metrics.effort],
+              ["Confidence", metrics.confidence],
+              ["Demand", metrics.demand],
+            ] as const
+          ).map(([label, value]) => {
+            const isLow = label === "Confidence" && value < 5;
+            return (
+              <div key={label} className="flex flex-col">
+                <dt className="text-[9px] uppercase tracking-[0.06em] text-muted-foreground">
+                  {label}
+                </dt>
+                <dd
+                  className={`font-mono text-xs tabular-nums font-medium ${
+                    isLow ? "text-red-600 dark:text-red-400" : "text-foreground"
+                  }`}
+                >
+                  {value}
+                </dd>
+              </div>
+            );
+          })}
         </dl>
       </div>
 
+      {/* Action buttons */}
       <div className="px-5 pb-4 pt-3 space-y-2 border-t border-border/60">
         <Button
           size="sm"
@@ -172,7 +241,9 @@ export function DecisionCardV2({
           onClick={onConvert}
           disabled={isConverting}
         >
-          {isConverting ? "Generating PRD…" : (
+          {isConverting ? (
+            "Generating PRD…"
+          ) : (
             <>
               Convert to PRD
               <ArrowRight className="ml-1 h-3 w-3" />
