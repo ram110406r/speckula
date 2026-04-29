@@ -123,7 +123,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
   // Auth is registered at the /ai prefix in app.ts (onRequest) so that the
   // rate-limit keyGenerator can read request.userId. Don't re-register here.
 
-  fastify.post('/chat', async (request: FastifyRequest, reply) => {
+  fastify.post('/chat', { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } }, async (request: FastifyRequest, reply) => {
     if (!process.env.GROQ_API_KEY) {
       reply.code(500).send({ ok: false, error: 'Missing Groq configuration.' });
       return;

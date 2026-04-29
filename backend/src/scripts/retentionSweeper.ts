@@ -20,12 +20,10 @@ const readPositiveInt = (raw: string | undefined, fallback: number): number => {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
-async function main() {
+export async function sweepExpiredRecords(): Promise<void> {
   const retentionDays = readPositiveInt(process.env.RETENTION_DAYS, 60);
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
   const now = new Date();
-
-  console.log(`[retention] cutoff=${cutoff.toISOString()} now=${now.toISOString()}`);
 
   const [prompts, reasoning, expiredCache, expiredPatterns] = await Promise.all([
     db.promptLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
@@ -46,11 +44,16 @@ async function main() {
   );
 }
 
-main()
-  .catch((err) => {
-    console.error('[retention] sweep failed:', err);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await db.$disconnect();
-  });
+// Standalone script entry point — used by `npm run retention:sweep`.
+// When imported as a module (e.g. from index.ts), this block does not run.
+const _isMain = process.argv[1] && /retentionSweeper\.[jt]s$/.test(process.argv[1]);
+if (_isMain) {
+  sweepExpiredRecords()
+    .catch((err) => {
+      console.error('[retention] sweep failed:', err);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await db.$disconnect();
+    });
+}

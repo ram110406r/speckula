@@ -230,6 +230,14 @@ async function callBackendRoute<T>(path: string, body: unknown, externalSignal?:
       }
 
       const envelope = await response.json().catch(() => null) as BackendEnvelope<T> | null;
+
+      if (response.status === 429) {
+        const msg = envelope?.error || "You've reached the request limit. Please wait a moment before trying again.";
+        const err = new Error(msg) as Error & { status: number };
+        err.status = 429;
+        throw err;
+      }
+
       if (!response.ok || !envelope?.ok || envelope.data === undefined) {
         const message = envelope?.error || `Backend call failed (${response.status})`;
         throw new Error(message);
