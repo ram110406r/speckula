@@ -131,7 +131,7 @@ export const groqService = {
     const opts: CallGroqOpts =
       typeof modelOrOpts === "string" ? { model: modelOrOpts } : modelOrOpts;
     const modelName = MODELS[opts.model ?? "fast"];
-    const promptHash = this.hashPrompt(userId, prompt, modelName, !!opts.jsonMode);
+    const promptHash = this.hashPrompt(userId, prompt, modelName, !!opts.jsonMode, opts.temperature ?? 0.6);
 
     const cached = await db.promptCache
       .findUnique({ where: { promptHash } })
@@ -750,9 +750,9 @@ ${content}`;
 
   // Cache key MUST include userId and model — otherwise user A's cached
   // response (with their notes embedded in the prompt) is served to user B.
-  hashPrompt(userId: string, prompt: string, modelName: string, jsonMode: boolean): string {
+  hashPrompt(userId: string, prompt: string, modelName: string, jsonMode: boolean, temperature = 0.6): string {
     const h = crypto.createHash("sha256");
-    h.update(`u:${userId}\nm:${modelName}\nj:${jsonMode ? "1" : "0"}\n`);
+    h.update(`u:${userId}\nm:${modelName}\nj:${jsonMode ? "1" : "0"}\nt:${temperature}\n`);
     h.update(prompt);
     return h.digest("hex");
   },
