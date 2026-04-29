@@ -3,7 +3,8 @@
 
 export const dynamic = 'force-dynamic';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+import { backendUrl } from '@/lib/env';
+const BACKEND_URL = backendUrl;
 
 const VALID_SEGMENT = /^[a-zA-Z0-9_-]+$/;
 const PROXY_TIMEOUT_MS = 60_000;

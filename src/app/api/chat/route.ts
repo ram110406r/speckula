@@ -3,7 +3,8 @@
 
 export const dynamic = 'force-dynamic';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+import { backendUrl } from '@/lib/env';
+const BACKEND_URL = backendUrl;
 // Stream calls can take a while; cap so a wedged backend doesn't pin a
 // Vercel/Next.js function for the full platform timeout.
 const PROXY_TIMEOUT_MS = 60_000;

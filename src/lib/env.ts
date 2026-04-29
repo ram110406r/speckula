@@ -30,5 +30,11 @@ export const firebaseConfig = {
 // BACKEND_URL is NOT prefixed with NEXT_PUBLIC_ — it must never appear in the
 // browser bundle. Only the Next.js API proxy routes (src/app/api/*/route.ts)
 // may import this.
-export const getBackendUrl = (): string =>
-  process.env.BACKEND_URL ?? 'http://localhost:3001';
+export const backendUrl = (() => {
+  if (typeof window !== 'undefined') return ''; // client bundle — never reached
+  const url = process.env.BACKEND_URL ?? 'http://localhost:3001';
+  if (url.endsWith('/')) {
+    throw new Error('[env] BACKEND_URL must not have a trailing slash');
+  }
+  return url;
+})();
