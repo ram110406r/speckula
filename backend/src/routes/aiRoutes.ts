@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { groqService } from '../services/groqService.js';
 import { z } from 'zod';
 import { utcDayStart } from '../lib/dateUtils.js';
+import { classifyPrismaError } from '../lib/prismaErrors.js';
 
 const MAX_CONTENT_CHARS = 80_000;
 
@@ -64,14 +65,14 @@ const classify = (error: unknown): { status: number; message: string } => {
   if (error instanceof z.ZodError) {
     return { status: 400, message: 'Invalid request payload' };
   }
+  const prisma = classifyPrismaError(error);
+  if (prisma) return prisma;
   const status = (error as { status?: number; statusCode?: number })?.status
     ?? (error as { status?: number; statusCode?: number })?.statusCode;
   if (typeof status === 'number') {
     if (status === 429) return { status: 429, message: 'Upstream rate limit reached. Try again shortly.' };
     if (status >= 500) return { status: 502, message: 'Upstream AI service error' };
   }
-  // Default: treat unknown errors as 500 with a generic message; specific
-  // routes can override before calling this if they have a known cause.
   return { status: 500, message: 'Internal error' };
 };
 
