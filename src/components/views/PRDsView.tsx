@@ -73,7 +73,7 @@ export function PRDsView() {
     <div className="flex h-full bg-background transition-all duration-300">
       {/* PRD List */}
       <div className="w-80 shrink-0 border-r border-border/60 flex flex-col bg-background">
-        <div className="flex items-center justify-between px-6 h-14 border-b border-border/60 shrink-0 bg-white/20">
+        <div className="flex items-center justify-between px-6 h-14 border-b border-border/60 shrink-0 bg-card/20">
           <div className="flex items-center gap-2.5">
             <LayoutDashboard className="h-4 w-4 text-primary" />
             <span className="label-system text-[12px]">Specifications</span>
@@ -106,8 +106,8 @@ export function PRDsView() {
                 key={prd.id}
                 className={`w-full text-left px-4 py-4 rounded-lg transition-all group relative border ${
                   selectedPRD?.id === prd.id 
-                    ? "bg-white border-primary/20 shadow-sm" 
-                    : "border-transparent hover:bg-white/40"
+                    ? "bg-card border-primary/20 shadow-sm" 
+                    : "border-transparent hover:bg-card/40"
                 }`}
                 onClick={() => setSelectedPRD(prd)}
               >
@@ -137,7 +137,7 @@ export function PRDsView() {
           )}
         </div>
         
-        <div className="p-4 border-t border-border/60 bg-white/10">
+        <div className="p-4 border-t border-border/60 bg-card/10">
           <Button
             className="w-full h-10 label-system text-[12px] bg-primary text-white hover:bg-primary-hover shadow-sm"
             onClick={handleGenerate}
@@ -154,10 +154,10 @@ export function PRDsView() {
       </div>
 
       {/* PRD Preview */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-white/20">
+      <div className="flex-1 flex flex-col overflow-hidden bg-card/20">
         {selectedPRD ? (
           <>
-            <div className="flex items-center justify-between px-10 h-14 border-b border-border/60 shrink-0 bg-white/50 backdrop-blur-md">
+            <div className="flex items-center justify-between px-10 h-14 border-b border-border/60 shrink-0 bg-card/50 backdrop-blur-md">
               <div className="flex items-center gap-4">
                 <FileText className="h-4 w-4 text-primary/60" />
                 <div>
@@ -170,7 +170,7 @@ export function PRDsView() {
                   </div>
                 </div>
               </div>
-              <Button size="sm" variant="outline" className="h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-4 bg-white transition-all">
+              <Button size="sm" variant="outline" className="h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-4 bg-card transition-all">
                 <Download className="h-3 w-3 mr-1.5" /> Export Specs
               </Button>
             </div>

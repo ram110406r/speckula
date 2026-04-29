@@ -232,11 +232,11 @@ export function AutonomousModeView() {
               value={idea}
               onChange={(e) => setIdea(e.target.value)}
               placeholder="Describe your product idea — e.g. 'Build an app for students to manage expenses'"
-              className="w-full min-h-[80px] rounded-lg border border-border/60 bg-white px-3 py-2 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full min-h-[80px] rounded-lg border border-border/60 bg-card px-3 py-2 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
               disabled={isRunning || pendingQuestion !== null}
             />
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-1 rounded-full border border-border/60 bg-white p-1 shadow-sm">
+              <div className="flex items-center gap-1 rounded-full border border-border/60 bg-card p-1 shadow-sm">
                 {depthOptions.map((opt) => {
                   const active = depth === opt.id;
                   return (
@@ -297,10 +297,10 @@ export function AutonomousModeView() {
           </div>
 
           {pendingQuestion && (
-            <div className="border-t border-border/60 p-4 bg-amber-50/40 dark:bg-amber-500/5 shrink-0">
+            <div className="border-t border-border/60 p-4 bg-warning/5 shrink-0">
               <div className="flex items-start gap-2 mb-3">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5" />
-                <div className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                <AlertTriangle className="h-3.5 w-3.5 text-warning mt-0.5" />
+                <div className="text-xs text-foreground leading-relaxed">
                   {pendingQuestion.why
                     ? <><span className="font-semibold">Why this matters:</span> {pendingQuestion.why}</>
                     : <span className="font-semibold">Awaiting your answer to proceed.</span>}
@@ -351,13 +351,13 @@ function AgentStatePill({ state }: { state: AgentState }) {
   if (state === "idle") return null;
   const tone =
     state === "error"
-      ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300"
+      ? "border-destructive/30 bg-destructive/10 text-destructive"
       : state === "stopped"
         ? "border-border bg-muted text-muted-foreground"
         : state === "output"
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+          ? "border-success/30 bg-success/10 text-success"
           : state === "awaiting_user"
-            ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+            ? "border-warning/30 bg-warning/10 text-warning"
             : "border-primary/20 bg-primary/10 text-primary";
   const label =
     state === "output"
@@ -397,8 +397,8 @@ function ChatBubble({ entry }: { entry: ChatEntry }) {
   }
   if (entry.kind === "question") {
     return (
-      <div className="rounded-2xl rounded-bl-md border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-sm leading-relaxed">
-        <div className="text-[10px] uppercase tracking-[0.06em] font-semibold text-amber-700 dark:text-amber-300 mb-2">
+      <div className="rounded-2xl rounded-bl-md border border-warning/30 bg-warning/5 px-4 py-3 text-sm leading-relaxed">
+        <div className="text-[10px] uppercase tracking-[0.06em] font-semibold text-warning mb-2">
           I can&apos;t prioritize correctly without this
         </div>
         <p className="text-foreground font-medium">→ {entry.question.question}</p>
@@ -413,13 +413,13 @@ function ChatBubble({ entry }: { entry: ChatEntry }) {
   if (entry.kind === "system") {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground/80">
-        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+        <CheckCircle2 className="h-3 w-3 text-success" />
         <span>{entry.text}</span>
       </div>
     );
   }
   return (
-    <div className="rounded-md border-l-2 border-l-red-500 bg-red-500/[0.06] px-3 py-2 text-xs text-red-800 dark:text-red-200 leading-relaxed">
+    <div className="rounded-md border-l-2 border-l-destructive bg-destructive/5 px-3 py-2 text-xs text-foreground leading-relaxed">
       <span className="font-semibold">Error:</span> {entry.text}
     </div>
   );
@@ -493,8 +493,8 @@ function StructuredOutput({
             {decisions
               .filter((d) => d.keyInsight)
               .map((d, i) => (
-                <li key={i} className="rounded-lg border border-red-500/20 bg-red-500/[0.04] p-3 text-sm leading-relaxed text-red-900/90 dark:text-red-100/90">
-                  <span className="font-medium text-red-700 dark:text-red-300">{d.title}:</span>{" "}
+                <li key={i} className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm leading-relaxed text-foreground">
+                  <span className="font-medium text-destructive">{d.title}:</span>{" "}
                   {d.keyInsight}
                 </li>
               ))}
@@ -504,14 +504,14 @@ function StructuredOutput({
 
       {assumptions.length > 0 && (
         <SectionBlock icon={AlertTriangle} title="Hidden Assumptions">
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.05] p-4">
-            <p className="text-[10px] uppercase tracking-[0.06em] text-amber-700 dark:text-amber-300 font-semibold mb-2">
+          <div className="rounded-lg border border-warning/30 bg-warning/5 p-4">
+            <p className="text-[10px] uppercase tracking-[0.06em] text-warning font-semibold mb-2">
               These must be true for the plan to work
             </p>
             <ul className="space-y-1.5">
               {assumptions.map((a, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-amber-900/90 dark:text-amber-100/90">
-                  <span className="text-amber-600 mt-0.5">•</span>
+                <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-foreground">
+                  <span className="text-warning mt-0.5">•</span>
                   <span>{a}</span>
                 </li>
               ))}
@@ -531,7 +531,7 @@ function StructuredOutput({
                 <ul className="space-y-1">
                   {strategy.gaps.map((gap, i) => (
                     <li key={i} className="flex items-start gap-2 text-xs text-foreground/85">
-                      <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
+                      <AlertTriangle className="h-3 w-3 text-warning mt-0.5 shrink-0" />
                       <span>{gap}</span>
                     </li>
                   ))}
@@ -546,7 +546,7 @@ function StructuredOutput({
         <SectionBlock icon={Map} title="Roadmap">
           <div className="space-y-3">
             {roadmap.map((phase, i) => (
-              <div key={i} className="rounded-lg border border-border/60 bg-white p-4">
+              <div key={i} className="rounded-lg border border-border/60 bg-card p-4">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[10px] uppercase tracking-[0.06em] font-semibold text-primary">Phase {i + 1}</span>
                   <h4 className="text-sm font-semibold text-foreground">{phase.name}</h4>
@@ -598,7 +598,7 @@ function DecisionPreview({ decision }: { decision: DecisionSuggestion }) {
         : "border-border/40 bg-transparent text-muted-foreground/70";
 
   return (
-    <article className="rounded-lg border border-border/60 bg-white p-4 space-y-2">
+    <article className="rounded-lg border border-border/60 bg-card p-4 space-y-2">
       <header className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-semibold text-foreground leading-snug">{decision.title}</h4>
         <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.06em] font-medium ${priorityCls}`}>
@@ -651,23 +651,23 @@ const verdictStyles: Record<VerdictLabel, { icon: React.ElementType; label: stri
   PROCEED: {
     icon: ShieldCheck,
     label: "Proceed",
-    cardCls: "border-emerald-500/30 bg-emerald-500/[0.06]",
-    pillCls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-    iconCls: "text-emerald-600",
+    cardCls: "border-success/30 bg-success/[0.06]",
+    pillCls: "bg-success/15 text-success border-success/30",
+    iconCls: "text-success",
   },
   VALIDATE_FIRST: {
     icon: ShieldAlert,
     label: "Validate first",
-    cardCls: "border-amber-500/40 bg-amber-500/[0.06]",
-    pillCls: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
-    iconCls: "text-amber-600",
+    cardCls: "border-warning/40 bg-warning/5",
+    pillCls: "bg-warning/15 text-warning border-warning/30",
+    iconCls: "text-warning",
   },
   DO_NOT_BUILD: {
     icon: ShieldX,
     label: "Don't build yet",
-    cardCls: "border-red-500/40 bg-red-500/[0.06]",
-    pillCls: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
-    iconCls: "text-red-600",
+    cardCls: "border-destructive/40 bg-destructive/5",
+    pillCls: "bg-destructive/15 text-destructive border-destructive/30",
+    iconCls: "text-destructive",
   },
 };
 

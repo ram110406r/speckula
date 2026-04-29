@@ -10,7 +10,7 @@ export function ScoreHistoryGraph({ history }: ScoreHistoryGraphProps) {
   const max = Math.max(100, ...visible.map((entry) => entry.score));
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
       <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Score History</p>
       <div className="mt-4 flex items-end gap-2 h-24">
         {visible.length === 0 ? (

@@ -50,18 +50,18 @@ interface FocusPanelProps {
 const HEALTH: Record<HealthStatus, { label: string; scoreCls: string; ringCls: string }> = {
   healthy: {
     label: "Strong",
-    scoreCls: "text-emerald-600 dark:text-emerald-400",
-    ringCls: "ring-2 ring-emerald-500/30",
+    scoreCls: "text-success",
+    ringCls: "ring-2 ring-success/30",
   },
   risky: {
     label: "Risky",
-    scoreCls: "text-amber-600 dark:text-amber-400",
-    ringCls: "ring-2 ring-amber-500/30",
+    scoreCls: "text-warning",
+    ringCls: "ring-2 ring-warning/30",
   },
   weak: {
     label: "Weak",
-    scoreCls: "text-red-600 dark:text-red-400",
-    ringCls: "ring-2 ring-red-500/30",
+    scoreCls: "text-destructive",
+    ringCls: "ring-2 ring-destructive/30",
   },
 };
 
@@ -86,7 +86,7 @@ function MetricTile({
     <div
       className={`rounded-xl border p-3 ${
         highlight
-          ? "border-red-500/30 bg-red-500/[0.04]"
+          ? "border-destructive/30 bg-destructive/5"
           : "border-border/50 bg-muted/20"
       }`}
     >
@@ -95,7 +95,7 @@ function MetricTile({
       </p>
       <p
         className={`mt-0.5 font-mono text-2xl font-bold tabular-nums leading-none ${
-          highlight ? "text-red-600 dark:text-red-400" : "text-foreground"
+          highlight ? "text-destructive" : "text-foreground"
         }`}
       >
         {value}
@@ -103,7 +103,7 @@ function MetricTile({
       </p>
       <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-border/40">
         <div
-          className={`h-full rounded-full ${highlight ? "bg-red-500" : "bg-primary"}`}
+          className={`h-full rounded-full ${highlight ? "bg-destructive" : "bg-primary"}`}
           style={{ width: `${(value / 10) * 100}%` }}
         />
       </div>
@@ -255,7 +255,7 @@ export function FocusPanel({
           {/* Reasoning */}
           {data.reasoning && (
             <div className="flex items-start gap-2.5 rounded-lg bg-muted/30 p-3">
-              <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {data.reasoning}
               </p>
@@ -266,12 +266,12 @@ export function FocusPanel({
           {(data.keyInsight || data.recommendation) && (
             <div className="grid gap-3 sm:grid-cols-2">
               {data.keyInsight && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] p-3">
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.06em] font-semibold text-red-700 dark:text-red-300">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.06em] font-semibold text-destructive">
                     <AlertTriangle className="h-3 w-3" />
                     Key Insight
                   </div>
-                  <p className="mt-1.5 text-sm leading-relaxed text-red-900/90 dark:text-red-100/90">
+                  <p className="mt-1.5 text-sm leading-relaxed text-foreground">
                     {data.keyInsight}
                   </p>
                 </div>
@@ -302,8 +302,8 @@ export function FocusPanel({
                     key={i}
                     className={`flex items-start gap-2 rounded-md border-l-2 px-3 py-2 text-xs ${
                       pb.severity === "alert"
-                        ? "border-l-red-500 bg-red-500/[0.04] text-red-900 dark:text-red-100"
-                        : "border-l-amber-500 bg-amber-500/[0.04] text-amber-900 dark:text-amber-100"
+                        ? "border-l-destructive bg-destructive/5 text-foreground"
+                        : "border-l-warning bg-warning/5 text-foreground"
                     }`}
                   >
                     {pb.severity === "alert" ? (

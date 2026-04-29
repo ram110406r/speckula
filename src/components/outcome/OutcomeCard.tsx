@@ -11,7 +11,7 @@ interface OutcomeCardProps {
 
 export function OutcomeCard({ expected, actual, comparison }: OutcomeCardProps) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
       <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Outcome Loop</p>
       {!expected ? (
         <p className="mt-3 text-sm text-muted-foreground">No expected outcome captured yet.</p>

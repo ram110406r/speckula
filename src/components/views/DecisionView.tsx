@@ -57,22 +57,22 @@ const groupOrder: ReadonlyArray<{ status: HealthStatus; label: string; subtitle:
     status: "healthy",
     label: "Strong Decisions",
     subtitle: "Well-supported, ship-ready",
-    accentCls: "text-emerald-700 dark:text-emerald-300",
-    dotCls: "bg-emerald-500",
+    accentCls: "text-success",
+    dotCls: "bg-success",
   },
   {
     status: "risky",
     label: "Needs Validation",
     subtitle: "Thin evidence or imbalanced trade-offs",
-    accentCls: "text-amber-700 dark:text-amber-300",
-    dotCls: "bg-amber-500",
+    accentCls: "text-warning",
+    dotCls: "bg-warning",
   },
   {
     status: "weak",
     label: "Risky Decisions",
     subtitle: "Deal-breakers — gather evidence first",
-    accentCls: "text-red-700 dark:text-red-300",
-    dotCls: "bg-red-500",
+    accentCls: "text-destructive",
+    dotCls: "bg-destructive",
   },
 ];
 
@@ -555,7 +555,7 @@ export function DecisionView() {
         )}
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="md:col-span-1 rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+          <div className="md:col-span-1 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
             <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Expected Outcome</p>
             <div className="mt-4 space-y-3">
               <Input value={expectedMetric} onChange={(e) => setExpectedMetric(e.target.value)} placeholder="Metric (e.g. retention)" />
@@ -565,7 +565,7 @@ export function DecisionView() {
             </div>
           </div>
 
-          <div className="md:col-span-1 rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+          <div className="md:col-span-1 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
             <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Actual Outcome</p>
             <div className="mt-4 space-y-3">
               <Input value={actualMetric} onChange={(e) => setActualMetric(e.target.value)} placeholder="Metric" />
@@ -585,7 +585,7 @@ export function DecisionView() {
         </div>
 
         {strategicGuidance && (
-          <section className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+          <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
             <header className="flex items-center gap-2">
               <p className="text-[10px] uppercase tracking-[0.08em] font-medium text-primary">Strategic Focus</p>
             </header>
@@ -606,7 +606,7 @@ export function DecisionView() {
                   <ul className="space-y-1">
                     {strategicGuidance.gaps.map((gap) => (
                       <li key={gap} className="flex items-start gap-2 text-sm text-foreground/90">
-                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
                         <span className="leading-relaxed">{gap}</span>
                       </li>
                     ))}
@@ -618,7 +618,7 @@ export function DecisionView() {
         )}
 
         {suggestions.length === 0 && !isLoading ? (
-          <div className="flex flex-col items-center justify-center p-16 text-center border border-dashed border-border/60 rounded-2xl max-w-lg mx-auto bg-white/40">
+          <div className="flex flex-col items-center justify-center p-16 text-center border border-dashed border-border/60 rounded-2xl max-w-lg mx-auto bg-card/40">
             <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
               <Lightbulb className="h-5 w-5 text-primary" />
             </div>
@@ -636,7 +636,7 @@ export function DecisionView() {
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm animate-pulse"
+                className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm animate-pulse"
               >
                 <div className="h-6 w-24 rounded-full bg-muted/60" />
                 <div className="mt-4 h-5 w-3/4 rounded bg-muted/60" />
@@ -889,7 +889,7 @@ function DecisionGrid({
           </div>
         </div>
 
-        <div className="flex items-center gap-1 rounded-full border border-border/60 bg-white p-1 shadow-sm">
+        <div className="flex items-center gap-1 rounded-full border border-border/60 bg-card p-1 shadow-sm">
           {filterChips.map((chip) => {
             const active = filter === chip.id;
             return (
@@ -911,7 +911,7 @@ function DecisionGrid({
       </div>
 
       {totalFiltered === 0 && (
-        <div className="rounded-2xl border border-dashed border-border/60 bg-white/40 p-12 text-center">
+        <div className="rounded-2xl border border-dashed border-border/60 bg-card/40 p-12 text-center">
           <p className="text-sm font-medium">No decisions match this filter</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {totalAnnotated} total · try a different filter or clear your search.

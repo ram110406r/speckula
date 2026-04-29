@@ -541,7 +541,7 @@ export function TipTapEditor() {
   return (
     <div ref={editorContainerRef} className="relative h-full w-full">
       {isAutoExtracting && (
-        <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-full border border-primary/20 bg-white px-3 py-1.5 shadow-sm">
+        <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-full border border-primary/20 bg-card px-3 py-1.5 shadow-sm">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
           <span className="label-system text-[11px] text-primary">Extracting insights</span>
         </div>

@@ -76,7 +76,7 @@ export function PlatformView() {
   if (!user) {
     return (
       <div className="flex h-full items-center justify-center p-10">
-        <div className="max-w-md rounded-2xl border border-border/60 bg-white p-8 text-center shadow-sm">
+        <div className="max-w-md rounded-2xl border border-border/60 bg-card p-8 text-center shadow-sm">
           <Users className="mx-auto h-10 w-10 text-primary/50" />
           <h1 className="mt-4 text-lg font-semibold">Platform mode needs a signed-in user.</h1>
           <p className="mt-2 text-sm text-muted-foreground">Sign in to manage your public profile and team workspaces.</p>
@@ -136,7 +136,7 @@ export function PlatformView() {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <div className="flex items-center justify-between border-b border-border/60 bg-white/60 px-8 h-14 shrink-0">
+      <div className="flex items-center justify-between border-b border-border/60 bg-card/60 px-8 h-14 shrink-0">
         <div className="flex items-center gap-3">
           <Network className="h-4 w-4 text-primary" />
           <span className="label-system text-[12px]">Platform Mode</span>
@@ -148,7 +148,7 @@ export function PlatformView() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-border/40 bg-white/20 px-8 py-3 shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-border/40 bg-card/20 px-8 py-3 shrink-0 overflow-x-auto">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -157,7 +157,7 @@ export function PlatformView() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`inline-flex items-center gap-2 rounded-md border px-4 py-2 label-system text-[12px] transition-all ${
-                active ? "border-primary bg-primary text-white" : "border-border/60 bg-white hover:border-primary/40 hover:text-foreground"
+                active ? "border-primary bg-primary text-white" : "border-border/60 bg-card hover:border-primary/40 hover:text-foreground"
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -169,12 +169,12 @@ export function PlatformView() {
 
       <div className="flex-1 overflow-auto p-8 custom-scrollbar space-y-8">
         {isLoading ? (
-          <div className="flex h-80 items-center justify-center rounded-2xl border border-dashed border-border/40 bg-white">
+          <div className="flex h-80 items-center justify-center rounded-2xl border border-dashed border-border/40 bg-card">
             <p className="label-system text-[12px] text-muted-foreground">Loading platform</p>
           </div>
         ) : activeTab === "portfolio" ? (
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <section className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm">
+            <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="label-system text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Public Profile</p>
@@ -208,7 +208,7 @@ export function PlatformView() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm space-y-4">
+            <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="label-system text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Decision History</p>
@@ -268,7 +268,7 @@ function WorkspaceSection({
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-      <section className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm space-y-4">
+      <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm space-y-4">
         <div>
           <p className="label-system text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Workspace Dashboard</p>
           <h3 className="mt-2 text-base font-semibold">Create a team workspace</h3>
@@ -278,7 +278,7 @@ function WorkspaceSection({
         <p className="text-xs text-muted-foreground">Owners manage membership; viewers can inspect shared work.</p>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm space-y-4">
+      <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="label-system text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Shared Workspaces</p>

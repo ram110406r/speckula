@@ -484,7 +484,7 @@ export function AIPanel() {
             .map((insight, idx) => ({ insight, idx, id: `insight-${idx}` }))
             .filter(({ id }) => !dismissed.has(id))
             .map(({ insight, idx, id }) => (
-              <div key={id} className="rounded-md border border-primary/20 bg-white p-2.5 border-l-4 border-l-primary">
+              <div key={id} className="rounded-md border border-primary/20 bg-card p-2.5 border-l-4 border-l-primary">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-[12px] font-semibold text-foreground">{insight.title}</p>
@@ -527,7 +527,7 @@ export function AIPanel() {
             .map((s, idx) => ({ s, id: `suggestion-${idx}` }))
             .filter(({ id }) => !dismissed.has(id))
             .map(({ s, id }) => (
-              <div key={id} className="rounded-md border border-border/70 bg-white p-2.5">
+              <div key={id} className="rounded-md border border-border/70 bg-card p-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2">
                     <Lightbulb className="h-3.5 w-3.5 text-primary mt-0.5" />
@@ -581,7 +581,7 @@ export function AIPanel() {
             ?.map((d, idx) => ({ d, idx, id: `decision-${idx}` }))
             .filter(({ id }) => !dismissed.has(id))
             .map(({ d, idx, id }) => (
-              <div key={id} className="rounded-md border border-primary/20 bg-white p-2.5 border-l-4 border-l-primary">
+              <div key={id} className="rounded-md border border-primary/20 bg-card p-2.5 border-l-4 border-l-primary">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <p className="text-[12px] font-semibold text-foreground">{d.text}</p>
@@ -624,11 +624,11 @@ export function AIPanel() {
         </div>
 
         {showDetailedSignals && signals.decisions && signals.decisions.length > 0 && (
-          <div className="rounded-2xl border border-border/70 bg-white p-3 shadow-sm">
+          <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
             <p className="label-system text-[11px] text-primary">Decision Timeline</p>
             <div className="mt-2 space-y-2">
               {signals.decisions.slice(0, 3).map((decision, idx) => (
-                <div key={`timeline-${decision.text}-${idx}`} className="rounded-xl border border-border/60 bg-[#fcfaf4] px-3 py-2">
+                <div key={`timeline-${decision.text}-${idx}`} className="rounded-xl border border-border/60 bg-muted px-3 py-2">
                   <p className="text-xs font-semibold text-foreground">{decision.text}</p>
                   <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                     <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />Just now</span>
@@ -663,7 +663,7 @@ export function AIPanel() {
                 className="justify-start label-system text-[12px] border-border/60 hover:border-primary/40 hover:bg-muted/50 text-foreground h-9"
                 onClick={() => triggerPrompt("Extract the key product insights from what I've described. Identify: pain points, target users, market opportunity, and differentiation.")}
               >
-                <Lightbulb className="mr-2 h-3 w-3 text-yellow-500 shrink-0" />
+                <Lightbulb className="mr-2 h-3 w-3 text-warning shrink-0" />
                 Extract Insights
               </Button>
               <Button
@@ -671,7 +671,7 @@ export function AIPanel() {
                 className="justify-start label-system text-[12px] border-border/60 hover:border-primary/40 hover:bg-muted/50 text-foreground h-9"
                 onClick={() => triggerPrompt("Based on the product concept described, suggest a prioritized list of execution tasks and milestones for the first 90 days. Format as a structured action plan.")}
               >
-                <CheckSquare className="mr-2 h-3 w-3 text-green-500 shrink-0" />
+                <CheckSquare className="mr-2 h-3 w-3 text-success shrink-0" />
                 Suggest Execution Tasks
               </Button>
             </div>
@@ -703,7 +703,7 @@ export function AIPanel() {
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-border/70 shrink-0 bg-[#efe8d8]">
+      <div className="p-3 border-t border-border/70 shrink-0 bg-secondary">
         {messages.length > 0 && (
           <Button
             variant="ghost"

@@ -23,16 +23,16 @@ const SEVERITY_STYLES = {
     action: "text-primary hover:text-primary/70",
   },
   warning: {
-    wrapper: "border-l-amber-500 bg-amber-500/[0.04]",
-    icon: "text-amber-500",
-    text: "text-amber-900 dark:text-amber-100/90",
-    action: "text-amber-700 dark:text-amber-300 hover:underline",
+    wrapper: "border-l-warning bg-warning/5",
+    icon: "text-warning",
+    text: "text-foreground",
+    action: "text-warning hover:underline",
   },
   danger: {
-    wrapper: "border-l-red-500 bg-red-500/[0.04]",
-    icon: "text-red-500",
-    text: "text-red-900 dark:text-red-100/90",
-    action: "text-red-700 dark:text-red-300 hover:underline",
+    wrapper: "border-l-destructive bg-destructive/5",
+    icon: "text-destructive",
+    text: "text-foreground",
+    action: "text-destructive hover:underline",
   },
 } as const;
 

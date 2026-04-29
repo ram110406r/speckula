@@ -35,7 +35,7 @@ export function LandingPage() {
           </button>
           <Button 
             variant="outline" 
-            className="label-system text-[12px] border-border bg-white hover:border-primary/50 hover:text-primary transition-all px-6"
+            className="label-system text-[12px] border-border bg-card hover:border-primary/50 hover:text-primary transition-all px-6"
             onClick={loginWithGoogle}
             disabled={loading}
           >
@@ -74,7 +74,7 @@ export function LandingPage() {
           <Button 
             size="lg" 
             variant="secondary"
-            className="h-11 px-8 label-system text-[12px] bg-white border border-border shadow-sm hover:bg-secondary/20 transition-all"
+            className="h-11 px-8 label-system text-[12px] bg-card border border-border shadow-sm hover:bg-secondary/20 transition-all"
             type="button"
             onClick={() => scrollToSection("features")}
           >

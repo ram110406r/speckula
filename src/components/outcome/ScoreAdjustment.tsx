@@ -9,7 +9,7 @@ export function ScoreAdjustment({ oldConfidence, newConfidence }: ScoreAdjustmen
   const delta = newConfidence - oldConfidence;
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
       <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Score Adjustment</p>
       <p className="mt-3 text-sm text-foreground">
         Confidence {oldConfidence}/10 → {newConfidence}/10

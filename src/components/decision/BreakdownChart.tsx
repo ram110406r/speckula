@@ -18,7 +18,7 @@ export function BreakdownChart({ impact, effort, confidence, demand }: Breakdown
   const values = [impact, effort, confidence, demand];
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
       <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Breakdown</p>
       <div className="mt-4 space-y-3">
         {rows.map(([label, color], index) => (

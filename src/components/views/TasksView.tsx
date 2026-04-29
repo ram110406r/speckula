@@ -355,7 +355,7 @@ export function TasksView() {
                       isDone
                         ? "border-border/40 bg-transparent opacity-60 hover:opacity-100"
                         : isBlocked
-                        ? "border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60"
+                        ? "border-warning/40 bg-warning/5 hover:border-warning/60"
                         : "border-border bg-background hover:border-primary/40"
                     }`}
                     onClick={() => setSelectedTask(task)}
@@ -371,7 +371,7 @@ export function TasksView() {
                       ) : task.status === "in-progress" ? (
                         <Clock className="h-4 w-4 text-primary" />
                       ) : (
-                        <Circle className={`h-4 w-4 ${isBlocked ? "text-amber-500" : "text-muted-foreground/50"}`} />
+                        <Circle className={`h-4 w-4 ${isBlocked ? "text-warning" : "text-muted-foreground/50"}`} />
                       )}
                     </button>
                     <div className="flex-1 min-w-0">
@@ -380,7 +380,7 @@ export function TasksView() {
                       </p>
                       <div className="flex items-center gap-2 mt-2 flex-wrap text-xs text-muted-foreground">
                         {isBlocked && (
-                          <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                          <span className="flex items-center gap-1 text-warning">
                             <ArrowRight className="h-3 w-3" />
                             Blocked by {blockingTasks.length}
                           </span>

@@ -44,7 +44,7 @@ export function NodeCard({ insight, animationDelay = 0 }: NodeCardProps) {
     <article
       role="article"
       aria-label={`${cfg.label}: ${insight.title}`}
-      className="node-card-animate relative flex flex-col bg-card rounded-lg border border-border overflow-hidden transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_8px_16px_rgba(192,74,43,0.10)]"
+      className="node-card-animate relative flex flex-col bg-card rounded-lg border border-border overflow-hidden transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_8px_16px_rgba(37,99,235,0.08)]"
       style={{ animationDelay: `${animationDelay}ms` }}
     >
       {/* Semantic top-border strip */}

@@ -30,7 +30,7 @@ export function PublicProfilePage({ userId }: { userId: string }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b border-border/60 bg-white/70 backdrop-blur-sm">
+      <div className="border-b border-border/60 bg-card/70 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="inline-flex items-center gap-2 label-system text-[12px] text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-3.5 w-3.5" /> Back
@@ -42,7 +42,7 @@ export function PublicProfilePage({ userId }: { userId: string }) {
       </div>
 
       <main className="mx-auto max-w-6xl px-6 py-10 space-y-8">
-        <section className="rounded-3xl border border-border/60 bg-white p-8 shadow-sm">
+        <section className="rounded-3xl border border-border/60 bg-card p-8 shadow-sm">
           <p className="label-system text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Public Profile</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">{profile?.name || userId}</h1>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{profile?.bio || "This profile has not been completed yet."}</p>

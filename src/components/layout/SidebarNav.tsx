@@ -218,8 +218,8 @@ export function SidebarNav() {
                     key={`${group.label}-${item.label}`}
                     className={`relative flex h-9 w-full items-center gap-2.5 rounded-lg pl-3 pr-3 text-left text-sm transition-colors ${
                       isActive
-                        ? "bg-card text-primary before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-full before:bg-primary"
-                        : "text-foreground/70 hover:bg-card/60 hover:text-foreground"
+                        ? "bg-accent text-primary font-medium before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-full before:bg-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                     onClick={() => setActiveView(item.view)}
                   >
@@ -257,7 +257,7 @@ export function SidebarNav() {
               <div
                 key={doc.id}
                 className={`group flex items-center gap-2 px-3 h-8 cursor-pointer rounded-md transition-colors ${
-                  isActive ? "bg-card text-foreground" : "text-foreground/70 hover:bg-card/60 hover:text-foreground"
+                  isActive ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
                 onClick={() => {
                   setCurrentDocId(doc.id);

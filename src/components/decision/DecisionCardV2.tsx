@@ -18,28 +18,28 @@ const HEALTH_STYLES: Record<
   }
 > = {
   healthy: {
-    pillCls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    dotCls: "bg-emerald-500",
+    pillCls: "border-success/30 bg-success/10 text-success",
+    dotCls: "bg-success",
     label: "Strong",
-    scoreCls: "text-emerald-700 dark:text-emerald-300",
-    scoreBg: "bg-emerald-500/10",
-    topBorderCls: "bg-emerald-500",
+    scoreCls: "text-success",
+    scoreBg: "bg-success/10",
+    topBorderCls: "bg-success",
   },
   risky: {
-    pillCls: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    dotCls: "bg-amber-500",
+    pillCls: "border-warning/40 bg-warning/10 text-warning",
+    dotCls: "bg-warning",
     label: "Risky",
-    scoreCls: "text-amber-700 dark:text-amber-300",
-    scoreBg: "bg-amber-500/10",
-    topBorderCls: "bg-amber-500",
+    scoreCls: "text-warning",
+    scoreBg: "bg-warning/10",
+    topBorderCls: "bg-warning",
   },
   weak: {
-    pillCls: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
-    dotCls: "bg-red-500",
+    pillCls: "border-destructive/40 bg-destructive/10 text-destructive",
+    dotCls: "bg-destructive",
     label: "Weak",
-    scoreCls: "text-red-700 dark:text-red-300",
-    scoreBg: "bg-red-500/10",
-    topBorderCls: "bg-red-500",
+    scoreCls: "text-destructive",
+    scoreBg: "bg-destructive/10",
+    topBorderCls: "bg-destructive",
   },
 };
 
@@ -116,7 +116,7 @@ export function DecisionCardV2({
     <article
       onClick={handleCardClick}
       className={`
-        group relative flex flex-col rounded-2xl border border-border/60 bg-white
+        group relative flex flex-col rounded-2xl border border-border/60 bg-card
         shadow-sm transition-all duration-200 animate-fade-up overflow-hidden
         ${onFocus ? "cursor-pointer hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5" : ""}
       `}
@@ -208,7 +208,7 @@ export function DecisionCardV2({
                 </dt>
                 <dd
                   className={`font-mono text-xs tabular-nums font-medium ${
-                    isLow ? "text-red-600 dark:text-red-400" : "text-foreground"
+                    isLow ? "text-destructive" : "text-foreground"
                   }`}
                 >
                   {value}

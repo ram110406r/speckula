@@ -14,8 +14,8 @@ interface CaseBriefDialogProps {
 }
 
 const verdictTone: Record<CaseBriefData["verdict"]["recommendation"], string> = {
-  Build: "text-emerald-700 dark:text-emerald-300",
-  Delay: "text-amber-700 dark:text-amber-300",
+  Build: "text-success",
+  Delay: "text-warning",
   Validate: "text-primary",
 };
 
@@ -73,7 +73,7 @@ export function CaseBriefDialog({ open, loading, data, error, onClose }: CaseBri
           )}
 
           {!loading && error && (
-            <div className="rounded-md border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               {error}
             </div>
           )}

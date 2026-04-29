@@ -11,7 +11,7 @@ interface ScoreCardProps {
 
 export function ScoreCard({ score, impact, effort, confidence, demand, reasoning }: ScoreCardProps) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
       <div className="flex items-end justify-between gap-4">
         <div>
           <p className="label-system text-[10px] uppercase tracking-widest text-muted-foreground">Opportunity Score</p>

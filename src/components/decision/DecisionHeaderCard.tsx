@@ -23,23 +23,23 @@ function bandFromScore(score: number): { band: StrengthBand; label: string; pill
     return {
       band: "strong",
       label: "Strong Decision",
-      pillCls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-      dotCls: "bg-emerald-500",
+      pillCls: "border-success/30 bg-success/10 text-success",
+      dotCls: "bg-success",
     };
   }
   if (score >= 45) {
     return {
       band: "moderate",
       label: "Moderate",
-      pillCls: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-      dotCls: "bg-amber-500",
+      pillCls: "border-warning/40 bg-warning/10 text-warning",
+      dotCls: "bg-warning",
     };
   }
   return {
     band: "risky",
     label: "Risky Decision",
-    pillCls: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
-    dotCls: "bg-red-500",
+    pillCls: "border-destructive/40 bg-destructive/10 text-destructive",
+    dotCls: "bg-destructive",
   };
 }
 
@@ -68,7 +68,7 @@ export function DecisionHeaderCard({
   const previousScore = visibleHistory.length > 1 ? visibleHistory[visibleHistory.length - 2].score : null;
   const delta = previousScore !== null ? score - previousScore : 0;
   const TrendIcon = delta > 0 ? TrendingUp : delta < 0 ? TrendingDown : Minus;
-  const trendCls = delta > 0 ? "text-emerald-600" : delta < 0 ? "text-red-600" : "text-muted-foreground";
+  const trendCls = delta > 0 ? "text-success" : delta < 0 ? "text-destructive" : "text-muted-foreground";
   const max = Math.max(100, ...visibleHistory.map((entry) => entry.score));
 
   const metrics: ReadonlyArray<readonly [string, number]> = [
@@ -79,7 +79,7 @@ export function DecisionHeaderCard({
   ];
 
   return (
-    <section className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
+    <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
       <header className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium ${pillCls}`}>
@@ -111,7 +111,7 @@ export function DecisionHeaderCard({
 
       {reasoning && (
         <div className="mt-3 flex items-start gap-2">
-          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
           <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
             {reasoning}
           </p>
@@ -121,12 +121,12 @@ export function DecisionHeaderCard({
       {(keyInsight || recommendation) && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {keyInsight && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] p-3">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.06em] font-semibold text-red-700 dark:text-red-300">
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.06em] font-semibold text-destructive">
                 <AlertTriangle className="h-3 w-3" />
                 Key Insight
               </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-red-900/90 dark:text-red-100/90">
+              <p className="mt-1.5 text-sm leading-relaxed text-foreground">
                 {keyInsight}
               </p>
             </div>
@@ -155,14 +155,14 @@ export function DecisionHeaderCard({
               key={label}
               className={`rounded-lg border px-3 py-2 ${
                 isLowConfidence
-                  ? "border-red-500/30 bg-red-500/[0.05]"
+                  ? "border-destructive/30 bg-destructive/[0.05]"
                   : "border-border/40 bg-muted/20"
               }`}
             >
               <dt className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground">{label}</dt>
               <dd
                 className={`mt-0.5 font-mono text-sm font-semibold tabular-nums ${
-                  isLowConfidence ? "text-red-700 dark:text-red-300" : "text-foreground"
+                  isLowConfidence ? "text-destructive" : "text-foreground"
                 }`}
               >
                 {value}<span className="text-muted-foreground/60">/10</span>
@@ -173,9 +173,9 @@ export function DecisionHeaderCard({
       </dl>
 
       {overcommitWarning && (
-        <div className="mt-4 flex items-start gap-2 rounded-md border-l-2 border-l-red-500 bg-red-500/[0.04] px-3 py-2">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />
-          <p className="text-xs leading-relaxed font-medium text-red-800 dark:text-red-200">
+        <div className="mt-4 flex items-start gap-2 rounded-md border-l-2 border-l-destructive bg-destructive/5 px-3 py-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+          <p className="text-xs leading-relaxed font-medium text-foreground">
             High-priority decision with low confidence. Major product risk — validate before committing.
           </p>
         </div>
