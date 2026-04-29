@@ -90,6 +90,8 @@ const parseJsonTolerant = <T = unknown>(raw: string): T | null => {
 };
 
 // Retry transient 429/5xx with exponential backoff.
+// On 429, prefer the Groq-supplied Retry-After header (seconds) over our own
+// jittered schedule — the header tells us the exact window we must wait.
 async function callGroqWithRetry<T>(fn: () => Promise<T>): Promise<T> {
   const maxAttempts = 3;
   let lastErr: unknown;
@@ -98,11 +100,14 @@ async function callGroqWithRetry<T>(fn: () => Promise<T>): Promise<T> {
       return await fn();
     } catch (err) {
       lastErr = err;
-      const status = (err as { status?: number; statusCode?: number })?.status
-        ?? (err as { status?: number; statusCode?: number })?.statusCode;
-      const retriable = status === 429 || (typeof status === "number" && status >= 500);
+      const errObj = err as { status?: number; statusCode?: number; headers?: Record<string, string> };
+      const status = errObj?.status ?? errObj?.statusCode;
+      const retriable = status === 429 || (typeof status === 'number' && status >= 500);
       if (!retriable || attempt === maxAttempts - 1) throw err;
-      const backoffMs = 250 * 2 ** attempt + Math.floor(Math.random() * 100);
+      const retryAfterSec = errObj?.headers?.['retry-after'];
+      const backoffMs = retryAfterSec
+        ? Math.min(parseInt(retryAfterSec, 10) * 1000, 30_000)
+        : 250 * 2 ** attempt + Math.floor(Math.random() * 100);
       await new Promise((r) => setTimeout(r, backoffMs));
     }
   }

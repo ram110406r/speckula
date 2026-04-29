@@ -282,6 +282,7 @@ const readPositiveInt = (raw: string | undefined, fallback: number): number => {
 };
 
 // Retry Groq stream-create on transient 429/5xx with exponential backoff.
+// On 429, honour Groq's Retry-After header before falling back to our schedule.
 // Anything else (4xx, network) bubbles up immediately.
 async function callGroqWithRetry(
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
@@ -299,11 +300,14 @@ async function callGroqWithRetry(
       });
     } catch (err) {
       lastErr = err;
-      const status = (err as { status?: number; statusCode?: number })?.status
-        ?? (err as { status?: number; statusCode?: number })?.statusCode;
+      const errObj = err as { status?: number; statusCode?: number; headers?: Record<string, string> };
+      const status = errObj?.status ?? errObj?.statusCode;
       const retriable = status === 429 || (typeof status === 'number' && status >= 500);
       if (!retriable || attempt === maxAttempts - 1) throw err;
-      const backoffMs = 250 * 2 ** attempt + Math.floor(Math.random() * 100);
+      const retryAfterSec = errObj?.headers?.['retry-after'];
+      const backoffMs = retryAfterSec
+        ? Math.min(parseInt(retryAfterSec, 10) * 1000, 30_000)
+        : 250 * 2 ** attempt + Math.floor(Math.random() * 100);
       await new Promise((r) => setTimeout(r, backoffMs));
     }
   }
