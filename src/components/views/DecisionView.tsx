@@ -587,7 +587,6 @@ export function DecisionView() {
         {strategicGuidance && (
           <section className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm">
             <header className="flex items-center gap-2">
-              <span aria-hidden className="text-base">🎯</span>
               <p className="text-[10px] uppercase tracking-[0.08em] font-medium text-primary">Strategic Focus</p>
             </header>
 

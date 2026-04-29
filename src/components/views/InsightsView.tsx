@@ -71,24 +71,14 @@ export function InsightsView() {
 
   return (
     <div
-      className="flex flex-col h-full transition-colors duration-300"
-      style={{ background: "var(--signal-bg)" }}
+      className="flex flex-col h-full transition-colors duration-300 bg-background"
     >
       {/* Status bar */}
-      <div
-        className="flex items-center justify-between px-8 py-3.5 border-b shrink-0 bg-white dark:bg-[var(--signal-surface)]"
-        style={{ borderColor: "var(--signal-border)" }}
-      >
-        <span
-          className="font-mono text-[10px] uppercase tracking-[0.1em]"
-          style={{ color: "var(--signal-text-tertiary)" }}
-        >
+      <div className="flex items-center justify-between px-8 py-3.5 border-b border-border shrink-0 bg-card">
+        <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground/60">
           EVIDENCE
         </span>
-        <span
-          className="font-mono text-[10px]"
-          style={{ color: "var(--signal-text-tertiary)" }}
-        >
+        <span className="font-mono text-[10px] text-muted-foreground/60">
           copilot for product managers
         </span>
       </div>
@@ -98,25 +88,12 @@ export function InsightsView() {
         {/* Feed header */}
         <div className="flex items-start justify-between gap-4 mb-8">
           <div className="flex items-center gap-4">
-            <Brain
-              className="h-7 w-7 shrink-0 mt-0.5"
-              style={{ color: "var(--signal-accent)" }}
-            />
+            <Brain className="h-7 w-7 shrink-0 mt-0.5 text-primary" />
             <div>
-              <h1
-                className="text-[28px] font-semibold leading-none tracking-tight"
-                style={{
-                  fontFamily:
-                    "var(--font-display, Georgia, 'Times New Roman', serif)",
-                  color: "var(--signal-text-primary)",
-                }}
-              >
+              <h1 className="text-[28px] font-semibold leading-none tracking-tight text-foreground">
                 Intelligence Feed
               </h1>
-              <span
-                className="font-mono text-[11px] uppercase tracking-[0.08em] mt-1 block"
-                style={{ color: "var(--signal-text-tertiary)" }}
-              >
+              <span className="font-mono text-[11px] uppercase tracking-[0.08em] mt-1 block text-muted-foreground/60">
                 {insights.length} {insights.length === 1 ? "Node" : "Nodes"}
               </span>
             </div>
@@ -126,26 +103,16 @@ export function InsightsView() {
           <div className="flex items-center gap-2.5 shrink-0">
             <button
               onClick={() => setActiveView("editor")}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-[4px] font-mono text-[12px] font-medium border transition-all hover:bg-[var(--signal-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-accent)]/40"
-              style={{
-                borderColor: "var(--signal-border)",
-                color: "var(--signal-text-primary)",
-                background: "white",
-              }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-[4px] font-mono text-[12px] font-medium border border-border bg-card text-foreground transition-all hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               + Manual Entry
             </button>
             <button
               onClick={handleExtract}
               disabled={isExtracting || !currentDocId}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-[4px] font-mono text-[12px] font-medium text-white transition-all hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-accent)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: "var(--signal-accent)", borderColor: "var(--signal-accent)" }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-[4px] font-mono text-[12px] font-medium text-primary-foreground bg-primary transition-all hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {isExtracting ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <span className="text-[13px] leading-none">🔥</span>
-              )}
+              {isExtracting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {isExtracting ? "Processing…" : "Extract with AI"}
             </button>
           </div>
@@ -158,20 +125,11 @@ export function InsightsView() {
               key={id}
               onClick={() => setFilter(id)}
               aria-current={filter === id ? "page" : undefined}
-              className="px-5 py-2 rounded-full font-mono text-[12px] font-medium whitespace-nowrap border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-accent)]/40"
-              style={
+              className={`px-5 py-2 rounded-full font-mono text-[12px] font-medium whitespace-nowrap border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                 filter === id
-                  ? {
-                      background: "var(--signal-accent)",
-                      color: "#fff",
-                      borderColor: "var(--signal-accent)",
-                    }
-                  : {
-                      background: "white",
-                      color: "var(--signal-text-secondary)",
-                      borderColor: "var(--signal-border)",
-                    }
-              }
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-muted-foreground border-border hover:text-foreground"
+              }`}
             >
               {label}
             </button>
@@ -181,41 +139,20 @@ export function InsightsView() {
         {/* Grid / states */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 gap-4">
-            <Loader2
-              className="h-6 w-6 animate-spin"
-              style={{ color: "var(--signal-accent)" }}
-            />
-            <span
-              className="font-mono text-[11px] uppercase tracking-[0.08em] animate-pulse"
-              style={{ color: "var(--signal-text-tertiary)" }}
-            >
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="font-mono text-[11px] uppercase tracking-[0.08em] animate-pulse text-muted-foreground/60">
               Fetching Intelligence
             </span>
           </div>
         ) : filtered.length === 0 ? (
-          <div
-            className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed rounded-xl max-w-2xl mx-auto p-10"
-            style={{ borderColor: "var(--signal-border)" }}
-          >
-            <Brain
-              className="h-8 w-8 mb-4"
-              style={{ color: "var(--signal-text-tertiary)", opacity: 0.4 }}
-            />
-            <p
-              className="font-mono text-[11px] uppercase tracking-[0.08em] mb-2"
-              style={{ color: "var(--signal-text-secondary)" }}
-            >
+          <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-border rounded-xl max-w-2xl mx-auto p-10">
+            <Brain className="h-8 w-8 mb-4 text-muted-foreground/40" />
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] mb-2 text-muted-foreground">
               System Idle
             </p>
-            <p
-              className="text-[13px] leading-relaxed max-w-xs"
-              style={{ color: "var(--signal-text-tertiary)" }}
-            >
+            <p className="text-[13px] leading-relaxed max-w-xs text-muted-foreground/60">
               Use{" "}
-              <span
-                className="font-semibold"
-                style={{ color: "var(--signal-text-primary)" }}
-              >
+              <span className="font-semibold text-foreground">
                 Extract with AI
               </span>{" "}
               to populate this feed with structured product signals.
