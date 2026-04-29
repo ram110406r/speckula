@@ -26,13 +26,13 @@ const statusConfig: Record<TaskStatus, { label: string; color: string }> = {
 };
 
 const categoryConfig: Record<string, string> = {
-  backend: "#3b82f6",
-  frontend: "#8b5cf6",
-  design: "#ec4899",
-  qa: "#f59e0b",
-  integration: "#06b6d4",
-  devops: "#6366f1",
-  general: "#6b7280",
+  backend: "#2563EB",
+  frontend: "#3B82F6",
+  design: "#60A5FA",
+  qa: "#1D4ED8",
+  integration: "#0891B2",
+  devops: "#1E40AF",
+  general: "#64748B",
 };
 
 export function TasksView() {
@@ -355,7 +355,7 @@ export function TasksView() {
                       isDone
                         ? "border-border/40 bg-transparent opacity-60 hover:opacity-100"
                         : isBlocked
-                        ? "border-warning/40 bg-warning/5 hover:border-warning/60"
+                        ? "border-primary/40 bg-primary/5 hover:border-primary/60"
                         : "border-border bg-background hover:border-primary/40"
                     }`}
                     onClick={() => setSelectedTask(task)}
@@ -371,7 +371,7 @@ export function TasksView() {
                       ) : task.status === "in-progress" ? (
                         <Clock className="h-4 w-4 text-primary" />
                       ) : (
-                        <Circle className={`h-4 w-4 ${isBlocked ? "text-warning" : "text-muted-foreground/50"}`} />
+                        <Circle className={`h-4 w-4 ${isBlocked ? "text-primary" : "text-muted-foreground/50"}`} />
                       )}
                     </button>
                     <div className="flex-1 min-w-0">
@@ -380,7 +380,7 @@ export function TasksView() {
                       </p>
                       <div className="flex items-center gap-2 mt-2 flex-wrap text-xs text-muted-foreground">
                         {isBlocked && (
-                          <span className="flex items-center gap-1 text-warning">
+                          <span className="flex items-center gap-1 text-primary">
                             <ArrowRight className="h-3 w-3" />
                             Blocked by {blockingTasks.length}
                           </span>

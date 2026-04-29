@@ -112,14 +112,14 @@
 /* Signals / Intelligence Feed design tokens                                   */
 /* ────────────────────────────────────────────────────────────────────────── */
 :root {
-  --signal-pain-point: #D4733D;
-  --signal-pain-point-bg: rgba(212, 115, 61, 0.10);
-  --signal-opportunity: #C8556D;
-  --signal-opportunity-bg: rgba(200, 85, 109, 0.10);
-  --signal-pattern: #7B5E5C;
-  --signal-pattern-bg: rgba(123, 94, 92, 0.10);
-  --signal-user-segment: #8B7355;
-  --signal-user-segment-bg: rgba(139, 115, 85, 0.10);
+  --signal-pain-point: #1E40AF;
+  --signal-pain-point-bg: rgba(30, 64, 175, 0.08);
+  --signal-opportunity: #2563EB;
+  --signal-opportunity-bg: rgba(37, 99, 235, 0.08);
+  --signal-pattern: #0891B2;
+  --signal-pattern-bg: rgba(8, 145, 178, 0.08);
+  --signal-user-segment: #6366F1;
+  --signal-user-segment-bg: rgba(99, 102, 241, 0.08);
   --signal-bg: #F8FAFC;
   --signal-surface: #FFFFFF;
   --signal-border: #E6EAF0;
