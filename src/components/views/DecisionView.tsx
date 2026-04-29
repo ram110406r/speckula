@@ -286,6 +286,7 @@ export function DecisionView() {
         title: `PRD: ${prdPreview.title}`,
         content: prdPreview.content,
         status: "draft",
+        sourceDocId: currentDocId ?? undefined,
       });
       setPrdPreview(null);
       setPendingDecisionForPRD(null);
@@ -366,6 +367,7 @@ export function DecisionView() {
               userStory: decision.userStory,
               tradeoffs: decision.tradeoffs,
               strategyTheme: guidance.theme,
+              sourceDocId: currentDocId ?? undefined,
             });
           } catch (persistError) {
             console.error("Decision persistence failed:", persistError);

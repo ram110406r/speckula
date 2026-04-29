@@ -28,14 +28,10 @@ export function InsightsView() {
     setIsLoading(true);
     try {
       const data = await getInsights(user.uid);
-      // Show insights matching the current doc AND those saved without a
-      // sourceDocId (legacy / extracted-without-doc) so they aren't
-      // permanently invisible. When no doc is active, show the unattached
-      // ones — there is no other reasonable filter at that point.
       setInsights(
         currentDocId
-          ? data.filter((insight) => !insight.sourceDocId || insight.sourceDocId === currentDocId)
-          : data.filter((insight) => !insight.sourceDocId)
+          ? data.filter((insight) => insight.sourceDocId === currentDocId)
+          : []
       );
     } catch (error) {
       console.error("Failed to fetch insights:", error);

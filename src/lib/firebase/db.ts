@@ -70,6 +70,7 @@ export interface DecisionRecord {
   userStory: string;
   tradeoffs: string;
   strategyTheme?: string | null;
+  sourceDocId?: string;
   userId: string;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
