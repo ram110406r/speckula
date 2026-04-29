@@ -1,0 +1,8 @@
+node_modules
+.next
+backend
+.env
+.env.*
+*.test.ts
+coverage
+docs
