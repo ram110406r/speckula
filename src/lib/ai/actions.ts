@@ -199,13 +199,19 @@ interface BackendEnvelope<T> {
 /**
  * Call a dedicated Fastify route through the Next.js proxy.
  * Handles auth header, 30s timeout, 401 retry-with-refresh, and unwraps the { ok, data } envelope.
+ * Pass an externalSignal to propagate cancellation (e.g. doc-switch aborts).
  */
-async function callBackendRoute<T>(path: string, body: unknown): Promise<T> {
+async function callBackendRoute<T>(path: string, body: unknown, externalSignal?: AbortSignal): Promise<T> {
   const maxAttempts = 2;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const token = await getAuthToken(attempt > 0);
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 30000);
+    const onExternalAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) { controller.abort(); }
+      else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    }
 
     try {
       const response = await fetch(`/api/ai/${path}`, {
@@ -219,6 +225,7 @@ async function callBackendRoute<T>(path: string, body: unknown): Promise<T> {
       });
 
       if (response.status === 401 && attempt === 0) {
+        await response.text().catch(() => "");
         continue;
       }
 
@@ -235,6 +242,7 @@ async function callBackendRoute<T>(path: string, body: unknown): Promise<T> {
       }
     } finally {
       window.clearTimeout(timeoutId);
+      if (externalSignal) externalSignal.removeEventListener("abort", onExternalAbort);
     }
   }
   throw new Error(`Backend call to /ai/${path} failed.`);
@@ -992,59 +1000,16 @@ export const processEditorAction = async (userId: string, selectedText: string, 
 
 export const analyzeThinkingSignalsAction = async (contextText: string, signal?: AbortSignal): Promise<ProactiveThinkingSignals> => {
   const boundedContext = contextText.length > 6000 ? contextText.slice(-6000) : contextText;
-  const prompt = `Analyze the current product writing and return JSON only with this exact shape:
-{
-  "insights": [{ "title": string, "description": string, "category": "pain-point" | "opportunity" | "pattern" }],
-  "suggestions": [{ "text": string, "confidence": number, "why": string }],
-  "challenges": [{ "text": string, "confidence": number, "why": string }],
-  "decisions": [{ "text": string, "confidence": number, "why": string }]
-}
-
-Rules:
-- insights: max 3 items
-- suggestions: max 3 items (feature ideas), each short and actionable
-- challenges: max 2 items, direct but constructive
-- decisions: max 2 items (strategic feature directions user should consider), low confidence (exploratory)
-- confidence must be 1-10 (decisions typically 4-7 range)
-- why must be a brief reason (max 100 chars)
-- If context is weak, return empty arrays`;
-
-  const raw = await callAI(prompt, boundedContext, signal);
-  const parsed = parseJsonPayload(raw);
-
-  const normalizeHints = (input: unknown): ProactiveHint[] => {
-    if (!Array.isArray(input)) return [];
-
-    return input
-      .map((item): ProactiveHint | null => {
-        if (typeof item === "string") {
-          return { text: item, confidence: 6, why: "Derived from recent context." };
-        }
-
-        if (!item || typeof item !== "object") return null;
-
-        const maybe = item as { text?: unknown; confidence?: unknown; why?: unknown };
-        const text = typeof maybe.text === "string" ? maybe.text.trim() : "";
-        if (!text) return null;
-
-        const rawConfidence = typeof maybe.confidence === "number" ? maybe.confidence : 6;
-        const confidence = Math.max(1, Math.min(10, Math.round(rawConfidence)));
-        const why = typeof maybe.why === "string" && maybe.why.trim().length > 0
-          ? maybe.why.trim()
-          : "Derived from recent context.";
-
-        return { text, confidence, why };
-      })
-      .filter((item): item is ProactiveHint => item !== null);
-  };
-
+  const data = await callBackendRoute<ProactiveThinkingSignals>(
+    "signals/analyze",
+    { content: boundedContext },
+    signal
+  );
   return {
-    insights: Array.isArray((parsed as { insights?: unknown[] })?.insights)
-      ? ((parsed as { insights?: ProactiveInsight[] }).insights ?? []).slice(0, 3)
-      : [],
-    suggestions: normalizeHints((parsed as { suggestions?: unknown }).suggestions).slice(0, 3),
-    challenges: normalizeHints((parsed as { challenges?: unknown }).challenges).slice(0, 2),
-     decisions: normalizeHints((parsed as { decisions?: unknown }).decisions).slice(0, 2),
+    insights: Array.isArray(data.insights) ? data.insights.slice(0, 3) : [],
+    suggestions: Array.isArray(data.suggestions) ? data.suggestions.slice(0, 3) : [],
+    challenges: Array.isArray(data.challenges) ? data.challenges.slice(0, 2) : [],
+    decisions: Array.isArray(data.decisions) ? data.decisions.slice(0, 2) : [],
   };
 };
 

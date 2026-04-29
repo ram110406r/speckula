@@ -40,6 +40,11 @@ const scoreDecisionSchema = z.object({
   context: z.string().max(MAX_CONTENT_CHARS),
 }).strict();
 
+const analyzeSignalsSchema = z.object({
+  projectId: z.string().min(1).optional(),
+  content: z.string().min(1).max(MAX_CONTENT_CHARS),
+}).strict();
+
 const usageDateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
 });
@@ -187,6 +192,26 @@ export default async function aiRoutes(fastify: FastifyInstance) {
       } catch (error) {
         fastify.log.error(error);
         replyError(reply, error, 'Failed to score decision');
+      }
+    }
+  );
+
+  fastify.post<{ Body: z.infer<typeof analyzeSignalsSchema> }>(
+    '/signals/analyze',
+    async (request, reply) => {
+      try {
+        const body = analyzeSignalsSchema.parse(request.body);
+        const userId = requireUserId(request, reply);
+        if (!userId) return;
+        const result = await groqService.analyzeSignals(
+          body.content,
+          userId,
+          body.projectId ?? DEFAULT_PROJECT_ID
+        );
+        reply.code(200).send({ ok: true, data: result });
+      } catch (error) {
+        fastify.log.error(error);
+        replyError(reply, error, 'Failed to analyze signals');
       }
     }
   );
