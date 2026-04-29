@@ -1,14 +1,15 @@
 import Fastify, { FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import aiRoutes from './routes/aiRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import importRoutes from './routes/importRoutes.js';
 import slackRoutes from './routes/slackRoutes.js';
 import slackOAuthRoutes from './routes/slackOAuthRoutes.js';
+import healthRoutes from './routes/healthRoutes.js';
 import { verifyFirebaseAuth } from './lib/firebaseAuth.js';
-import { db } from './lib/db.js';
-import { getFirebaseApp } from './lib/firebaseAdmin.js';
+import { validateEnv } from './lib/env.js';
 
 const parseOriginList = (raw: string | undefined): string[] | null => {
   if (!raw) return null;
@@ -17,17 +18,29 @@ const parseOriginList = (raw: string | undefined): string[] | null => {
 };
 
 export const createServer = async () => {
+  const env = validateEnv();
+  const isProd = env.NODE_ENV === 'production';
+
   const fastify = Fastify({
-    logger:
-      process.env.NODE_ENV === 'development'
-        ? {
-            transport: {
-              target: 'pino-pretty',
-              options: { colorize: true },
-            },
-          }
-        : true,
+    logger: isProd
+      // Production: raw JSON to stdout, consumed by log aggregator.
+      ? { level: 'info' }
+      // Development: human-readable coloured output.
+      : {
+          level: 'debug',
+          transport: { target: 'pino-pretty', options: { colorize: true } },
+        },
     bodyLimit: 2 * 1024 * 1024, // 2 MB; multipart routes set their own limit.
+    // Return the request ID in error responses so clients can quote it in
+    // support tickets and we can correlate to log entries.
+    genReqId: () => crypto.randomUUID(),
+  });
+
+  // Security headers — CSP is disabled because this is a JSON API server,
+  // not a page server. Helmet still sets HSTS, nosniff, X-Frame-Options, etc.
+  await fastify.register(helmet, {
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
   });
 
   // CORS allow-list. FRONTEND_URLS (comma-separated) wins; FRONTEND_URL is
@@ -38,11 +51,12 @@ export const createServer = async () => {
     ['http://localhost:3000'];
   await fastify.register(cors, {
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // same-origin / curl
+      if (!origin) return cb(null, true); // same-origin / curl / server-to-server
       if (originList.includes(origin)) return cb(null, true);
-      cb(new Error('Origin not allowed'), false);
+      cb(new Error('CORS: origin not allowed'), false);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   });
 
   // Rate limit fires at preHandler so that any onRequest auth hook has a
@@ -63,8 +77,8 @@ export const createServer = async () => {
     }),
   });
 
-  fastify.setErrorHandler((error, _request, reply) => {
-    fastify.log.error(error);
+  fastify.setErrorHandler((error, request, reply) => {
+    fastify.log.error({ err: error, requestId: request.id }, 'Request error');
     const status = (() => {
       if (error && typeof error === 'object' && 'statusCode' in error) {
         const code = (error as { statusCode?: unknown }).statusCode;
@@ -72,36 +86,21 @@ export const createServer = async () => {
       }
       return 500;
     })();
-    // In production avoid leaking validation/Prisma internals; in dev
-    // surface the full message so route bugs are debuggable.
     const message =
-      process.env.NODE_ENV === 'production' && status >= 500
+      isProd && status >= 500
         ? 'Internal server error'
         : error instanceof Error
           ? error.message
           : 'Unknown error';
-    reply.code(status).send({ ok: false, error: message });
+    // Return the requestId so clients can quote it in support tickets.
+    reply
+      .code(status)
+      .header('X-Request-ID', request.id)
+      .send({ ok: false, error: message, requestId: request.id });
   });
 
-  // Health probes the DB and Firebase Admin so a pod with broken
-  // dependencies fails its liveness/readiness check.
-  fastify.get('/health', async (_req, reply) => {
-    const checks: Record<string, 'ok' | 'fail'> = { server: 'ok' };
-    try {
-      await db.$queryRaw`SELECT 1`;
-      checks.db = 'ok';
-    } catch {
-      checks.db = 'fail';
-    }
-    try {
-      getFirebaseApp();
-      checks.firebase = 'ok';
-    } catch {
-      checks.firebase = 'fail';
-    }
-    const allOk = Object.values(checks).every((v) => v === 'ok');
-    reply.code(allOk ? 200 : 503).send({ status: allOk ? 'ok' : 'degraded', checks });
-  });
+  // Health check — no auth, no rate limit, used by load balancers + UptimeRobot.
+  await fastify.register(healthRoutes);
 
   // AI routes: auth on onRequest (so rate-limit can key by userId), and
   // rate-limit at preHandler (configured globally above) capped at 100/hr/user.
@@ -109,7 +108,9 @@ export const createServer = async () => {
     async (instance) => {
       instance.addHook('onRequest', verifyFirebaseAuth);
       instance.addHook('onRoute', (route) => {
-        route.config = { ...(route.config || {}), rateLimit: { max: 100, timeWindow: '1 hour' } };
+        if (!route.config?.rateLimit) {
+          route.config = { ...(route.config || {}), rateLimit: { max: 100, timeWindow: '1 hour' } };
+        }
       });
       await instance.register(aiRoutes);
       await instance.register(chatRoutes);
