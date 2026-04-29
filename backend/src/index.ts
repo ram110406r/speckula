@@ -3,6 +3,7 @@ import createServer from './app';
 import { disconnectDb } from './lib/db';
 import { getFirebaseApp } from './lib/firebaseAdmin';
 import { validateEnv } from './lib/env';
+import { sweepExpiredRecords } from './scripts/retentionSweeper';
 
 // Load environment variables
 dotenv.config();
@@ -46,6 +47,20 @@ async function startServer() {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`AI backend powered by Groq (llama-3.3-70b-versatile)`);
     console.log(`Environment: ${NODE_ENV}`);
+
+    // Run an initial sweep 60 s after startup (avoids cold-start DB pressure),
+    // then repeat every 6 hours. Failures are logged but never crash the server.
+    const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+    setTimeout(() => {
+      sweepExpiredRecords().catch((err) =>
+        fastify.log.error({ err }, '[retention] initial sweep failed')
+      );
+      setInterval(() => {
+        sweepExpiredRecords().catch((err) =>
+          fastify.log.error({ err }, '[retention] periodic sweep failed')
+        );
+      }, SIX_HOURS_MS);
+    }, 60_000);
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
