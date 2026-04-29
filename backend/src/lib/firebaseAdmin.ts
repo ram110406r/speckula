@@ -59,7 +59,11 @@ export const getFirebaseApp = (): App => {
 
 export const verifyFirebaseIdToken = async (idToken: string) => {
   const app = getFirebaseApp();
-  return getAuth(app).verifyIdToken(idToken);
+  // checkRevoked: true rejects tokens for accounts that have been disabled or
+  // had their tokens explicitly revoked (e.g. after a password change).
+  // This makes a network call to Firebase on every request when the local
+  // cached verification succeeds — add Redis caching here if latency matters.
+  return getAuth(app).verifyIdToken(idToken, true);
 };
 
 export const getFirebaseFirestore = (): Firestore => {
