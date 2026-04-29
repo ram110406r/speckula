@@ -15,15 +15,18 @@ const required = (name: string): string => {
 };
 
 // ── Firebase Web SDK (NEXT_PUBLIC_* — baked in at build time) ─────────────────
-// These are exposed to the browser bundle. They identify the Firebase project
-// but do not grant any access on their own — Firestore rules enforce auth.
+// Next.js inlines these into the browser bundle at compile time; they are
+// not available via process.env at runtime on the client. We read them
+// directly rather than through required() to avoid throwing at module
+// evaluation time when .env.local is not yet configured — Firebase's own
+// initializeApp will surface a clear error if a key is empty.
 export const firebaseConfig = {
-  apiKey:            required('NEXT_PUBLIC_FIREBASE_API_KEY'),
-  authDomain:        required('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN'),
-  projectId:         required('NEXT_PUBLIC_FIREBASE_PROJECT_ID'),
-  storageBucket:     required('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: required('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'),
-  appId:             required('NEXT_PUBLIC_FIREBASE_APP_ID'),
+  apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? '',
+  authDomain:        process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? '',
+  projectId:         process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? '',
+  storageBucket:     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? '',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
+  appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '',
 } as const;
 
 // ── Server-side only ──────────────────────────────────────────────────────────

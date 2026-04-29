@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Sora, IBM_Plex_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/firebase/AuthProvider";
@@ -27,12 +28,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Theme bootstrap must run before paint to avoid FOUC. Lives in <head>
-            (not <body>) because React 19 logs a warning when re-rendering a
-            <script dangerouslySetInnerHTML> inside a component subtree on the
-            client, even though the script is only ever executed during SSR. */}
-        <script
+      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
+        {/* beforeInteractive — Next.js injects this into <head> in the server
+            HTML before any JS loads, avoiding FOUC without triggering the
+            React 19 "script inside component tree" warning. */}
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `(() => {
               try {
@@ -44,8 +46,6 @@ export default function RootLayout({
             })();`,
           }}
         />
-      </head>
-      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </AuthProvider>

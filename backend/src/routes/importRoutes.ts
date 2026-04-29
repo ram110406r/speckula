@@ -67,9 +67,18 @@ const isBlockedIp = (ip: string): boolean => {
     if (lower.startsWith('fe80:') || lower.startsWith('fe80::')) return true;
     // ULA fc00::/7 — fc00..fdff
     if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
-    // IPv4-mapped IPv6 (::ffff:127.0.0.1) — extract embedded v4 and recheck
-    const mapped = lower.match(/^::ffff:([0-9.]+)$/);
-    if (mapped && isIP(mapped[1]) === 4 && isBlockedIp(mapped[1])) return true;
+    // IPv4-mapped IPv6 — two forms produced by different serialisers:
+    //   dotted-decimal: ::ffff:127.0.0.1  (some DNS resolvers)
+    //   hex groups:     ::ffff:7f00:1     (WHATWG URL normalisation)
+    const mappedDecimal = lower.match(/^::ffff:([0-9.]+)$/);
+    if (mappedDecimal && isIP(mappedDecimal[1]) === 4 && isBlockedIp(mappedDecimal[1])) return true;
+    const mappedHex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (mappedHex) {
+      const hi = parseInt(mappedHex[1], 16);
+      const lo = parseInt(mappedHex[2], 16);
+      const v4 = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+      if (isBlockedIp(v4)) return true;
+    }
     return false;
   }
   // Not an IP literal at all — treat decimal/hex IPv4 encodings as blocked.
@@ -84,17 +93,20 @@ const assertPublicHost = async (hostname: string): Promise<void> => {
   if (lower === 'localhost' || lower === 'localhost.localdomain') {
     throw new Error('Private network URLs are not allowed.');
   }
+  // Strip brackets from IPv6 literals — WHATWG URL hostname includes them:
+  // new URL('http://[::1]').hostname === '[::1]', so isIP returns 0 without this.
+  const rawHost = lower.startsWith('[') && lower.endsWith(']') ? lower.slice(1, -1) : lower;
   // If the host is already a literal IP, validate directly.
-  if (isIP(lower) !== 0) {
-    if (isBlockedIp(lower)) throw new Error('Private network URLs are not allowed.');
+  if (isIP(rawHost) !== 0) {
+    if (isBlockedIp(rawHost)) throw new Error('Private network URLs are not allowed.');
     return;
   }
   // Otherwise resolve A and AAAA and ensure all returned IPs are public.
   let answers: string[] = [];
   try {
     const [a, aaaa] = await Promise.allSettled([
-      dns.resolve4(lower),
-      dns.resolve6(lower),
+      dns.resolve4(rawHost),
+      dns.resolve6(rawHost),
     ]);
     if (a.status === 'fulfilled') answers.push(...a.value);
     if (aaaa.status === 'fulfilled') answers.push(...aaaa.value);
