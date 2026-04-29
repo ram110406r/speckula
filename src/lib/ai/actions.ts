@@ -133,11 +133,12 @@ async function callAI(prompt: string, context: string, externalSignal?: AbortSig
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const token = await getAuthToken(attempt > 0);
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 30000);
+    const timeoutReason = new DOMException("Request timed out after 30s", "TimeoutError");
+    const timeoutId = window.setTimeout(() => controller.abort(timeoutReason), 30000);
     // Forward an outer abort (e.g. from a doc switch) to this attempt.
-    const onExternalAbort = () => controller.abort();
+    const onExternalAbort = () => controller.abort(externalSignal!.reason);
     if (externalSignal) {
-      if (externalSignal.aborted) controller.abort();
+      if (externalSignal.aborted) controller.abort(externalSignal.reason);
       else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
     }
 
@@ -177,8 +178,9 @@ async function callAI(prompt: string, context: string, externalSignal?: AbortSig
       // We handle non-streaming for actions to get a clean structured result
       return await response.text();
     } catch (error) {
-      const isAbortError = error instanceof DOMException && error.name === "AbortError";
-      if (attempt === maxAttempts - 1 || isAbortError) {
+      const isCancellation = error instanceof DOMException &&
+        (error.name === "AbortError" || error.name === "TimeoutError");
+      if (attempt === maxAttempts - 1 || isCancellation) {
         throw error;
       }
     } finally {
@@ -206,10 +208,11 @@ async function callBackendRoute<T>(path: string, body: unknown, externalSignal?:
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const token = await getAuthToken(attempt > 0);
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 30000);
-    const onExternalAbort = () => controller.abort();
+    const timeoutReason = new DOMException("Request timed out after 30s", "TimeoutError");
+    const timeoutId = window.setTimeout(() => controller.abort(timeoutReason), 30000);
+    const onExternalAbort = () => controller.abort(externalSignal!.reason);
     if (externalSignal) {
-      if (externalSignal.aborted) { controller.abort(); }
+      if (externalSignal.aborted) { controller.abort(externalSignal.reason); }
       else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
     }
 
@@ -244,8 +247,9 @@ async function callBackendRoute<T>(path: string, body: unknown, externalSignal?:
       }
       return envelope.data;
     } catch (error) {
-      const isAbortError = error instanceof DOMException && error.name === "AbortError";
-      if (attempt === maxAttempts - 1 || isAbortError) {
+      const isCancellation = error instanceof DOMException &&
+        (error.name === "AbortError" || error.name === "TimeoutError");
+      if (attempt === maxAttempts - 1 || isCancellation) {
         throw error;
       }
     } finally {
