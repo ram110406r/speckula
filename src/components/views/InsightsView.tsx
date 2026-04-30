@@ -6,8 +6,9 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
 import { getInsights, getDocument, type Insight } from "@/lib/firebase/db";
 import { extractInsightsAction } from "@/lib/ai/actions";
-import { downloadCSV } from "@/lib/export";
+import { generateInsightsMarkdown, downloadMarkdown, downloadInsightsDocx } from "@/lib/export";
 import { toast } from "@/store/useToastStore";
+import { exportDialog } from "@/store/useExportDialogStore";
 import { NodeCard } from "@/components/signals/NodeCard";
 
 type FilterKey = "all" | "pain-point" | "opportunity" | "user-segment" | "pattern";
@@ -52,12 +53,23 @@ export function InsightsView() {
   const filtered: Insight[] =
     filter === "all" ? insights : insights.filter((i) => i.category === filter);
 
-  const handleExportCSV = () => {
+  const handleExport = () => {
     if (insights.length === 0) { toast.warning("No signals to export"); return; }
-    const header = ["Category", "Title", "Description"];
-    const rows = insights.map(i => [i.category, i.title, i.description ?? ""]);
-    downloadCSV([header, ...rows], "signals");
-    toast.success("Signals exported", `${insights.length} signals saved as CSV`);
+    exportDialog.open({
+      defaultFilename: "product-signals",
+      formats: [
+        { value: "md",   label: "Markdown (.md)" },
+        { value: "docx", label: "Word document (.docx)" },
+      ],
+      onExport: async (filename, format) => {
+        if (format === "md") {
+          downloadMarkdown(generateInsightsMarkdown(insights), filename);
+        } else {
+          await downloadInsightsDocx(insights, filename);
+        }
+        toast.success("Signals exported", `${insights.length} signals saved as .${format}`);
+      },
+    });
   };
 
   const handleExtract = async () => {
@@ -112,11 +124,11 @@ export function InsightsView() {
           {/* Action buttons */}
           <div className="flex items-center gap-2.5 shrink-0">
             <button
-              onClick={handleExportCSV}
+              onClick={handleExport}
               disabled={insights.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 rounded-[4px] font-mono text-[12px] font-medium border border-border bg-card text-foreground transition-all hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Download className="h-3.5 w-3.5" /> Export CSV
+              <Download className="h-3.5 w-3.5" /> Export
             </button>
             <button
               onClick={() => setActiveView("editor")}

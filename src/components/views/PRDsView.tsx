@@ -7,8 +7,9 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
 import { getPRDs, getDocument, type PRD } from "@/lib/firebase/db";
 import { generatePRDAction } from "@/lib/ai/actions";
-import { downloadMarkdown, copyToClipboard, slugify } from "@/lib/export";
+import { downloadMarkdown, downloadPRDDocx, copyToClipboard, slugify } from "@/lib/export";
 import { toast } from "@/store/useToastStore";
+import { exportDialog } from "@/store/useExportDialogStore";
 
 const statusConfig = {
   draft: { label: "Draft", className: "bg-muted/10 text-muted-foreground border-border" },
@@ -46,9 +47,22 @@ export function PRDsView() {
 
   const handleExport = () => {
     if (!selectedPRD) return;
-    const md = `# ${selectedPRD.title}\n\n${selectedPRD.content}`;
-    downloadMarkdown(md, slugify(selectedPRD.title));
-    toast.success("Spec exported", "Saved as Markdown file");
+    exportDialog.open({
+      defaultFilename: slugify(selectedPRD.title),
+      formats: [
+        { value: "md",   label: "Markdown (.md)" },
+        { value: "docx", label: "Word document (.docx)" },
+      ],
+      onExport: async (filename, format) => {
+        const md = `# ${selectedPRD.title}\n\n${selectedPRD.content}`;
+        if (format === "md") {
+          downloadMarkdown(md, filename);
+        } else {
+          await downloadPRDDocx(selectedPRD.title, selectedPRD.content, filename);
+        }
+        toast.success("Spec exported", `Saved as .${format}`);
+      },
+    });
   };
 
   const handleCopy = async () => {

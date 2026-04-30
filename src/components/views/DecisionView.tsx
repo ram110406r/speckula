@@ -42,6 +42,7 @@ import { updateConfidenceScore } from "@/lib/ai/scoreFeedback";
 import { evaluateDecisionHealth, evaluatePushback, type HealthStatus, type PushbackAction } from "@/lib/ai/decisionHealth";
 import { downloadCSV } from "@/lib/export";
 import { toast } from "@/store/useToastStore";
+import { exportDialog } from "@/store/useExportDialogStore";
 import { CaseBriefDialog } from "@/components/decision/CaseBriefDialog";
 import { FocusPanel, type FocusPanelData } from "@/components/decision/FocusPanel";
 
@@ -490,20 +491,26 @@ export function DecisionView() {
 
   const handleExportCSV = () => {
     if (scoredSuggestions.length === 0) { toast.warning("No decisions to export"); return; }
-    const header = ["Title", "Priority", "Impact", "Effort", "Confidence", "Demand", "Score", "Justification", "Tradeoffs"];
-    const rows = scoredSuggestions.map((d) => [
-      d.title,
-      d.priority ?? "",
-      d.scoreBreakdown?.impact ?? "",
-      d.scoreBreakdown?.effort ?? "",
-      d.scoreBreakdown?.confidence ?? "",
-      d.scoreBreakdown?.demand ?? "",
-      d.score ?? "",
-      d.justification ?? "",
-      d.tradeoffs ?? "",
-    ]);
-    downloadCSV([header, ...rows], "decisions");
-    toast.success("Decisions exported", `${scoredSuggestions.length} decisions saved as CSV`);
+    exportDialog.open({
+      defaultFilename: "decisions",
+      formats: [{ value: "csv", label: "Spreadsheet (.csv)" }],
+      onExport: (filename) => {
+        const header = ["Title", "Priority", "Impact", "Effort", "Confidence", "Demand", "Score", "Justification", "Tradeoffs"];
+        const rows = scoredSuggestions.map((d) => [
+          d.title,
+          d.priority ?? "",
+          d.scoreBreakdown?.impact ?? "",
+          d.scoreBreakdown?.effort ?? "",
+          d.scoreBreakdown?.confidence ?? "",
+          d.scoreBreakdown?.demand ?? "",
+          d.score ?? "",
+          d.justification ?? "",
+          d.tradeoffs ?? "",
+        ]);
+        downloadCSV([header, ...rows], filename);
+        toast.success("Decisions exported", `${scoredSuggestions.length} decisions saved as CSV`);
+      },
+    });
   };
 
   return (

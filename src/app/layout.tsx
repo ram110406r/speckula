@@ -4,6 +4,7 @@ import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/firebase/AuthProvider";
 import { Toaster } from "@/components/ui/toaster";
+import { ExportDialog } from "@/components/ui/export-dialog";
 
 const sora = Sora({
   subsets: ["latin"],
@@ -49,6 +50,7 @@ export default function RootLayout({
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
           <Toaster />
+          <ExportDialog />
         </AuthProvider>
       </body>
     </html>

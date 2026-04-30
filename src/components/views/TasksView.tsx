@@ -10,6 +10,7 @@ import { getTasks, updateTask, deleteTask, getDocument, type ExecutionTask, getP
 import { generateTasksFromPRDAction, analyzeDependenciesAction, intelligentPrioritizeAction } from "@/lib/ai/actions";
 import { downloadCSV } from "@/lib/export";
 import { toast } from "@/store/useToastStore";
+import { exportDialog } from "@/store/useExportDialogStore";
 
 type TaskStatus = "todo" | "in-progress" | "done";
 type TaskPriority = "high" | "medium" | "low";
@@ -264,10 +265,16 @@ export function TasksView() {
 
   const handleExportCSV = () => {
     if (tasks.length === 0) { toast.warning("No tasks to export"); return; }
-    const header = ["Title", "Status", "Priority", "Effort", "Category", "Description"];
-    const rows = tasks.map(t => [t.title, t.status, t.priority ?? "", t.effort ?? "", t.category ?? "", t.description ?? ""]);
-    downloadCSV([header, ...rows], "tasks");
-    toast.success("Tasks exported", `${tasks.length} tasks saved as CSV`);
+    exportDialog.open({
+      defaultFilename: "tasks",
+      formats: [{ value: "csv", label: "Spreadsheet (.csv)" }],
+      onExport: (filename) => {
+        const header = ["Title", "Status", "Priority", "Effort", "Category", "Description"];
+        const rows = tasks.map(t => [t.title, t.status, t.priority ?? "", t.effort ?? "", t.category ?? "", t.description ?? ""]);
+        downloadCSV([header, ...rows], filename);
+        toast.success("Tasks exported", `${tasks.length} tasks saved as CSV`);
+      },
+    });
   };
 
   return (
