@@ -47,6 +47,11 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
+        env:
+          # prisma generate only reads the schema — no real DB needed.
+          # The env() helper in prisma.config.ts throws if the var is absent,
+          # so we supply a syntactically-valid placeholder here.
+          DATABASE_URL: postgresql://localhost:5432/speckula
       # Validate that committed migrations match the schema. `prisma migrate
       # diff --exit-code` returns non-zero when the schema and migration
       # history disagree, so drift fails CI.
