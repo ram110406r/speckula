@@ -134,7 +134,7 @@ export function InsightsView() {
       {/* Status bar */}
       <div className="flex items-center justify-between px-8 py-3.5 border-b border-border shrink-0 bg-card">
         <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground/60">EVIDENCE</span>
-        <span className="font-mono text-[10px] text-muted-foreground/60">copilot for product managers</span>
+        <span className="font-mono text-[10px] text-muted-foreground/60">speckula</span>
       </div>
 
       <div className="flex-1 overflow-auto p-8 custom-scrollbar">
