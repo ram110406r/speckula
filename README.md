@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/logo.png" alt="Buildcase Logo" width="120" />
+  <img src="public/logo.png" alt="Buildcase Logo" width="300" />
   
   <h1>Buildcase</h1>
   <p><strong>The AI-first workspace for product discovery and execution.</strong></p>
