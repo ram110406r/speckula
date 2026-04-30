@@ -1465,3 +1465,79 @@ export const submitOutcomeFeedback = async (
 
   return { updatedScore, insight };
 };
+
+// ── Research workspace AI ─────────────────────────────────────────────────────
+
+export interface ResearchAnalysis {
+  summary: string;
+  risks: string[];
+  opportunities: string[];
+  missingInfo: string[];
+}
+
+export const analyzeResearchAction = async (
+  userId: string,
+  blocks: Record<string, string>
+): Promise<ResearchAnalysis> => {
+  const parts = [
+    blocks.problem    && `**Problem**: ${blocks.problem}`,
+    blocks.context    && `**Context**: ${blocks.context}`,
+    blocks.userPain   && `**User Pain**: ${blocks.userPain}`,
+    blocks.insights   && `**Insights**: ${blocks.insights}`,
+    blocks.assumptions && `**Assumptions**: ${blocks.assumptions}`,
+  ].filter(Boolean).join("\n\n");
+
+  if (!parts) return { summary: "", risks: [], opportunities: [], missingInfo: [] };
+
+  const prompt = `You are a product strategy analyst. Analyze this product research and return ONLY valid JSON.
+
+Research:
+${parts}
+
+Return exactly this JSON (no markdown, no explanation):
+{
+  "summary": "2-3 sentence synthesis of the core finding",
+  "risks": ["specific risk 1", "specific risk 2"],
+  "opportunities": ["opportunity 1", "opportunity 2"],
+  "missingInfo": ["missing or unclear item 1", "missing or unclear item 2"]
+}
+
+Each item max 18 words. 2-4 items per array.`;
+
+  try {
+    const result = await callAI(prompt, userId);
+    const parsed = parseJsonPayload(result) as ResearchAnalysis;
+    return {
+      summary: typeof parsed.summary === "string" ? parsed.summary : "",
+      risks: Array.isArray(parsed.risks) ? (parsed.risks as string[]) : [],
+      opportunities: Array.isArray(parsed.opportunities) ? (parsed.opportunities as string[]) : [],
+      missingInfo: Array.isArray(parsed.missingInfo) ? (parsed.missingInfo as string[]) : [],
+    };
+  } catch {
+    return { summary: "", risks: [], opportunities: [], missingInfo: [] };
+  }
+};
+
+export const getBlockSuggestion = async (
+  userId: string,
+  blockLabel: string,
+  blockContent: string,
+  otherContext: string
+): Promise<string | null> => {
+  if (!blockContent || blockContent.trim().length < 40) return null;
+
+  const prompt = `You are a product thinking coach reviewing a "${blockLabel}" section. Give ONE specific, actionable suggestion to strengthen it. Max 2 sentences. Be direct and concrete.
+
+Content: ${blockContent.slice(0, 600)}
+${otherContext ? `\nOther context: ${otherContext.slice(0, 300)}` : ""}
+
+Respond with ONLY the suggestion text. No labels, no bullet points.`;
+
+  try {
+    const result = await callAI(prompt, userId);
+    return result?.trim() || null;
+  } catch {
+    return null;
+  }
+};
+
