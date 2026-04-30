@@ -32,6 +32,7 @@ import {
   getUserDocuments,
   createDocument,
   deleteDocument,
+  renameDocument,
 } from "@/lib/firebase/db";
 
 interface NavItem {
@@ -73,6 +74,8 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
   const [isDarkMode,   setIsDarkMode]   = useState(false);
   const [isCreating,   setIsCreating]   = useState(false);
   const [docsError,    setDocsError]    = useState<string | null>(null);
+  const [renamingId,   setRenamingId]   = useState<string | null>(null);
+  const [renameValue,  setRenameValue]  = useState("");
 
   // ── theme init ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -172,6 +175,23 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const startRename = (e: React.MouseEvent, id: string, currentTitle: string) => {
+    e.stopPropagation();
+    setRenamingId(id);
+    setRenameValue(currentTitle);
+  };
+
+  const commitRename = async (id: string) => {
+    const title = renameValue.trim();
+    setRenamingId(null);
+    if (!user || !title) return;
+    try {
+      await renameDocument(user.uid, id, title);
+      const docs = await getUserDocuments(user.uid);
+      setDocuments(docs);
+    } catch { /* noop */ }
   };
 
   const handleDeleteDoc = async (e: React.MouseEvent, id: string) => {
@@ -295,27 +315,50 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
             </div>
 
             <ul className="space-y-0.5">
-              {documents.map((doc) => {
-                const isActive = currentDocId === doc.id;
+              {documents.map((document) => {
+                const isActive = currentDocId === document.id;
+                const isRenaming = renamingId === document.id;
                 return (
                   <li
-                    key={doc.id}
-                    className={`group flex items-center gap-1.5 px-2 h-7 rounded-md cursor-pointer transition-colors ${
-                      isActive
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                    onClick={() => { setCurrentDocId(doc.id); setActiveView("editor"); }}
+                    key={document.id}
+                    className={`group flex items-center gap-1.5 px-2 h-7 rounded-md transition-colors ${
+                      isActive ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    } ${isRenaming ? "cursor-default" : "cursor-pointer"}`}
+                    onClick={() => { if (!isRenaming) { setCurrentDocId(document.id); setActiveView("editor"); } }}
                   >
                     <File className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-                    <span className="text-[11px] truncate flex-1">{doc.title}</span>
-                    <button
-                      onClick={(e) => handleDeleteDoc(e, doc.id)}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive transition-opacity"
-                      aria-label={`Delete ${doc.title}`}
-                    >
-                      <Trash2 className="h-2.5 w-2.5" />
-                    </button>
+                    {isRenaming ? (
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={() => commitRename(document.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename(document.id);
+                          if (e.key === "Escape") setRenamingId(null);
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-[11px] flex-1 bg-transparent border-b border-primary/60 outline-none min-w-0"
+                      />
+                    ) : (
+                      <span
+                        className="text-[11px] truncate flex-1"
+                        onDoubleClick={(e) => startRename(e, document.id, document.title)}
+                        title="Double-click to rename"
+                      >
+                        {document.title}
+                      </span>
+                    )}
+                    {!isRenaming && (
+                      <button
+                        onClick={(e) => handleDeleteDoc(e, document.id)}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive transition-opacity"
+                        aria-label={`Delete ${document.title}`}
+                      >
+                        <Trash2 className="h-2.5 w-2.5" />
+                      </button>
+                    )}
                   </li>
                 );
               })}

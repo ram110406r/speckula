@@ -238,6 +238,24 @@ export const getInsights = async (userId: string) => {
   }
 };
 
+export const deleteInsight = async (userId: string, insightId: string) => {
+  try {
+    await deleteDoc(doc(userInsightsCollection(userId), insightId));
+  } catch (error) {
+    logFirestorePermissionHint("deleteInsight", error);
+    throw error;
+  }
+};
+
+export const updateInsight = async (userId: string, insightId: string, data: Partial<Pick<Insight, "title" | "description">>) => {
+  try {
+    await setDoc(doc(userInsightsCollection(userId), insightId), data, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("updateInsight", error);
+    throw error;
+  }
+};
+
 // --- DECISION ACTIONS ---
 
 // Returns the Firestore-assigned document id so callers can link in-memory
@@ -266,6 +284,24 @@ export const getDecisions = async (userId: string) => {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as DecisionRecord[];
   } catch (error) {
     logFirestorePermissionHint("getDecisions", error);
+    throw error;
+  }
+};
+
+export const deleteDecision = async (userId: string, decisionId: string) => {
+  try {
+    await deleteDoc(doc(userDecisionsCollection(userId), decisionId));
+  } catch (error) {
+    logFirestorePermissionHint("deleteDecision", error);
+    throw error;
+  }
+};
+
+export const renameDocument = async (userId: string, docId: string, title: string) => {
+  try {
+    await setDoc(userDocRef(userId, docId), { title, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("renameDocument", error);
     throw error;
   }
 };
