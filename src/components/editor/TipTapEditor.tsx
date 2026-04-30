@@ -25,6 +25,7 @@ import type { BuildcaseTemplate } from '@/lib/templates';
 import { EditorDropOverlay } from './EditorDropOverlay';
 import { useFileDropImport } from '@/hooks/useFileDropImport';
 import { insertTextAsNodes } from '@/lib/editor/insertTextAsNodes';
+import { EditorToolbar } from './EditorToolbar';
 
 const INLINE_AI_LEARNING_KEY = "buildcase-inline-ai-learning-v1";
 
@@ -596,6 +597,8 @@ export function TipTapEditor() {
         onDismiss={dismissInlineSuggestion}
       />
 
+      <EditorToolbar editor={editor} />
+
       <div ref={dropZoneRef} className="relative h-full w-full">
         <EditorDropOverlay visible={isDragging} />
         {isImporting && !isDragging && (
@@ -612,6 +615,21 @@ export function TipTapEditor() {
           <button type="button" onClick={dismissError} className="font-medium">{errorMessage}</button>
         </div>
       )}
+
+      {/* Word count footer */}
+      {editor && (() => {
+        const text = editor.state.doc.textContent;
+        const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+        const chars = text.length;
+        const mins = Math.max(1, Math.ceil(words / 200));
+        return (
+          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-end gap-4 px-6 py-1.5 bg-card/60 border-t border-border/40 text-[10px] text-muted-foreground/50 font-mono pointer-events-none">
+            <span>{words.toLocaleString()} words</span>
+            <span>{chars.toLocaleString()} chars</span>
+            <span>{mins} min read</span>
+          </div>
+        );
+      })()}
 
       <TemplatePicker open={showTemplatePicker} onSelect={handleTemplateSelect} />
     </div>
