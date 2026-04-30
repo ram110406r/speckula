@@ -30,12 +30,12 @@ const statusConfig: Record<TaskStatus, { label: string; color: string; colBg: st
 };
 
 const categoryConfig: Record<string, string> = {
-  backend: "#2563EB",
-  frontend: "#3B82F6",
-  design: "#60A5FA",
-  qa: "#1D4ED8",
+  backend: "#7E43F5",
+  frontend: "#9E6BF8",
+  design: "#C4A5FA",
+  qa: "#5B2FD1",
   integration: "#0891B2",
-  devops: "#1E40AF",
+  devops: "#665AC2",
   general: "#64748B",
 };
 
