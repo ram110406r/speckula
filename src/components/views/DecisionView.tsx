@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
-import { getDocument, saveDecision, savePRD } from "@/lib/firebase/db";
+import { getDocument, saveDecision, savePRD, deleteDecision } from "@/lib/firebase/db";
 import {
   suggestDirectionAction,
   strategicGuidanceAction,
@@ -489,6 +489,17 @@ export function DecisionView() {
     }
   };
 
+  const handleDeleteDecision = async (decisionId: string) => {
+    if (!user) return;
+    try {
+      await deleteDecision(user.uid, decisionId);
+      setScoredSuggestions((prev) => prev.filter((d) => d.decisionId !== decisionId));
+      toast.success("Decision deleted");
+    } catch {
+      toast.error("Failed to delete decision");
+    }
+  };
+
   const handleExportCSV = () => {
     if (scoredSuggestions.length === 0) { toast.warning("No decisions to export"); return; }
     exportDialog.open({
@@ -710,6 +721,7 @@ export function DecisionView() {
             updateFeedbackState={updateFeedbackState}
             onSubmitFeedback={handleSubmitFeedback}
             onFocusDecision={setFocusPanelData}
+            onDeleteDecision={handleDeleteDecision}
           />
         )}
       </div>
@@ -776,6 +788,7 @@ interface DecisionGridProps {
   updateFeedbackState: (decisionId: string, patch: Partial<FeedbackCardState>) => void;
   onSubmitFeedback: (decision: ScoredDecision, success: boolean) => void;
   onFocusDecision: (data: FocusPanelData) => void;
+  onDeleteDecision: (decisionId: string) => void;
 }
 
 function DecisionGrid({
@@ -793,6 +806,7 @@ function DecisionGrid({
   updateFeedbackState,
   onSubmitFeedback,
   onFocusDecision,
+  onDeleteDecision,
 }: DecisionGridProps) {
   // Annotate every decision with its evaluated health + pushbacks once, so
   // grouping, filtering, and rendering all share the same judgment.
@@ -995,6 +1009,7 @@ function DecisionGrid({
                     pushbacks={pushbacks}
                     topRisk={decision.risks?.[0]}
                     onPushbackCta={onPushbackCta}
+                    onDelete={() => onDeleteDecision(decision.decisionId)}
                     onGenerateBrief={() => onGenerateBrief(decision)}
                     onConvert={() => onConvertToPRD(decision, index)}
                     onFocus={() =>
