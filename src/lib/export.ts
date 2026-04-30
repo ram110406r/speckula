@@ -242,6 +242,52 @@ export async function downloadPRDDocx(title: string, content: string, filename: 
   downloadBlob(blob, `${filename}.docx`);
 }
 
+// ── decisions ────────────────────────────────────────────────────────────────
+
+export interface ExportableDecision {
+  title: string;
+  priority: string;
+  score: number;
+  justification: string;
+  userStory?: string;
+  tradeoffs?: string;
+  impact: number;
+  effort: number;
+  confidence?: number;
+  demand?: number;
+  health?: string;
+}
+
+export function generateDecisionsMarkdown(decisions: ExportableDecision[]): string {
+  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const lines: string[] = [
+    `# Decision Log`,
+    ``,
+    `*Generated ${date} · ${decisions.length} decision${decisions.length !== 1 ? "s" : ""}*`,
+    ``,
+  ];
+  for (const d of decisions) {
+    lines.push(`## ${d.title}`);
+    lines.push(``);
+    lines.push(`**Priority:** ${d.priority} | **Score:** ${d.score}/100 | **Health:** ${d.health ?? "—"}`);
+    lines.push(``);
+    lines.push(`**Justification:** ${d.justification}`);
+    if (d.userStory) { lines.push(``); lines.push(`**User Story:** ${d.userStory}`); }
+    if (d.tradeoffs) { lines.push(``); lines.push(`**Trade-offs:** ${d.tradeoffs}`); }
+    lines.push(``);
+    lines.push(`| Metric | Value |`);
+    lines.push(`|---|---|`);
+    lines.push(`| Impact | ${d.impact} |`);
+    lines.push(`| Effort | ${d.effort} |`);
+    if (d.confidence !== undefined) lines.push(`| Confidence | ${d.confidence} |`);
+    if (d.demand !== undefined) lines.push(`| Demand | ${d.demand} |`);
+    lines.push(``);
+    lines.push(`---`);
+    lines.push(``);
+  }
+  return lines.join("\n");
+}
+
 // ── tasks CSV table (re-export shape helpers) ────────────────────────────────
 
 export async function downloadTasksDocx(

@@ -1,5 +1,5 @@
 import React from "react";
-import { Sparkles, Loader2, ArrowRight, AlertTriangle, AlertCircle, Trash2 } from "lucide-react";
+import { Sparkles, Loader2, ArrowRight, AlertTriangle, AlertCircle, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AIInsight } from "@/components/ui/AIInsight";
 import type { HealthStatus, Pushback, PushbackAction } from "@/lib/ai/decisionHealth";
@@ -65,6 +65,7 @@ interface DecisionCardV2Props {
   onConvert: () => void;
   onFocus?: () => void;
   onDelete?: () => void;
+  onEdit?: () => void;
   isBriefLoading?: boolean;
   isConverting?: boolean;
   footer?: React.ReactNode;
@@ -74,6 +75,7 @@ interface DecisionCardV2Props {
 
 export function DecisionCardV2({
   onDelete,
+  onEdit,
   title,
   summary,
   score,
@@ -148,6 +150,15 @@ export function DecisionCardV2({
             <span className={`rounded border px-2 py-0.5 text-[10px] uppercase tracking-[0.06em] font-medium ${PRIORITY_CLS[priority]}`}>
               {priority}
             </span>
+            {onEdit && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                title="Edit decision"
+                className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            )}
             {onDelete && (
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}

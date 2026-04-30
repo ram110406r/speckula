@@ -67,8 +67,16 @@ export interface DecisionRecord {
   priority: "high" | "medium" | "low";
   impact: number;
   effort: number;
+  confidence?: number;
+  demand?: number;
+  score?: number;
+  reasoning?: string;
   userStory: string;
   tradeoffs: string;
+  summary?: string;
+  keyInsight?: string;
+  recommendation?: string;
+  risks?: string[];
   strategyTheme?: string | null;
   sourceDocId?: string;
   userId: string;
@@ -294,6 +302,19 @@ export const deleteDecision = async (userId: string, decisionId: string) => {
     await deleteDoc(doc(userDecisionsCollection(userId), decisionId));
   } catch (error) {
     logFirestorePermissionHint("deleteDecision", error);
+    throw error;
+  }
+};
+
+export const updateDecision = async (
+  userId: string,
+  decisionId: string,
+  data: Partial<Omit<DecisionRecord, "id" | "userId" | "createdAt">>
+) => {
+  try {
+    await setDoc(doc(userDecisionsCollection(userId), decisionId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("updateDecision", error);
     throw error;
   }
 };
