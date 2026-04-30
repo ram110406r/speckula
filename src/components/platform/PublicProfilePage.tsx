@@ -9,13 +9,20 @@ import { getPublicProfile, type PublicProfile } from "@/lib/firebase/db";
 export function PublicProfilePage({ userId }: { userId: string }) {
   const [profile, setProfile] = React.useState<PublicProfile | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
 
   React.useEffect(() => {
     const load = async () => {
       setLoading(true);
+      setLoadError(false);
       try {
         const profileData = await getPublicProfile(userId);
         setProfile(profileData);
+        setLoadError(false);
+      } catch (error) {
+        console.error("Failed to load public profile:", error);
+        setProfile(null);
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
@@ -28,6 +35,39 @@ export function PublicProfilePage({ userId }: { userId: string }) {
     return <div className="flex min-h-screen items-center justify-center bg-background"><p className="label-system text-[12px] text-muted-foreground">Loading public profile...</p></div>;
   }
 
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="border-b border-border/60 bg-card/70 backdrop-blur-sm">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+            <Link href="/" className="inline-flex items-center gap-2 label-system text-[12px] text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back
+            </Link>
+            <Button variant="outline" size="sm" className="label-system text-[12px]" onClick={() => navigator.clipboard.writeText(window.location.href)}>
+              <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy Link
+            </Button>
+          </div>
+        </div>
+
+        <main className="mx-auto max-w-6xl px-6 py-10">
+          <section className="rounded-3xl border border-border/60 bg-card p-8 shadow-sm">
+            <p className="label-system text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+              Public Profile
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+              {loadError ? "Profile unavailable" : "Profile not published"}
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+              {loadError
+                ? "We could not load this profile right now. Try again later."
+                : "This user has not published a public profile yet."}
+            </p>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b border-border/60 bg-card/70 backdrop-blur-sm">
@@ -35,7 +75,19 @@ export function PublicProfilePage({ userId }: { userId: string }) {
           <Link href="/" className="inline-flex items-center gap-2 label-system text-[12px] text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-3.5 w-3.5" /> Back
           </Link>
-          <Button variant="outline" size="sm" className="label-system text-[12px]" onClick={() => navigator.clipboard.writeText(window.location.href)}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="label-system text-[12px]"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(window.location.href);
+              } catch (error) {
+                console.error("Failed to copy public profile link:", error);
+                alert("Could not copy the link.");
+              }
+            }}
+          >
             <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy Link
           </Button>
         </div>

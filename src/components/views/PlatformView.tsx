@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/firebase/AuthProvider";
+import { useAppStore } from "@/store/useAppStore";
 import {
   getDecisions,
   getPublicProfile,
@@ -36,6 +37,7 @@ function getOriginPath(path: string) {
 
 export function PlatformView() {
   const { user } = useAuth();
+  const { currentDocId } = useAppStore();
   const [activeTab, setActiveTab] = React.useState<PlatformTab>("portfolio");
   const [workspaces, setWorkspaces] = React.useState<(TeamWorkspace & { id: string })[]>([]);
   const [decisions, setDecisions] = React.useState<DecisionRecord[]>([]);
@@ -56,9 +58,12 @@ export function PlatformView() {
         getWorkspacesForUser(user.uid),
         getDecisions(user.uid),
       ]);
+      const scopedDecisions = currentDocId
+        ? decisionData.filter((decision) => decision.sourceDocId === currentDocId)
+        : [];
 
       setWorkspaces(workspaceData);
-      setDecisions(decisionData);
+      setDecisions(scopedDecisions);
       setProfileName(profileData?.name ?? user.displayName ?? "");
       setProfileBio(profileData?.bio ?? "");
       setProfileSkills(profileData?.skills?.join(", ") ?? "");
@@ -67,7 +72,7 @@ export function PlatformView() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, currentDocId]);
 
   React.useEffect(() => {
     loadPlatformData();
@@ -133,6 +138,9 @@ export function PlatformView() {
   };
 
   const publicProfileLink = getOriginPath(profileUrl(user.uid));
+  const decisionSummary = currentDocId
+    ? `${decisions.length} decisions for the active document`
+    : "Select a document to view its linked decisions";
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -142,7 +150,19 @@ export function PlatformView() {
           <span className="label-system text-[12px]">Platform Mode</span>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" className="h-8 label-system text-[12px]" onClick={() => navigator.clipboard.writeText(publicProfileLink)}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 label-system text-[12px]"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(publicProfileLink);
+              } catch (error) {
+                console.error("Failed to copy profile link:", error);
+                alert("Could not copy the profile link.");
+              }
+            }}
+          >
             <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy Profile Link
           </Button>
         </div>
@@ -214,10 +234,10 @@ export function PlatformView() {
                   <p className="label-system text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Decision History</p>
                   <h3 className="mt-2 text-base font-semibold">Your private decision log</h3>
                 </div>
-                <span className="label-system text-[12px] text-muted-foreground">{decisions.length} decisions</span>
+                <span className="label-system text-[12px] text-muted-foreground">{decisionSummary}</span>
               </div>
-              {decisions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No decisions yet — generate your first one in the Decisions view.</p>
+              {currentDocId ? decisions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No decisions are linked to this document yet — generate one in the Decisions view.</p>
               ) : (
                 <div className="space-y-3">
                   {decisions.slice(0, 6).map((decision) => (
@@ -227,6 +247,8 @@ export function PlatformView() {
                     </div>
                   ))}
                 </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Open a document first to see its linked decisions here.</p>
               )}
             </section>
           </div>
