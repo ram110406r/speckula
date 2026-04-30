@@ -729,17 +729,38 @@ export function TasksView() {
                 </div>
               )}
               <div>
-                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-2 mb-2">
-                  <Users className="h-3.5 w-3.5" /> Assign To
-                </label>
-                <select
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5" /> Assign To
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {selectedTask.assignee && (
+                      <button
+                        type="button"
+                        onClick={() => assignTaskToUser(selectedTask, "")}
+                        className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    {selectedTask.assignee !== user?.email && (
+                      <button
+                        type="button"
+                        onClick={() => assignTaskToUser(selectedTask, user?.email || "")}
+                        className="text-[11px] text-primary hover:underline"
+                      >
+                        Assign to me
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="text"
                   value={selectedTask.assignee || ""}
                   onChange={(e) => assignTaskToUser(selectedTask, e.target.value)}
+                  placeholder="Name or email…"
                   className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background"
-                >
-                  <option value="">Unassigned</option>
-                  <option value={user?.email || ""}>{user?.email || "You"}</option>
-                </select>
+                />
               </div>
             </div>
             <DialogFooter className="justify-between sm:justify-between">
