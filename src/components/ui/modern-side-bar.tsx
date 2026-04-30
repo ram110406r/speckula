@@ -505,7 +505,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
       </div>
 
       {/* Desktop sidebar (renders inside Shell's grid cell) */}
-      <div className="hidden md:block h-full overflow-hidden">
+      <div className="hidden md:block h-full overflow-visible">
         {SidebarContent}
       </div>
     </>
