@@ -20,7 +20,7 @@ export function LandingPage() {
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 flex items-center justify-center">
             <Image
-              src="/logo.png" 
+              src="/logo.svg" 
               alt="Speckula Logo" 
               width={32}
               height={32}
@@ -47,7 +47,7 @@ export function LandingPage() {
       {/* Hero Section */}
       <header className="relative z-10 text-center max-w-4xl space-y-10 pt-24 pb-32">
         <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-primary/5 border border-primary/10 label-system text-[12px] text-primary animate-fade-in shadow-sm">
-          <Image src="/logo.png" alt="" width={14} height={14} className="h-3.5 w-3.5 object-contain" />
+          <Image src="/logo.svg" alt="" width={14} height={14} className="h-3.5 w-3.5 object-contain" />
           <span>The Decision Engine for Product Teams</span>
         </div>
         
