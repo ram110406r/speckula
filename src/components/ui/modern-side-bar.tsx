@@ -21,7 +21,6 @@ import {
   SunMedium,
   ChevronLeft,
   ChevronRight,
-  Search,
   Menu,
   X,
 } from "lucide-react";
@@ -70,7 +69,6 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
   const [isCollapsed,  setIsCollapsed]  = useState(false);
   const [mobileOpen,   setMobileOpen]   = useState(false);
   const [isDarkMode,   setIsDarkMode]   = useState(false);
-  const [search,       setSearch]       = useState("");
   const [isCreating,   setIsCreating]   = useState(false);
   const [docsError,    setDocsError]    = useState<string | null>(null);
 
@@ -168,15 +166,8 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
     } catch { /* noop */ }
   };
 
-  // ── filtered nav ────────────────────────────────────────────────────────────
-  const filteredItems = search.trim()
-    ? NAV_ITEMS.filter((i) =>
-        i.label.toLowerCase().includes(search.toLowerCase())
-      )
-    : NAV_ITEMS;
-
   const grouped = GROUP_ORDER.reduce<Record<string, NavItem[]>>((acc, g) => {
-    const items = filteredItems.filter((i) => i.group === g);
+    const items = NAV_ITEMS.filter((i) => i.group === g);
     if (items.length) acc[g] = items;
     return acc;
   }, {});
@@ -211,22 +202,6 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
           }
         </button>
       </div>
-
-      {/* ── Search (expanded only) ── */}
-      {!isCollapsed && (
-        <div className="px-3 py-2.5 border-b border-sidebar-border/40">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/50" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="w-full pl-8 pr-3 py-1.5 bg-muted/40 border border-border/60 rounded-md text-xs placeholder-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
-            />
-          </div>
-        </div>
-      )}
 
       {/* ── Navigation ── */}
       <nav className="flex-1 min-h-0 overflow-y-auto custom-scrollbar py-2 px-2">
