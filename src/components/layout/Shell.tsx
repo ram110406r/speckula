@@ -108,6 +108,12 @@ export function Shell() {
   const { aiPanelOpen, toggleAiPanel, activeView, setActiveView, documents, currentDocId } =
     useAppStore();
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  // Track whether Autonomous Mode has ever been visited so we can keep it
+  // mounted (but hidden) instead of unmounting on navigation, preserving state.
+  const [autonomousMounted, setAutonomousMounted] = React.useState(false);
+  React.useEffect(() => {
+    if (activeView === "autonomous") setAutonomousMounted(true);
+  }, [activeView]);
 
   if (loading) {
     return (
@@ -129,14 +135,14 @@ export function Shell() {
 
   const renderMainView = () => {
     switch (activeView) {
-      case "insights":    return <InsightsView />;
-      case "prds":        return <PRDsView />;
-      case "tasks":       return <TasksView />;
-      case "decisions":   return <DecisionView />;
-      case "platform":    return <PlatformView />;
-      case "slack":       return <SlackView />;
-      case "autonomous":  return <AutonomousModeView />;
-      default:            return <Editor />;
+      case "insights":   return <InsightsView />;
+      case "prds":       return <PRDsView />;
+      case "tasks":      return <TasksView />;
+      case "decisions":  return <DecisionView />;
+      case "platform":   return <PlatformView />;
+      case "slack":      return <SlackView />;
+      // "autonomous" is rendered persistently below — not here
+      default:           return <Editor />;
     }
   };
 
@@ -204,7 +210,16 @@ export function Shell() {
         </div>
 
         <div className="min-h-0 min-w-0 overflow-hidden bg-card">
-          {renderMainView()}
+          {/* All views except Autonomous Mode — unmount freely */}
+          <div style={{ display: activeView === "autonomous" ? "none" : undefined }} className="h-full">
+            {renderMainView()}
+          </div>
+          {/* Autonomous Mode — kept mounted once visited so state survives navigation */}
+          {autonomousMounted && (
+            <div style={{ display: activeView !== "autonomous" ? "none" : undefined }} className="h-full">
+              <AutonomousModeView />
+            </div>
+          )}
         </div>
 
         {showAIPanel && (
