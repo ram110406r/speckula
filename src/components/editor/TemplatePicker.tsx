@@ -4,7 +4,7 @@ import React from "react";
 import { Users, MessageSquareWarning, Lightbulb, FileText } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { TEMPLATES, BLANK, type BuildcaseTemplate } from "@/lib/templates";
+import { TEMPLATES, BLANK, type SpeckulaTemplate } from "@/lib/templates";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Users,
@@ -15,7 +15,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 
 interface TemplatePickerProps {
   open: boolean;
-  onSelect: (template: BuildcaseTemplate) => void;
+  onSelect: (template: SpeckulaTemplate) => void;
 }
 
 export function TemplatePicker({ open, onSelect }: TemplatePickerProps) {

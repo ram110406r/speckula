@@ -1,5 +1,5 @@
 
-# 📄 BUILDCASE — PRODUCT REQUIREMENTS DOCUMENT (PRD)
+# 📄 Speckula — PRODUCT REQUIREMENTS DOCUMENT (PRD)
 
 ---
 
@@ -7,13 +7,13 @@
 
 ## 1.1 Product Name
 
-**Buildcase**
+**Speckula**
 
 ---
 
 ## 1.2 Vision
 
-Buildcase is an **AI-native product intelligence system** that helps product managers **discover what to build, define it clearly, and move it to execution** — all in a single continuous workflow.
+Speckula is an **AI-native product intelligence system** that helps product managers **discover what to build, define it clearly, and move it to execution** — all in a single continuous workflow.
 
 ---
 
@@ -25,7 +25,7 @@ To replace fragmented product workflows (docs, dashboards, tools) with a **singl
 
 ## 1.4 Positioning
 
-> **Buildcase is the Cursor for Product Managers — an AI-first workspace for product discovery and execution.**
+> **Speckula is the Cursor for Product Managers — an AI-first workspace for product discovery and execution.**
 
 ---
 
@@ -405,7 +405,7 @@ Maintain simplicity at all costs.
 
 ---
 
-A successful Buildcase product should:
+A successful Speckula product should:
 
 * Help users think better
 * Reduce decision time
@@ -416,6 +416,6 @@ A successful Buildcase product should:
 
 # 🔥 Final Statement
 
-> **Buildcase is not a productivity tool — it is a thinking system for building products.**
+> **Speckula is not a productivity tool — it is a thinking system for building products.**
 
 

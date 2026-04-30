@@ -1,7 +1,7 @@
 {
-  "name": "buildcase-ai-backend",
+  "name": "Speckula-ai-backend",
   "version": "1.0.0",
-  "description": "Groq-powered AI service layer for BuildCase with Firebase integration",
+  "description": "Groq-powered AI service layer for Speckula with Firebase integration",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

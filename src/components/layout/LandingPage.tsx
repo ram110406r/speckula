@@ -21,13 +21,13 @@ export function LandingPage() {
           <div className="w-8 h-8 flex items-center justify-center">
             <Image
               src="/logo.png" 
-              alt="Buildcase Logo" 
+              alt="Speckula Logo" 
               width={32}
               height={32}
               className="w-full h-full object-contain"
             />
           </div>
-          <span className="font-semibold text-lg tracking-tight text-foreground">Buildcase</span>
+          <span className="font-semibold text-lg tracking-tight text-foreground">Speckula</span>
         </div>
         <div className="flex items-center gap-6">
           <button type="button" onClick={() => scrollToSection("philosophy")} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden md:block">
@@ -109,7 +109,7 @@ export function LandingPage() {
         <div className="max-w-3xl text-center space-y-6 px-6">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">Calm. Focused. Precise.</h2>
           <p className="text-lg text-muted-foreground leading-relaxed">
-            Product tools are noisy. Buildcase is built as a focused environment where the logic of your product wins — no distractions, no dashboards for the sake of dashboards.
+            Product tools are noisy. Speckula is built as a focused environment where the logic of your product wins — no distractions, no dashboards for the sake of dashboards.
           </p>
         </div>
       </section>
@@ -120,7 +120,7 @@ export function LandingPage() {
           <ShieldCheck className="h-3.5 w-3.5 text-primary/60" />
           <span>Secured with Google Cloud Identity</span>
         </div>
-        <p className="text-xs text-muted-foreground/70">© 2026 Buildcase</p>
+        <p className="text-xs text-muted-foreground/70">© 2026 Speckula</p>
       </footer>
     </div>
   );

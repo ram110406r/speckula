@@ -2,7 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(npx eslint *)",
-      "Bash(awk 'NR==370 || NR==371' /e/buildcase/backend/src/routes/importRoutes.ts)",
+      "Bash(awk 'NR==370 || NR==371' /e/Speckula/backend/src/routes/importRoutes.ts)",
       "Bash(node --input-type=module -e ' *)",
       "Bash(npm ls *)",
       "Bash(npx vitest *)"

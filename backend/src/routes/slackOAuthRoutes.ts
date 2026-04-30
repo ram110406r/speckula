@@ -14,7 +14,7 @@ import {
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 min
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3000';
 
-// ─── State signing (so we know which Buildcase user is installing) ─────────
+// ─── State signing (so we know which Speckula user is installing) ─────────
 const stateSecret = (): string => {
   // Reuse signing secret as the HMAC key for state to keep one less env var.
   const s = process.env.SLACK_SIGNING_SECRET;

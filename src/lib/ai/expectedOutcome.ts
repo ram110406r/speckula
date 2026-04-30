@@ -9,7 +9,7 @@ export interface ExpectedOutcomeRecord {
   expected: ExpectedOutcome;
 }
 
-const STORAGE_PREFIX = "buildcase-expected-outcome-v1";
+const STORAGE_PREFIX = "Speckula-expected-outcome-v1";
 const keyFor = (ideaId: string) => `${STORAGE_PREFIX}:${ideaId}`;
 
 const writeLocal = (ideaId: string, record: ExpectedOutcomeRecord) => {

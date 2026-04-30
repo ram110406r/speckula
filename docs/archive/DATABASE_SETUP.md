@@ -22,15 +22,15 @@ sudo systemctl start postgresql
 psql -U postgres
 
 # Create database
-CREATE DATABASE buildcase;
+CREATE DATABASE Speckula;
 
 # Create user (optional, for security)
-CREATE USER buildcase_user WITH PASSWORD 'secure_password';
-ALTER ROLE buildcase_user SET client_encoding TO 'utf8';
-ALTER ROLE buildcase_user SET default_transaction_isolation TO 'read committed';
-ALTER ROLE buildcase_user SET default_transaction_deferrable TO on;
-ALTER ROLE buildcase_user SET default_transaction_read_only TO off;
-GRANT ALL PRIVILEGES ON DATABASE buildcase TO buildcase_user;
+CREATE USER Speckula_user WITH PASSWORD 'secure_password';
+ALTER ROLE Speckula_user SET client_encoding TO 'utf8';
+ALTER ROLE Speckula_user SET default_transaction_isolation TO 'read committed';
+ALTER ROLE Speckula_user SET default_transaction_deferrable TO on;
+ALTER ROLE Speckula_user SET default_transaction_read_only TO off;
+GRANT ALL PRIVILEGES ON DATABASE Speckula TO Speckula_user;
 
 # Exit psql
 \q
@@ -64,17 +64,17 @@ npx prisma studio
 
 ### PostgreSQL with default user
 ```
-postgresql://postgres:password@localhost:5432/buildcase
+postgresql://postgres:password@localhost:5432/Speckula
 ```
 
 ### PostgreSQL with custom user
 ```
-postgresql://buildcase_user:secure_password@localhost:5432/buildcase
+postgresql://Speckula_user:secure_password@localhost:5432/Speckula
 ```
 
 ### PostgreSQL on different host/port
 ```
-postgresql://user:password@host:5432/buildcase
+postgresql://user:password@host:5432/Speckula
 ```
 
 ## Troubleshooting
@@ -154,12 +154,12 @@ Add to `package.json`:
 
 ### Backup
 ```bash
-pg_dump buildcase > backup.sql
+pg_dump Speckula > backup.sql
 ```
 
 ### Restore
 ```bash
-psql buildcase < backup.sql
+psql Speckula < backup.sql
 ```
 
 ## Performance Optimization

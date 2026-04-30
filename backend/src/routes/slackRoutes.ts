@@ -178,7 +178,7 @@ export default async function slackRoutes(fastify: FastifyInstance) {
         try {
           const firestore = getFirebaseFirestore();
 
-          // Multi-tenant: look up which Buildcase user owns this Slack workspace.
+          // Multi-tenant: look up which Speckula user owns this Slack workspace.
           const installSnap = await firestore.doc(`slackInstallations/${team_id}`).get();
           if (!installSnap.exists) {
             request.log.warn({ team_id }, 'no installation record for incoming team_id; skipping');

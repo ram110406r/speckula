@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="public/logo.png" alt="Buildcase Logo" width="300" />
+  <img src="public/logo.png" alt="Speckula Logo" width="300" />
   
-  <h1>Buildcase</h1>
+  <h1>Speckula</h1>
   <p><strong>The AI-first workspace for product discovery and execution.</strong></p>
   <p><em>Think of it as Cursor — but for Product Managers.</em></p>
 
@@ -18,11 +18,11 @@
 
 ---
 
-## What is Buildcase?
+## What is Speckula?
 
-Buildcase is an **AI-native product intelligence system** — a single, focused environment where product managers go from raw ideas to structured execution without switching tools.
+Speckula is an **AI-native product intelligence system** — a single, focused environment where product managers go from raw ideas to structured execution without switching tools.
 
-> There is no system that helps product managers go from **raw user signals → product decisions → execution** in a continuous, intelligent workflow. Buildcase is that system.
+> There is no system that helps product managers go from **raw user signals → product decisions → execution** in a continuous, intelligent workflow. Speckula is that system.
 
 **Core workflow:**
 ```
@@ -80,8 +80,8 @@ A carefully crafted aesthetic — Burnt Orange (`#C04A2B`) on Warm Cream (`#F7F4
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/your-username/buildcase.git
-cd buildcase
+git clone https://github.com/your-username/Speckula.git
+cd Speckula
 ```
 
 ### 2. Install dependencies
@@ -167,7 +167,7 @@ src/
 │   Editor         │    Start typing your       │   [Suggest Tasks]   │
 │   Insights       │    product thoughts...     │                     │
 │   PRDs           │                            │   ─────────────── ─ │
-│   Tasks          │                            │   Ask Buildcase...  │
+│   Tasks          │                            │   Ask Speckula...  │
 │                  │                            │                     │
 │   [Sign In]      │                            │                     │
 │                  │                            │                     │
@@ -178,7 +178,7 @@ src/
 
 ## Design Philosophy
 
-Buildcase follows four core principles:
+Speckula follows four core principles:
 
 1. **Editor-First** — The entire experience revolves around a single intelligent editor.
 2. **AI-Native** — AI is not a feature. It is the core system behavior.
@@ -219,5 +219,5 @@ Contributions are welcome! Please open an issue first to discuss what you'd like
 ---
 
 <div align="center">
-  <strong>Buildcase is not a productivity tool — it is a thinking system for building products.</strong>
+  <strong>Speckula is not a productivity tool — it is a thinking system for building products.</strong>
 </div>

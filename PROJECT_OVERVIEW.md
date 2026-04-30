@@ -1,8 +1,8 @@
-# Buildcase — Product Intelligence Workspace
+# Speckula — Product Intelligence Workspace
 
 > **The Cursor for Product Managers.** One workspace, one AI loop, from raw idea to shipped outcome.
 
-Product work today lives in five tabs: Notion for notes, a separate doc for the PRD, Jira for tasks, a spreadsheet for scoring, and ChatGPT in a sixth tab to glue it together. Buildcase collapses that stack. You write in a single editor, and the same content silently becomes structured insights, a scored decision, a PRD, a task list, and — after launch — a public case study with the actual outcome attached. The AI doesn't sit in a side window; it flows through every step.
+Product work today lives in five tabs: Notion for notes, a separate doc for the PRD, Jira for tasks, a spreadsheet for scoring, and ChatGPT in a sixth tab to glue it together. Speckula collapses that stack. You write in a single editor, and the same content silently becomes structured insights, a scored decision, a PRD, a task list, and — after launch — a public case study with the actual outcome attached. The AI doesn't sit in a side window; it flows through every step.
 
 ---
 
@@ -106,7 +106,7 @@ The whole loop runs on **Groq Llama-3.3-70B** for sub-second responses, so the f
 ## 🗂️ Repository Layout
 
 ```
-buildcase/
+Speckula/
 ├── src/
 │   ├── app/                    # Next.js App Router (layout, /, /c, /u, /api)
 │   ├── components/

@@ -21,13 +21,13 @@ import { triggerAISuggestion, cancelAISuggestionTrigger } from '@/lib/ai/aiTrigg
 import { prioritizeSteps } from '@/lib/ai/priorityEngine';
 import { InlineSuggestion } from './InlineSuggestion';
 import { TemplatePicker } from './TemplatePicker';
-import type { BuildcaseTemplate } from '@/lib/templates';
+import type { SpeckulaTemplate } from '@/lib/templates';
 import { EditorDropOverlay } from './EditorDropOverlay';
 import { useFileDropImport } from '@/hooks/useFileDropImport';
 import { insertTextAsNodes } from '@/lib/editor/insertTextAsNodes';
 import { EditorToolbar } from './EditorToolbar';
 
-const INLINE_AI_LEARNING_KEY = "buildcase-inline-ai-learning-v1";
+const INLINE_AI_LEARNING_KEY = "Speckula-inline-ai-learning-v1";
 
 interface InlineLearningState {
   acceptedSuggestions: string[];
@@ -265,7 +265,7 @@ export function TipTapEditor() {
   }, [editor, currentDocId, isLoadingContent, newDocumentId]);
 
   const handleTemplateSelect = React.useCallback(
-    (template: BuildcaseTemplate) => {
+    (template: SpeckulaTemplate) => {
       if (editor && template.id !== "blank") {
         editor.commands.setContent(template.content);
         editor.commands.focus("start");

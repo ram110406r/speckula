@@ -279,7 +279,7 @@ export function AutonomousModeView() {
                 <Bot className="h-8 w-8 mb-3 opacity-50" />
                 <p className="text-sm font-medium">Drop in an idea to start.</p>
                 <p className="text-xs mt-1 max-w-xs">
-                  Buildcase will think through it stage by stage and ask only when something critical is missing.
+                  Speckula will think through it stage by stage and ask only when something critical is missing.
                 </p>
               </div>
             )}

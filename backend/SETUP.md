@@ -22,10 +22,10 @@ sudo systemctl start postgresql
 
 ### Option B: Docker PostgreSQL
 ```bash
-docker run --name buildcase-db \
+docker run --name Speckula-db \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=buildcase \
+  -e POSTGRES_DB=Speckula \
   -p 5432:5432 \
   -d postgres:16
 ```
@@ -37,7 +37,7 @@ docker run --name buildcase-db \
 psql -U postgres
 
 # In psql shell:
-CREATE DATABASE buildcase;
+CREATE DATABASE Speckula;
 \q
 ```
 
@@ -45,7 +45,7 @@ CREATE DATABASE buildcase;
 
 Edit `backend/.env`:
 ```
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/buildcase"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/Speckula"
 ```
 
 ## Step 5: Run Database Migrations
@@ -90,10 +90,10 @@ curl http://localhost:3001/health
 - Check DATABASE_URL in .env
 - Verify database exists: `psql -U postgres -l`
 
-### "error: database "buildcase" does not exist"
+### "error: database "Speckula" does not exist"
 ```bash
 # Create database
-psql -U postgres -c "CREATE DATABASE buildcase;"
+psql -U postgres -c "CREATE DATABASE Speckula;"
 ```
 
 ### "password authentication failed"
@@ -106,8 +106,8 @@ psql -U postgres -c "CREATE DATABASE buildcase;"
 npm run prisma:reset
 
 # Or manually:
-psql -U postgres -c "DROP DATABASE buildcase;"
-psql -U postgres -c "CREATE DATABASE buildcase;"
+psql -U postgres -c "DROP DATABASE Speckula;"
+psql -U postgres -c "CREATE DATABASE Speckula;"
 npm run prisma:migrate
 ```
 

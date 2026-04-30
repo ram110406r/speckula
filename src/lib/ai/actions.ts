@@ -650,7 +650,7 @@ export const extractInsightsAction = async (userId: string, docContent: unknown,
   }
 
   if (insights.length > 0) {
-    activity.push("Signals extracted", `${insights.length} new signal${insights.length > 1 ? "s" : ""} added`);
+    activity.ai("Signals extracted", `${insights.length} new signal${insights.length > 1 ? "s" : ""} added`);
   }
   return insights;
 };
@@ -672,7 +672,7 @@ export const generatePRDAction = async (userId: string, docContent: unknown, tit
     status: "draft",
     sourceDocId,
   });
-  activity.push("Spec generated", `PRD: ${title}`);
+  activity.ai("Spec generated", `PRD: ${title}`);
   return data.content;
 };
 
@@ -1150,7 +1150,7 @@ Output ONLY a JSON array with this structure:
         milestone: t.milestone,
       };
     }) as TaskWithMetadata[];
-    activity.push("Tasks generated", `${result2.length} tasks from ${prdTitle ?? "PRD"}`);
+    activity.ai("Tasks generated", `${result2.length} tasks from ${prdTitle ?? "PRD"}`);
     return result2;
   } catch (e) {
     console.error("[generateTasksFromPRDAction] Failed to parse tasks JSON:", e);

@@ -1,8 +1,8 @@
-# BuildCase AI Backend - Phase 1 Completion Summary
+# Speckula AI Backend - Phase 1 Completion Summary
 
 ## 🎯 Objective Achieved
 
-Successfully scaffolded a **high-performance AI backend** for BuildCase using **Groq as the primary AI provider** with real-time pattern analysis, fast feedback loops, and scalable decision workflows.
+Successfully scaffolded a **high-performance AI backend** for Speckula using **Groq as the primary AI provider** with real-time pattern analysis, fast feedback loops, and scalable decision workflows.
 
 ## 📋 What Was Built
 

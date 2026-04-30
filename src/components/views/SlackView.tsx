@@ -320,7 +320,7 @@ export function SlackView() {
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted-foreground">
           <Plug2 className="h-8 w-8 opacity-60" />
           <p className="max-w-sm">
-            Connect your Slack workspace to ingest channel conversations into Buildcase.
+            Connect your Slack workspace to ingest channel conversations into Speckula.
             You&apos;ll choose which channels to sync.
           </p>
           <Button onClick={handleConnect}>

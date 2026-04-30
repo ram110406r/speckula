@@ -688,7 +688,7 @@ export function AIPanel() {
               }`}
             >
               <span className="label-system text-[12px] mb-1.5 block">
-                {m.role === "user" ? "You" : "Buildcase AI"}
+                {m.role === "user" ? "You" : "Speckula AI"}
               </span>
               <div className="whitespace-pre-wrap leading-relaxed text-[13px] font-normal">{m.content || (isLoading ? "▋" : "")}</div>
             </div>
@@ -720,7 +720,7 @@ export function AIPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             className="flex-1 min-h-[64px] max-h-[140px] text-sm resize-none rounded-lg border border-input bg-background px-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring leading-relaxed"
-            placeholder="Ask Buildcase..."
+            placeholder="Ask Speckula..."
             disabled={isLoading}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {

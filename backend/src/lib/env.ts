@@ -38,7 +38,7 @@ const envSchema = z.object({
   // CORS — exact origin the frontend is served from. No trailing slash.
   FRONTEND_URL: z
     .string()
-    .url('FRONTEND_URL must be a valid URL, e.g. https://app.buildcase.io')
+    .url('FRONTEND_URL must be a valid URL, e.g. https://app.Speckula.io')
     .optional(),
   FRONTEND_URLS: z.string().optional(),
 

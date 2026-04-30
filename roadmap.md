@@ -1,10 +1,10 @@
-# 🚀 Buildcase Product Roadmap
+# 🚀 Speckula Product Roadmap
 
 ---
 
 # 🧠 Product Vision
 
-Buildcase is an AI-native workspace that helps product managers and founders transform raw ideas into structured product decisions and execution — all within a single continuous workflow.
+Speckula is an AI-native workspace that helps product managers and founders transform raw ideas into structured product decisions and execution — all within a single continuous workflow.
 
 ---
 
@@ -229,7 +229,7 @@ Close feedback loop
 ## 📌 Success Metrics
 
 * Reduced tool switching
-* Users iterate inside Buildcase
+* Users iterate inside Speckula
 
 ---
 
@@ -301,13 +301,13 @@ Build ecosystem around product work
 
 # 🎯 NORTH STAR METRIC
 
-> Number of product decisions made using Buildcase
+> Number of product decisions made using Speckula
 
 ---
 
 # 🔥 FINAL NOTE
 
-Buildcase is not a productivity tool.
+Speckula is not a productivity tool.
 
 It is a system designed to:
 

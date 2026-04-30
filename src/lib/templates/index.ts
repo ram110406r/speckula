@@ -1,6 +1,6 @@
 import type { JSONContent } from "@tiptap/react";
 
-export interface BuildcaseTemplate {
+export interface SpeckulaTemplate {
   id: "user-interview" | "support-tickets" | "feature-request" | "blank";
   label: string;
   description: string;
@@ -27,7 +27,7 @@ const buildDoc = (sections: Array<{ heading: string; placeholder: string }>): JS
   ]),
 });
 
-export const TEMPLATES: BuildcaseTemplate[] = [
+export const TEMPLATES: SpeckulaTemplate[] = [
   {
     id: "user-interview",
     label: "User Interview",
@@ -71,7 +71,7 @@ export const TEMPLATES: BuildcaseTemplate[] = [
   },
 ];
 
-export const BLANK: BuildcaseTemplate = {
+export const BLANK: SpeckulaTemplate = {
   id: "blank",
   label: "Start blank",
   description: "An empty canvas. Useful when you already know your structure.",

@@ -9,7 +9,7 @@ export interface ActualOutcomeRecord {
   actual: ActualOutcome;
 }
 
-const STORAGE_PREFIX = "buildcase-actual-outcome-v1";
+const STORAGE_PREFIX = "Speckula-actual-outcome-v1";
 const keyFor = (ideaId: string) => `${STORAGE_PREFIX}:${ideaId}`;
 
 const writeLocal = (ideaId: string, record: ActualOutcomeRecord) => {

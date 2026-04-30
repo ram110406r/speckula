@@ -30,7 +30,7 @@ function logFirestorePermissionHint(operation: string, error: unknown) {
   );
 }
 
-export interface BuildcaseDocument {
+export interface SpeckulaDocument {
   id: string;
   title: string;
   content: unknown; // TipTap JSON
@@ -165,7 +165,7 @@ export const createDocument = async (userId: string, title: string = "Untitled D
   }
 };
 
-export const saveDocument = async (userId: string, docId: string, data: Partial<BuildcaseDocument>) => {
+export const saveDocument = async (userId: string, docId: string, data: Partial<SpeckulaDocument>) => {
   try {
     const ref = userDocRef(userId, docId);
     await setDoc(ref, { ...data, userId, updatedAt: serverTimestamp() }, { merge: true });
@@ -179,7 +179,7 @@ export const getDocument = async (userId: string, docId: string) => {
   try {
     const ref = userDocRef(userId, docId);
     const snap = await getDoc(ref);
-    return snap.exists() ? ({ id: snap.id, ...snap.data() } as BuildcaseDocument) : null;
+    return snap.exists() ? ({ id: snap.id, ...snap.data() } as SpeckulaDocument) : null;
   } catch (error) {
     logFirestorePermissionHint("getDocument", error);
     throw error;
@@ -199,7 +199,7 @@ export const getUserDocuments = async (userId: string) => {
   try {
     const q = query(userDocsCollection(userId), orderBy("updatedAt", "desc"));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as BuildcaseDocument[];
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as SpeckulaDocument[];
   } catch (error) {
     console.error("Error fetching documents:", error);
     // Return empty array instead of throwing to allow graceful degradation

@@ -39,12 +39,12 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       allow update, delete: if isOwner(userId);
 
-      // Buildcase documents — scoped per user
+      // Speckula documents — scoped per user
       match /documents/{docId} {
         allow read, write: if isOwner(userId);
       }
 
-      // New Buildcase Sub-collections
+      // New Speckula Sub-collections
       match /insights/{id} {
         allow read, write: if isOwner(userId);
       }

@@ -1,6 +1,6 @@
-# Buildcase AI Backend
+# Speckula AI Backend
 
-Groq-powered AI cache and compute layer for Buildcase. Firestore remains the
+Groq-powered AI cache and compute layer for Speckula. Firestore remains the
 source of truth for user data; this service is a thin, stateless AI worker with
 a PostgreSQL-backed cache and telemetry store.
 

@@ -1,4 +1,4 @@
-# BuildCase Backend API Documentation
+# Speckula Backend API Documentation
 
 ## Overview
 

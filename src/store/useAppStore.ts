@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type AppView = 'editor' | 'insights' | 'prds' | 'tasks' | 'decisions' | 'platform' | 'slack' | 'autonomous';
 
-interface BuildcaseDocument {
+interface SpeckulaDocument {
   id: string;
   title: string;
   updatedAt: unknown;
@@ -62,8 +62,8 @@ interface AppState {
   setActiveContext: (context: string) => void;
   currentDocId: string | null;
   setCurrentDocId: (id: string | null) => void;
-  documents: BuildcaseDocument[];
-  setDocuments: (docs: BuildcaseDocument[]) => void;
+  documents: SpeckulaDocument[];
+  setDocuments: (docs: SpeckulaDocument[]) => void;
   isSaving: boolean;
   setIsSaving: (status: boolean) => void;
   activeView: AppView;
@@ -179,7 +179,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     }),
   resetState: () => set({ ...initialState, documents: [] }),
 }), {
-  name: 'buildcase-app-store-v1',
+  name: 'Speckula-app-store-v1',
   storage: createJSONStorage(() => (typeof window !== 'undefined' ? window.localStorage : (undefined as unknown as Storage))),
   // Persist only the user-visible UI prefs and per-doc dismissed hints.
   // Ephemeral runtime state (documents list, isSaving, pending* fields,

@@ -4,7 +4,7 @@ export interface ProgressState {
   hasMetrics: boolean;
 }
 
-const PROGRESS_STORAGE_KEY = "buildcase-inline-ai-progress-v1";
+const PROGRESS_STORAGE_KEY = "Speckula-inline-ai-progress-v1";
 
 const defaultProgress: ProgressState = {
   hasProblem: false,

@@ -1,4 +1,4 @@
-# BuildCase AI Backend
+# Speckula AI Backend
 
 High-performance AI service layer powered by **Groq** with Firebase integration.
 
@@ -90,15 +90,15 @@ cp .env.example .env
 
 ```env
 # Database
-DATABASE_URL="postgresql://postgres:password@localhost:5432/buildcase"
+DATABASE_URL="postgresql://postgres:password@localhost:5432/Speckula"
 
 # Groq
 GROQ_API_KEY="gsk_your_api_key_here"
 
 # Firebase
-FIREBASE_PROJECT_ID="buildcase-f103a"
+FIREBASE_PROJECT_ID="Speckula-f103a"
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
-FIREBASE_CLIENT_EMAIL="firebase-adminsdk@buildcase-f103a.iam.gserviceaccount.com"
+FIREBASE_CLIENT_EMAIL="firebase-adminsdk@Speckula-f103a.iam.gserviceaccount.com"
 
 # Server
 PORT=3001
@@ -110,11 +110,11 @@ FRONTEND_URL="http://localhost:3000"
 
 ```bash
 # On Windows with PostgreSQL installed
-psql -U postgres -c "CREATE DATABASE buildcase"
+psql -U postgres -c "CREATE DATABASE Speckula"
 
 # Or use Docker
-docker run --name buildcase-db \
-  -e POSTGRES_DB=buildcase \
+docker run --name Speckula-db \
+  -e POSTGRES_DB=Speckula \
   -e POSTGRES_PASSWORD=password \
   -p 5432:5432 \
   -d postgres:15

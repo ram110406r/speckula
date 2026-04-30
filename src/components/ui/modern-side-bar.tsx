@@ -28,6 +28,7 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore, type AppView } from "@/store/useAppStore";
 import { NotificationBell } from "@/components/ui/notification-bell";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { activity } from "@/store/useActivityStore";
 import {
   getUserDocuments,
   createDocument,
@@ -84,10 +85,10 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
       setIsDarkMode(dark);
       document.documentElement.classList.toggle("dark", dark);
     };
-    const stored = window.localStorage.getItem("buildcase-theme");
+    const stored = window.localStorage.getItem("Speckula-theme");
     apply(stored ? stored === "dark" : mql.matches);
     const onChange = (e: MediaQueryListEvent) => {
-      if (!window.localStorage.getItem("buildcase-theme")) apply(e.matches);
+      if (!window.localStorage.getItem("Speckula-theme")) apply(e.matches);
     };
     mql.addEventListener?.("change", onChange);
     return () => mql.removeEventListener?.("change", onChange);
@@ -97,7 +98,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
     const next = !isDarkMode;
     setIsDarkMode(next);
     document.documentElement.classList.toggle("dark", next);
-    window.localStorage.setItem("buildcase-theme", next ? "dark" : "light");
+    window.localStorage.setItem("Speckula-theme", next ? "dark" : "light");
   };
 
   // ── collapse ────────────────────────────────────────────────────────────────
@@ -150,6 +151,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
       markDocumentAsNew(newId);
       setCurrentDocId(newId);
       setActiveView("editor");
+      activity.success("Document created");
     } catch {
       alert("Failed to create document.");
     } finally {
@@ -170,6 +172,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
       markDocumentAsNew(newId);
       setCurrentDocId(newId);
       setActiveView("editor");
+      activity.success("Document created");
     } catch {
       alert("Failed to create document.");
     } finally {
@@ -191,6 +194,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
       await renameDocument(user.uid, id, title);
       const docs = await getUserDocuments(user.uid);
       setDocuments(docs);
+      activity.success("Document renamed", title);
     } catch { /* noop */ }
   };
 
@@ -223,14 +227,14 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
         {!isCollapsed && (
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-7 h-7 shrink-0 flex items-center justify-center">
-              <Image src="/logo.png" alt="Buildcase" width={22} height={22} className="object-contain" />
+              <Image src="/logo.png" alt="Speckula" width={22} height={22} className="object-contain" />
             </div>
-            <span className="font-semibold text-sm tracking-tight truncate">Buildcase</span>
+            <span className="font-semibold text-sm tracking-tight truncate">Speckula</span>
           </div>
         )}
         {isCollapsed && (
           <div className="w-7 h-7 mx-auto flex items-center justify-center">
-            <Image src="/logo.png" alt="Buildcase" width={22} height={22} className="object-contain" />
+            <Image src="/logo.png" alt="Speckula" width={22} height={22} className="object-contain" />
           </div>
         )}
         <button

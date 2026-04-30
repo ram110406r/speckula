@@ -19,7 +19,7 @@ const plexMono = IBM_Plex_Mono({
 
 
 export const metadata: Metadata = {
-  title: "Buildcase - AI-Native Product Intelligence",
+  title: "Speckula - AI-Native Product Intelligence",
   description: "The AI-first workspace for product discovery and execution.",
 };
 
@@ -38,7 +38,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `(() => {
               try {
-                const stored = localStorage.getItem('buildcase-theme');
+                const stored = localStorage.getItem('Speckula-theme');
                 const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                 document.documentElement.classList.toggle('dark', stored ? stored === 'dark' : systemDark);
               } catch (_) {}

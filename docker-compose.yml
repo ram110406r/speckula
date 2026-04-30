@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: buildcase
-      POSTGRES_USER: buildcase
-      POSTGRES_PASSWORD: buildcase
+      POSTGRES_DB: Speckula
+      POSTGRES_USER: Speckula
+      POSTGRES_PASSWORD: Speckula
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U buildcase"]
+      test: ["CMD-SHELL", "pg_isready -U Speckula"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -26,8 +26,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://buildcase:buildcase@db:5432/buildcase
-      DIRECT_DATABASE_URL: postgresql://buildcase:buildcase@db:5432/buildcase
+      DATABASE_URL: postgresql://Speckula:Speckula@db:5432/Speckula
+      DIRECT_DATABASE_URL: postgresql://Speckula:Speckula@db:5432/Speckula
       GROQ_API_KEY: ${GROQ_API_KEY}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}

@@ -43,6 +43,7 @@ import { evaluateDecisionHealth, evaluatePushback, type HealthStatus, type Pushb
 import { downloadMarkdown, downloadCSV, generateDecisionsMarkdown } from "@/lib/export";
 import { toast } from "@/store/useToastStore";
 import { exportDialog } from "@/store/useExportDialogStore";
+import { activity } from "@/store/useActivityStore";
 import { CaseBriefDialog } from "@/components/decision/CaseBriefDialog";
 import { FocusPanel, type FocusPanelData } from "@/components/decision/FocusPanel";
 
@@ -227,6 +228,7 @@ export function DecisionView() {
         doc?.content
       );
       setBriefDialog({ open: true, loading: false, data, error: null, decisionId: decision.decisionId });
+      activity.ai("Case brief ready", decision.title);
     } catch (error) {
       setBriefDialog({
         open: true, loading: false, data: null,
@@ -344,6 +346,7 @@ export function DecisionView() {
       );
       setFeedbackByCard({});
       setScoredSuggestions(scored.sort((a, b) => b.score - a.score));
+      activity.ai("Decisions analyzed", `${scored.length} decision${scored.length !== 1 ? "s" : ""} scored`);
     } catch (error) {
       console.error("Decision generation failed:", error);
       toast.error("AI decision engine failed", "Check your API key and try again.");
@@ -406,6 +409,7 @@ export function DecisionView() {
         setScoredSuggestions((prev) => [newDecision, ...prev]);
         setSuggestions((prev) => [newDecision as unknown as DecisionSuggestion, ...prev]);
         toast.success("Decision added");
+        activity.success("Decision added", payload.title);
       }
       setDecisionForm(null);
       setEditingDecisionId(null);
@@ -440,6 +444,7 @@ export function DecisionView() {
       setPendingDecisionForPRD(null);
       setActiveView("prds");
       toast.success("PRD saved", "Saved to your PRD library.");
+      activity.success("PRD saved", `PRD: ${prdPreview.title}`);
     } catch {
       toast.error("Failed to save PRD");
     }

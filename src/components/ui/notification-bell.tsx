@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useRef, useEffect } from "react";
-import { Bell, CheckCheck, Trash2 } from "lucide-react";
-import { useActivityStore } from "@/store/useActivityStore";
+import { Bell, CheckCheck, Trash2, Sparkles, CheckCircle2, AlertTriangle, Info, BellOff } from "lucide-react";
+import { useActivityStore, type ActivityEventType } from "@/store/useActivityStore";
 
 function timeAgo(ts: number) {
   const s = Math.floor((Date.now() - ts) / 1000);
@@ -13,6 +13,13 @@ function timeAgo(ts: number) {
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
 }
+
+const TYPE_CONFIG: Record<ActivityEventType, { icon: React.ReactNode; color: string; border: string }> = {
+  ai:      { icon: <Sparkles      className="h-3 w-3" />, color: "text-primary",   border: "border-l-primary/50"   },
+  success: { icon: <CheckCircle2  className="h-3 w-3" />, color: "text-success",   border: "border-l-success/50"   },
+  warning: { icon: <AlertTriangle className="h-3 w-3" />, color: "text-warning",   border: "border-l-warning/50"   },
+  info:    { icon: <Info          className="h-3 w-3" />, color: "text-blue-400",  border: "border-l-blue-400/50"  },
+};
 
 interface Props {
   collapsed: boolean;
@@ -53,50 +60,88 @@ export function NotificationBell({ collapsed }: Props) {
 
       {open && (
         <div
-          className={`absolute z-50 bottom-full mb-2 w-72 rounded-lg border border-border bg-card shadow-xl overflow-hidden ${
+          className={`absolute z-50 bottom-full mb-2 w-80 rounded-xl border border-border bg-card shadow-2xl overflow-hidden ${
             collapsed ? "left-0" : "right-0"
           }`}
         >
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border/60">
-            <span className="text-xs font-semibold text-foreground">Activity</span>
-            <div className="flex items-center gap-1">
+          {/* Header */}
+          <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border/60 bg-muted/20">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-foreground">Notifications</span>
+              {unreadCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-0.5">
               <button
                 onClick={markAllRead}
                 title="Mark all read"
-                className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                disabled={unreadCount === 0}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={clear}
                 title="Clear all"
-                className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+                disabled={events.length === 0}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
 
-          <div className="max-h-64 overflow-y-auto custom-scrollbar">
+          {/* List */}
+          <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-border/30">
             {events.length === 0 ? (
-              <p className="text-xs text-muted-foreground/60 text-center py-6">No activity yet</p>
+              <div className="flex flex-col items-center justify-center py-10 gap-2.5">
+                <BellOff className="h-7 w-7 text-muted-foreground/20" />
+                <p className="text-xs text-muted-foreground/50">No notifications yet</p>
+                <p className="text-[11px] text-muted-foreground/30 text-center max-w-[180px] leading-snug">
+                  AI actions, saves, and completions will appear here
+                </p>
+              </div>
             ) : (
-              events.map((e) => (
-                <div
-                  key={e.id}
-                  className={`px-3 py-2.5 border-b border-border/30 last:border-0 ${e.read ? "" : "bg-primary/5"}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-medium text-foreground leading-tight">{e.title}</p>
-                    <span className="text-[10px] text-muted-foreground/60 shrink-0 mt-0.5">{timeAgo(e.timestamp)}</span>
+              events.map((e) => {
+                const cfg = TYPE_CONFIG[e.type] ?? TYPE_CONFIG.info;
+                return (
+                  <div
+                    key={e.id}
+                    className={`flex gap-3 px-3.5 py-2.5 border-l-2 transition-colors ${
+                      !e.read ? `${cfg.border} bg-muted/20` : "border-l-transparent"
+                    }`}
+                  >
+                    <div className={`mt-0.5 shrink-0 ${cfg.color}`}>{cfg.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className={`text-xs font-medium leading-tight ${e.read ? "text-muted-foreground" : "text-foreground"}`}>
+                          {e.title}
+                        </p>
+                        <span className="text-[10px] text-muted-foreground/50 shrink-0 mt-0.5 tabular-nums whitespace-nowrap">
+                          {timeAgo(e.timestamp)}
+                        </span>
+                      </div>
+                      {e.description && (
+                        <p className="text-[11px] text-muted-foreground/70 mt-0.5 leading-snug">{e.description}</p>
+                      )}
+                    </div>
                   </div>
-                  {e.description && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{e.description}</p>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
+
+          {/* Footer count */}
+          {events.length > 0 && (
+            <div className="px-3.5 py-2 border-t border-border/40 bg-muted/10 text-center">
+              <p className="text-[10px] text-muted-foreground/40">
+                {events.length} notification{events.length !== 1 ? "s" : ""} · persisted across sessions
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

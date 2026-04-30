@@ -85,14 +85,14 @@ export function SidebarNav() {
       setIsDarkMode(isDark);
       document.documentElement.classList.toggle("dark", isDark);
     };
-    const stored = window.localStorage.getItem("buildcase-theme");
+    const stored = window.localStorage.getItem("Speckula-theme");
     apply(stored ? stored === "dark" : mql.matches);
 
     // Respond to OS theme changes when the user has no explicit override —
     // otherwise the app drifts out of sync with the system after a session
     // because the initial computation is one-shot.
     const onChange = (event: MediaQueryListEvent) => {
-      const latestStored = window.localStorage.getItem("buildcase-theme");
+      const latestStored = window.localStorage.getItem("Speckula-theme");
       if (latestStored) return;
       apply(event.matches);
     };
@@ -104,7 +104,7 @@ export function SidebarNav() {
     const nextIsDark = !isDarkMode;
     setIsDarkMode(nextIsDark);
     document.documentElement.classList.toggle("dark", nextIsDark);
-    window.localStorage.setItem("buildcase-theme", nextIsDark ? "dark" : "light");
+    window.localStorage.setItem("Speckula-theme", nextIsDark ? "dark" : "light");
   };
 
   const [docsError, setDocsError] = React.useState<string | null>(null);
@@ -194,13 +194,13 @@ export function SidebarNav() {
           <div className="w-8 h-8 flex items-center justify-center">
             <Image
               src="/logo.png"
-              alt="Buildcase Logo"
+              alt="Speckula Logo"
               width={24}
               height={24}
               className="object-contain"
             />
           </div>
-          <span className="font-semibold text-lg tracking-tight">Buildcase</span>
+          <span className="font-semibold text-lg tracking-tight">Speckula</span>
         </div>
       </div>
 

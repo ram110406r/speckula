@@ -244,7 +244,7 @@ export default async function importRoutes(fastify: FastifyInstance) {
         let response: Response | null = null;
         for (let hop = 0; hop < 5; hop += 1) {
           const r = await fetch(currentUrl.toString(), {
-            headers: { 'User-Agent': 'Buildcase/1.0 (content import)' },
+            headers: { 'User-Agent': 'Speckula/1.0 (content import)' },
             signal: controller.signal,
             redirect: 'manual',
           });
@@ -311,7 +311,7 @@ export default async function importRoutes(fastify: FastifyInstance) {
       try {
         const extract = await getArticleExtractor();
         const article = await extract(html, undefined, {
-          headers: { 'User-Agent': 'Buildcase/1.0 (content import)' },
+          headers: { 'User-Agent': 'Speckula/1.0 (content import)' },
         });
 
         const rawContent = article?.content ?? '';

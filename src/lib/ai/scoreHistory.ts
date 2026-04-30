@@ -13,7 +13,7 @@ interface OpportunityScoreHistoryRecord {
   history: OpportunityScoreHistoryEntry[];
 }
 
-const STORAGE_PREFIX = "buildcase-opportunity-score-v1";
+const STORAGE_PREFIX = "Speckula-opportunity-score-v1";
 const MAX_ENTRIES = 60;
 
 const historyKey = (ideaId: string) => `${STORAGE_PREFIX}:${ideaId}`;

@@ -11,6 +11,7 @@ import { generateTasksFromPRDAction, analyzeDependenciesAction, intelligentPrior
 import { downloadCSV } from "@/lib/export";
 import { toast } from "@/store/useToastStore";
 import { exportDialog } from "@/store/useExportDialogStore";
+import { activity } from "@/store/useActivityStore";
 
 type TaskStatus = "todo" | "in-progress" | "done";
 type TaskPriority = "high" | "medium" | "low";
@@ -233,6 +234,7 @@ export function TasksView() {
         sourceDocId: currentDocId ?? undefined,
         dependsOn: [],
       });
+      activity.success("Task created", newTaskTitle.trim());
       setNewTaskTitle("");
       setNewTaskDescription("");
       setNewTaskPriority("medium");
