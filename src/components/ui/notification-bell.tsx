@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bell, CheckCheck, Trash2, Sparkles, CheckCircle2, AlertTriangle, Info, BellOff } from "lucide-react";
 import { useActivityStore, type ActivityEventType } from "@/store/useActivityStore";
 
@@ -29,6 +30,7 @@ export function NotificationBell({ collapsed }: Props) {
   const { events, unreadCount, markAllRead, clear } = useActivityStore();
   const [open, setOpen] = React.useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number; right: number } | null>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -42,6 +44,23 @@ export function NotificationBell({ collapsed }: Props) {
     setOpen((v) => !v);
     if (!open) markAllRead();
   };
+
+  // compute coords for portal placement when opened
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      if (!ref.current) return;
+      const r = ref.current.getBoundingClientRect();
+      setCoords({ top: r.top + window.scrollY, left: r.left + window.scrollX, right: r.right + window.scrollX });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
 
   return (
     <div ref={ref} className="relative">
@@ -58,11 +77,17 @@ export function NotificationBell({ collapsed }: Props) {
         )}
       </button>
 
-      {open && (
+      {open && coords && createPortal(
         <div
-          className={`absolute z-50 bottom-full mb-2 w-80 rounded-xl border border-border bg-card shadow-2xl overflow-hidden ${
-            collapsed ? "left-0" : "right-0"
-          }`}
+          style={{
+            position: "absolute",
+            top: coords.top,
+            left: Math.max(8, collapsed ? coords.left : coords.right - 320),
+            width: 320,
+            zIndex: 99999,
+            transform: "translateY(-8px) translateY(-100%)",
+          }}
+          className={`rounded-xl border border-border bg-card shadow-2xl overflow-hidden`}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border/60 bg-muted/20">
@@ -142,7 +167,8 @@ export function NotificationBell({ collapsed }: Props) {
               </p>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
