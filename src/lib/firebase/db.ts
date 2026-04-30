@@ -90,6 +90,7 @@ export interface ExecutionTask {
   sourceDocId?: string; // Reference to source editor document
   dependsOn?: string[]; // Array of task IDs this task depends on
   assignee?: string; // User ID or email of assigned team member
+  dueDate?: string; // ISO date string YYYY-MM-DD
   userId: string;
   createdAt?: Timestamp | null;
   updatedAt: Timestamp | null;

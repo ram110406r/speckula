@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { CheckSquare, Plus, Circle, CheckCircle2, Clock, Loader2, ArrowRight, Zap, Users, Trash2, Download } from "lucide-react";
+import { CheckSquare, Plus, Circle, CheckCircle2, Clock, Loader2, ArrowRight, Zap, Users, Trash2, Download, LayoutList, Columns3, CalendarDays, AlertCircle, GripVertical } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -22,10 +22,10 @@ const priorityConfig: Record<TaskPriority, { label: string; dot: string }> = {
 };
 
 const statusOrder: TaskStatus[] = ["todo", "in-progress", "done"];
-const statusConfig: Record<TaskStatus, { label: string; color: string }> = {
-  "todo": { label: "To do", color: "text-muted-foreground" },
-  "in-progress": { label: "In progress", color: "text-primary" },
-  "done": { label: "Done", color: "text-muted-foreground/60" },
+const statusConfig: Record<TaskStatus, { label: string; color: string; colBg: string; colBorder: string }> = {
+  "todo":        { label: "To do",       color: "text-muted-foreground",    colBg: "bg-muted/20",      colBorder: "border-border/60" },
+  "in-progress": { label: "In progress", color: "text-primary",             colBg: "bg-primary/5",     colBorder: "border-primary/30" },
+  "done":        { label: "Done",        color: "text-muted-foreground/60", colBg: "bg-muted/10",      colBorder: "border-border/40" },
 };
 
 const categoryConfig: Record<string, string> = {
@@ -37,6 +37,16 @@ const categoryConfig: Record<string, string> = {
   devops: "#1E40AF",
   general: "#64748B",
 };
+
+function formatDueDate(dueDate: string): { text: string; overdue: boolean } {
+  const date = new Date(dueDate + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return {
+    text: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    overdue: date < today,
+  };
+}
 
 export function TasksView() {
   const { user } = useAuth();
@@ -53,6 +63,9 @@ export function TasksView() {
   const [newTaskDescription, setNewTaskDescription] = React.useState("");
   const [newTaskPriority, setNewTaskPriority] = React.useState<TaskPriority>("medium");
   const [isSavingNew, setIsSavingNew] = React.useState(false);
+  const [viewMode, setViewMode] = React.useState<"list" | "board">("list");
+  const [dragOverCol, setDragOverCol] = React.useState<TaskStatus | null>(null);
+  const draggedTaskIdRef = React.useRef<string | null>(null);
 
   const fetchTasks = React.useCallback(async () => {
     if (!user) return;
@@ -86,25 +99,11 @@ export function TasksView() {
     if (!user) return;
     setIsGenerating(true);
     setShowPRDSelector(false);
-    
     try {
-      // Step 1: Generate tasks from PRD
       const tasksWithMetadata = await generateTasksFromPRDAction(prd.content, prd.title);
-      
-      // Step 2: Analyze dependencies
       const docContent = currentDocId ? (await getDocument(user.uid, currentDocId))?.content || "" : "";
       const deps = await analyzeDependenciesAction(tasksWithMetadata, docContent);
-      
-      // Step 3: Intelligently prioritize
       const prioritizedTasks = await intelligentPrioritizeAction(tasksWithMetadata, deps);
-      
-      // Step 4: Save all tasks to Firestore in two passes.
-      //
-      // First pass: persist every task with `dependsOn: []` so all of them
-      // exist before we reference each other. Forward dependencies (a task
-      // whose dep index is greater than its own position) require this —
-      // the previous one-pass approach silently dropped them because the
-      // dependent's persisted id wasn't yet known when we tried to read it.
       const savedTaskIds: string[] = new Array(prioritizedTasks.length);
       for (let i = 0; i < prioritizedTasks.length; i++) {
         const task = prioritizedTasks[i];
@@ -117,11 +116,6 @@ export function TasksView() {
         });
         savedTaskIds[i] = docRef.id;
       }
-
-      // Second pass: now that all ids are known, resolve dependencies in
-      // both directions. Bounds-check dep indices against tasks length so
-      // a model returning a stray index doesn't cause an "undefined" id
-      // to leak into Firestore.
       for (let i = 0; i < prioritizedTasks.length; i++) {
         const dep = deps.find((d) => d.taskIndex === i);
         if (!dep?.dependsOnIndices?.length) continue;
@@ -133,7 +127,6 @@ export function TasksView() {
           await updateTask(user.uid, savedTaskIds[i], { dependsOn });
         }
       }
-
       await fetchTasks();
     } catch (error) {
       console.error("Task generation from PRD failed:", error);
@@ -152,7 +145,6 @@ export function TasksView() {
         alert("Document is empty. Please add some product notes first.");
         return;
       }
-      // Show PRD selector for better task generation with context
       setShowPRDSelector(true);
     } catch (error) {
       console.error("Failed to load document:", error);
@@ -168,8 +160,7 @@ export function TasksView() {
     setSelectedTask(prev => (prev && prev.id === task.id ? { ...prev, assignee } : prev));
     try {
       await updateTask(user.uid, task.id, { assignee });
-    } catch (error) {
-      console.error("Failed to assign task:", error);
+    } catch {
       fetchTasks();
     }
   };
@@ -180,8 +171,7 @@ export function TasksView() {
     setSelectedTask(prev => (prev && prev.id === task.id ? { ...prev, status } : prev));
     try {
       await updateTask(user.uid, task.id, { status });
-    } catch (error) {
-      console.error("Failed to update status:", error);
+    } catch {
       fetchTasks();
     }
   };
@@ -192,8 +182,18 @@ export function TasksView() {
     setSelectedTask(prev => (prev && prev.id === task.id ? { ...prev, priority } : prev));
     try {
       await updateTask(user.uid, task.id, { priority });
-    } catch (error) {
-      console.error("Failed to update priority:", error);
+    } catch {
+      fetchTasks();
+    }
+  };
+
+  const setTaskDueDate = async (task: ExecutionTask, dueDate: string) => {
+    if (!user || !task.id) return;
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, dueDate } : t));
+    setSelectedTask(prev => (prev && prev.id === task.id ? { ...prev, dueDate } : prev));
+    try {
+      await updateTask(user.uid, task.id, { dueDate });
+    } catch {
       fetchTasks();
     }
   };
@@ -215,8 +215,7 @@ export function TasksView() {
     setSelectedTask(null);
     try {
       await deleteTask(user.uid, taskId);
-    } catch (error) {
-      console.error("Failed to delete task:", error);
+    } catch {
       alert("Failed to delete task.");
       fetchTasks();
     }
@@ -239,14 +238,43 @@ export function TasksView() {
       setNewTaskPriority("medium");
       setShowNewTask(false);
       await fetchTasks();
-    } catch (error) {
-      console.error("Failed to create task:", error);
+    } catch {
       alert("Failed to create task.");
     } finally {
       setIsSavingNew(false);
     }
   };
 
+  // ── Drag-and-drop (board view) ───────────────────────────────────────────────
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    draggedTaskIdRef.current = taskId;
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, col: TaskStatus) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverCol !== col) setDragOverCol(col);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the column element itself (not a child)
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setDragOverCol(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, col: TaskStatus) => {
+    e.preventDefault();
+    setDragOverCol(null);
+    const taskId = draggedTaskIdRef.current;
+    draggedTaskIdRef.current = null;
+    if (!taskId) return;
+    const task = tasks.find(t => t.id === taskId);
+    if (task) await setTaskStatus(task, col);
+  };
+
+  // ── Derived data ─────────────────────────────────────────────────────────────
   const filtered = filterStatus === "all" ? tasks : tasks.filter(t => t.status === filterStatus);
   const grouped = statusOrder.reduce<Record<string, ExecutionTask[]>>((acc, s) => {
     const bucket = filtered.filter(t => t.status === s);
@@ -257,7 +285,6 @@ export function TasksView() {
   const completedCount = tasks.filter(t => t.status === "done").length;
   const progress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
-  // Check for blocked tasks
   const getBlockingTasks = (task: ExecutionTask): ExecutionTask[] => {
     if (!task.dependsOn || task.dependsOn.length === 0) return [];
     return tasks.filter(t => task.dependsOn?.includes(t.id || ""));
@@ -269,16 +296,31 @@ export function TasksView() {
       defaultFilename: "tasks",
       formats: [{ value: "csv", label: "Spreadsheet (.csv)" }],
       onExport: (filename) => {
-        const header = ["Title", "Status", "Priority", "Effort", "Category", "Description"];
-        const rows = tasks.map(t => [t.title, t.status, t.priority ?? "", t.effort ?? "", t.category ?? "", t.description ?? ""]);
+        const header = ["Title", "Status", "Priority", "Effort", "Category", "Due Date", "Description"];
+        const rows = tasks.map(t => [t.title, t.status, t.priority ?? "", t.effort ?? "", t.category ?? "", t.dueDate ?? "", t.description ?? ""]);
         downloadCSV([header, ...rows], filename);
         toast.success("Tasks exported", `${tasks.length} tasks saved as CSV`);
       },
     });
   };
 
+  // ── Due date badge component ─────────────────────────────────────────────────
+  const DueDateBadge = ({ dueDate }: { dueDate: string }) => {
+    const { text, overdue } = formatDueDate(dueDate);
+    return (
+      <span className={`flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${
+        overdue ? "text-destructive bg-destructive/10" : "text-muted-foreground bg-muted/60"
+      }`}>
+        <CalendarDays className="h-3 w-3" />
+        {overdue && <AlertCircle className="h-2.5 w-2.5" />}
+        {text}
+      </span>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full bg-background transition-all duration-300">
+      {/* Header toolbar */}
       <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -294,6 +336,30 @@ export function TasksView() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {/* View toggle */}
+          <div className="flex items-center rounded-md border border-border/60 overflow-hidden mr-1">
+            <button
+              onClick={() => setViewMode("list")}
+              title="List view"
+              className={`h-8 px-2.5 flex items-center gap-1.5 text-xs transition-colors ${
+                viewMode === "list" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              onClick={() => setViewMode("board")}
+              title="Board view"
+              className={`h-8 px-2.5 flex items-center gap-1.5 text-xs transition-colors border-l border-border/60 ${
+                viewMode === "board" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Columns3 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Board</span>
+            </button>
+          </div>
+
           <Button
             size="sm"
             variant="ghost"
@@ -328,117 +394,231 @@ export function TasksView() {
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 px-8 py-3 border-b border-border/40 shrink-0">
-        {(["all", ...statusOrder] as const).map(s => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-              filterStatus === s
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
-          >
-            {s === "all" ? "All" : statusConfig[s].label}
-          </button>
-        ))}
-      </div>
+      {/* Filter pills — only in list view */}
+      {viewMode === "list" && (
+        <div className="flex items-center gap-1.5 px-8 py-3 border-b border-border/40 shrink-0">
+          {(["all", ...statusOrder] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setFilterStatus(s)}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                filterStatus === s
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              {s === "all" ? "All" : statusConfig[s].label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto p-10 space-y-10 max-w-4xl mx-auto w-full custom-scrollbar">
-        {isLoading && (
-          <div className="flex flex-col items-center justify-center p-20 gap-3">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Loading tasks…</span>
-          </div>
-        )}
-
-        {!isLoading && tasks.length === 0 && (
-          <div className="flex flex-col items-center justify-center p-16 text-center border border-dashed border-border/60 rounded-xl max-w-lg mx-auto">
-            <CheckSquare className="h-8 w-8 text-muted-foreground/40 mb-4" />
-            <p className="text-sm font-medium mb-1">No tasks yet</p>
-            <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">Generate tasks from a PRD to get started.</p>
-          </div>
-        )}
-
-        {!isLoading && tasks.length > 0 && Object.entries(grouped).map(([status, groupTasks]) => (
-          <div key={status}>
-            <div className="flex items-center gap-3 mb-4">
-              <span className={`text-xs font-medium uppercase tracking-[0.06em] ${statusConfig[status as TaskStatus].color}`}>
-                {statusConfig[status as TaskStatus].label}
-              </span>
-              <div className="h-px flex-1 bg-border/40" />
-              <span className="text-xs text-muted-foreground">{groupTasks.length}</span>
+      {/* ── List view ─────────────────────────────────────────────────────────── */}
+      {viewMode === "list" && (
+        <div className="flex-1 overflow-y-auto p-10 space-y-10 max-w-4xl mx-auto w-full custom-scrollbar">
+          {isLoading && (
+            <div className="flex flex-col items-center justify-center p-20 gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Loading tasks…</span>
             </div>
-            <div className="space-y-2">
-              {groupTasks.map((task) => {
-                const blockingTasks = getBlockingTasks(task);
-                const isBlocked = blockingTasks.length > 0 && blockingTasks.some(t => t.status !== "done");
-                const isDone = task.status === "done";
+          )}
+
+          {!isLoading && tasks.length === 0 && (
+            <div className="flex flex-col items-center justify-center p-16 text-center border border-dashed border-border/60 rounded-xl max-w-lg mx-auto">
+              <CheckSquare className="h-8 w-8 text-muted-foreground/40 mb-4" />
+              <p className="text-sm font-medium mb-1">No tasks yet</p>
+              <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">Generate tasks from a PRD to get started.</p>
+            </div>
+          )}
+
+          {!isLoading && tasks.length > 0 && Object.entries(grouped).map(([status, groupTasks]) => (
+            <div key={status}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className={`text-xs font-medium uppercase tracking-[0.06em] ${statusConfig[status as TaskStatus].color}`}>
+                  {statusConfig[status as TaskStatus].label}
+                </span>
+                <div className="h-px flex-1 bg-border/40" />
+                <span className="text-xs text-muted-foreground">{groupTasks.length}</span>
+              </div>
+              <div className="space-y-2">
+                {groupTasks.map((task) => {
+                  const blockingTasks = getBlockingTasks(task);
+                  const isBlocked = blockingTasks.length > 0 && blockingTasks.some(t => t.status !== "done");
+                  const isDone = task.status === "done";
+
+                  return (
+                    <div
+                      key={task.id}
+                      className={`flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-colors ${
+                        isDone
+                          ? "border-border/40 bg-transparent opacity-60 hover:opacity-100"
+                          : isBlocked
+                          ? "border-primary/40 bg-primary/5 hover:border-primary/60"
+                          : "border-border bg-background hover:border-primary/40"
+                      }`}
+                      onClick={() => setSelectedTask(task)}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); cycleStatus(task); }}
+                        title={`Mark ${task.status === "todo" ? "in progress" : task.status === "in-progress" ? "done" : "to do"}`}
+                        className="mt-0.5 shrink-0 rounded-md p-0.5 -m-0.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      >
+                        {isDone ? (
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                        ) : task.status === "in-progress" ? (
+                          <Clock className="h-4 w-4 text-primary" />
+                        ) : (
+                          <Circle className={`h-4 w-4 ${isBlocked ? "text-primary" : "text-muted-foreground/50"}`} />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium leading-snug ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                          {task.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap text-xs text-muted-foreground">
+                          {isBlocked && (
+                            <span className="flex items-center gap-1 text-primary">
+                              <ArrowRight className="h-3 w-3" />
+                              Blocked by {blockingTasks.length}
+                            </span>
+                          )}
+                          {task.category && (
+                            <span className="px-1.5 py-0.5 rounded bg-muted" style={{ borderLeft: `2px solid ${categoryConfig[task.category] || categoryConfig.general}` }}>
+                              {task.category}
+                            </span>
+                          )}
+                          {task.effort && (
+                            <span className="flex items-center gap-1.5">
+                              <span className="inline-block h-1 w-8 bg-border/60 rounded-full overflow-hidden">
+                                <span className="block h-full bg-primary/60" style={{ width: `${(task.effort / 10) * 100}%` }} />
+                              </span>
+                              <span>effort {task.effort}</span>
+                            </span>
+                          )}
+                          {task.dueDate && <DueDateBadge dueDate={task.dueDate} />}
+                          {task.milestone && <span>{task.milestone}</span>}
+                          <span className="flex items-center gap-1.5 ml-auto">
+                            <span className={`h-1.5 w-1.5 rounded-full ${priorityConfig[task.priority]?.dot || priorityConfig.medium.dot}`} />
+                            <span>{priorityConfig[task.priority]?.label || "Medium"}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Board view ────────────────────────────────────────────────────────── */}
+      {viewMode === "board" && (
+        <div className="flex-1 overflow-hidden flex gap-0">
+          {isLoading ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Loading tasks…</span>
+            </div>
+          ) : (
+            <div className="flex-1 grid grid-cols-3 gap-0 overflow-hidden">
+              {statusOrder.map((col) => {
+                const colTasks = tasks.filter(t => t.status === col);
+                const isDragTarget = dragOverCol === col;
 
                 return (
                   <div
-                    key={task.id}
-                    className={`flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-colors ${
-                      isDone
-                        ? "border-border/40 bg-transparent opacity-60 hover:opacity-100"
-                        : isBlocked
-                        ? "border-primary/40 bg-primary/5 hover:border-primary/60"
-                        : "border-border bg-background hover:border-primary/40"
+                    key={col}
+                    onDragOver={(e) => handleDragOver(e, col)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, col)}
+                    className={`flex flex-col border-r border-border/40 last:border-r-0 transition-colors ${
+                      isDragTarget ? "bg-primary/5" : "bg-background"
                     }`}
-                    onClick={() => setSelectedTask(task)}
                   >
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); cycleStatus(task); }}
-                      title={`Mark ${task.status === "todo" ? "in progress" : task.status === "in-progress" ? "done" : "to do"}`}
-                      className="mt-0.5 shrink-0 rounded-md p-0.5 -m-0.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    >
-                      {isDone ? (
-                        <CheckCircle2 className="h-4 w-4 text-primary" />
-                      ) : task.status === "in-progress" ? (
-                        <Clock className="h-4 w-4 text-primary" />
-                      ) : (
-                        <Circle className={`h-4 w-4 ${isBlocked ? "text-primary" : "text-muted-foreground/50"}`} />
+                    {/* Column header */}
+                    <div className={`flex items-center justify-between px-4 py-3 border-b ${statusConfig[col].colBorder} shrink-0 ${statusConfig[col].colBg}`}>
+                      <span className={`text-xs font-semibold uppercase tracking-[0.07em] ${statusConfig[col].color}`}>
+                        {statusConfig[col].label}
+                      </span>
+                      <span className={`text-xs font-mono tabular-nums px-1.5 py-0.5 rounded ${statusConfig[col].colBg} ${statusConfig[col].color}`}>
+                        {colTasks.length}
+                      </span>
+                    </div>
+
+                    {/* Drop zone indicator */}
+                    {isDragTarget && (
+                      <div className="mx-3 mt-3 h-1.5 rounded-full bg-primary/40 animate-pulse shrink-0" />
+                    )}
+
+                    {/* Cards */}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+                      {colTasks.length === 0 && !isDragTarget && (
+                        <div className="flex flex-col items-center justify-center h-24 text-center border border-dashed border-border/40 rounded-lg">
+                          <p className="text-xs text-muted-foreground/40">Drop tasks here</p>
+                        </div>
                       )}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium leading-snug ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                        {task.title}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2 flex-wrap text-xs text-muted-foreground">
-                        {isBlocked && (
-                          <span className="flex items-center gap-1 text-primary">
-                            <ArrowRight className="h-3 w-3" />
-                            Blocked by {blockingTasks.length}
-                          </span>
-                        )}
-                        {task.category && (
-                          <span className="px-1.5 py-0.5 rounded bg-muted" style={{ borderLeft: `2px solid ${categoryConfig[task.category] || categoryConfig.general}` }}>
-                            {task.category}
-                          </span>
-                        )}
-                        {task.effort && (
-                          <span className="flex items-center gap-1.5">
-                            <span className="inline-block h-1 w-8 bg-border/60 rounded-full overflow-hidden">
-                              <span className="block h-full bg-primary/60" style={{ width: `${(task.effort / 10) * 100}%` }} />
-                            </span>
-                            <span>effort {task.effort}</span>
-                          </span>
-                        )}
-                        {task.milestone && <span>{task.milestone}</span>}
-                        <span className="flex items-center gap-1.5 ml-auto">
-                          <span className={`h-1.5 w-1.5 rounded-full ${priorityConfig[task.priority]?.dot || priorityConfig.medium.dot}`} />
-                          <span>{priorityConfig[task.priority]?.label || "Medium"}</span>
-                        </span>
-                      </div>
+
+                      {colTasks.map((task) => {
+                        const blockingTasks = getBlockingTasks(task);
+                        const isBlocked = blockingTasks.length > 0 && blockingTasks.some(t => t.status !== "done");
+                        const isDone = task.status === "done";
+
+                        return (
+                          <div
+                            key={task.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, task.id!)}
+                            onClick={() => setSelectedTask(task)}
+                            className={`group relative flex flex-col gap-2 p-3 rounded-lg border cursor-pointer transition-all select-none ${
+                              isDone
+                                ? "border-border/30 bg-muted/20 opacity-60"
+                                : isBlocked
+                                ? "border-primary/30 bg-primary/5"
+                                : "border-border/60 bg-card hover:border-primary/40 hover:shadow-sm"
+                            }`}
+                          >
+                            {/* Drag handle */}
+                            <GripVertical className="absolute top-2 right-2 h-3.5 w-3.5 text-muted-foreground/0 group-hover:text-muted-foreground/40 transition-colors cursor-grab active:cursor-grabbing" />
+
+                            <p className={`text-xs font-medium leading-snug pr-5 ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                              {task.title}
+                            </p>
+
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {task.category && (
+                                <span
+                                  className="px-1.5 py-0.5 rounded text-[10px] bg-muted"
+                                  style={{ borderLeft: `2px solid ${categoryConfig[task.category] || categoryConfig.general}` }}
+                                >
+                                  {task.category}
+                                </span>
+                              )}
+                              {task.dueDate && <DueDateBadge dueDate={task.dueDate} />}
+                              <span className="flex items-center gap-1 ml-auto">
+                                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityConfig[task.priority]?.dot || priorityConfig.medium.dot}`} />
+                                <span className="text-[10px] text-muted-foreground">{priorityConfig[task.priority]?.label || "Medium"}</span>
+                              </span>
+                            </div>
+
+                            {isBlocked && (
+                              <span className="flex items-center gap-1 text-[10px] text-primary">
+                                <ArrowRight className="h-3 w-3" />
+                                Blocked by {blockingTasks.length}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* PRD Selector Dialog */}
       <Dialog open={showPRDSelector} onOpenChange={setShowPRDSelector}>
@@ -508,19 +688,40 @@ export function TasksView() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                {selectedTask.effort && (
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground">Effort</label>
-                    <p className="text-sm mt-1">{selectedTask.effort}/10</p>
-                  </div>
-                )}
-                {selectedTask.category && (
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground">Category</label>
-                    <p className="text-sm mt-1 capitalize">{selectedTask.category}</p>
-                  </div>
-                )}
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-1">
+                    <CalendarDays className="h-3.5 w-3.5" /> Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={selectedTask.dueDate ?? ""}
+                    onChange={(e) => setTaskDueDate(selectedTask, e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background"
+                  />
+                  {selectedTask.dueDate && (() => {
+                    const { overdue } = formatDueDate(selectedTask.dueDate);
+                    return overdue ? (
+                      <p className="text-[11px] text-destructive mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" /> Past due
+                      </p>
+                    ) : null;
+                  })()}
+                </div>
+                <div>
+                  {selectedTask.effort && (
+                    <>
+                      <label className="text-xs font-semibold text-muted-foreground">Effort</label>
+                      <p className="text-sm mt-1">{selectedTask.effort}/10</p>
+                    </>
+                  )}
+                </div>
               </div>
+              {selectedTask.category && (
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground">Category</label>
+                  <p className="text-sm mt-1 capitalize">{selectedTask.category}</p>
+                </div>
+              )}
               {selectedTask.prdSection && (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground">PRD Section</label>
@@ -570,6 +771,7 @@ export function TasksView() {
               <input
                 value={newTaskTitle}
                 onChange={(e) => setNewTaskTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreateTask(); }}
                 placeholder="What needs to be done?"
                 autoFocus
                 className="w-full mt-1 px-3 py-2 text-sm border border-border rounded-lg bg-background"
