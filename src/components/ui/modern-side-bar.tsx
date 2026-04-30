@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import {
   FileText,
@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore, type AppView } from "@/store/useAppStore";
+import { NotificationBell } from "@/components/ui/notification-bell";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import {
   getUserDocuments,
   createDocument,
@@ -133,6 +135,26 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
     })();
     return () => { cancelled = true; };
   }, [user, setDocuments, currentDocId, setCurrentDocId]);
+
+  const handleNewDocCb = useCallback(async () => {
+    if (!user || isCreating) return;
+    setIsCreating(true);
+    try {
+      resetForNewDocument();
+      const newId = await createDocument(user.uid);
+      const docs  = await getUserDocuments(user.uid);
+      setDocuments(docs);
+      markDocumentAsNew(newId);
+      setCurrentDocId(newId);
+      setActiveView("editor");
+    } catch {
+      alert("Failed to create document.");
+    } finally {
+      setIsCreating(false);
+    }
+  }, [user, isCreating, resetForNewDocument, setDocuments, markDocumentAsNew, setCurrentDocId, setActiveView]);
+
+  useKeyboardShortcuts(handleNewDocCb);
 
   const handleNewDoc = async () => {
     if (!user || isCreating) return;
@@ -355,6 +377,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
             {/* Actions */}
             {!isCollapsed ? (
               <div className="flex items-center gap-1 mt-1.5">
+                <NotificationBell collapsed={isCollapsed} />
                 <button
                   onClick={toggleTheme}
                   className="flex items-center gap-1.5 flex-1 justify-center h-7 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2"
@@ -375,6 +398,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-1.5">
+                <NotificationBell collapsed={isCollapsed} />
                 <button onClick={toggleTheme} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title={isDarkMode ? "Light mode" : "Dark mode"}>
                   {isDarkMode ? <SunMedium className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
                 </button>

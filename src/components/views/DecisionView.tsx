@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Compass, Sparkles, Loader2, Zap, Brain, Search, Lightbulb, AlertTriangle } from "lucide-react";
+import { Compass, Sparkles, Loader2, Zap, Brain, Search, Lightbulb, AlertTriangle, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,6 +40,8 @@ import { getExpectedOutcome, setExpectedOutcome, type ExpectedOutcomeRecord } fr
 import { getActualOutcome, recordActualOutcome, type ActualOutcomeRecord } from "@/lib/ai/actualOutcome";
 import { updateConfidenceScore } from "@/lib/ai/scoreFeedback";
 import { evaluateDecisionHealth, evaluatePushback, type HealthStatus, type PushbackAction } from "@/lib/ai/decisionHealth";
+import { downloadCSV } from "@/lib/export";
+import { toast } from "@/store/useToastStore";
 import { CaseBriefDialog } from "@/components/decision/CaseBriefDialog";
 import { FocusPanel, type FocusPanelData } from "@/components/decision/FocusPanel";
 
@@ -486,6 +488,24 @@ export function DecisionView() {
     }
   };
 
+  const handleExportCSV = () => {
+    if (scoredSuggestions.length === 0) { toast.warning("No decisions to export"); return; }
+    const header = ["Title", "Priority", "Impact", "Effort", "Confidence", "Demand", "Score", "Justification", "Tradeoffs"];
+    const rows = scoredSuggestions.map((d) => [
+      d.title,
+      d.priority ?? "",
+      d.scoreBreakdown?.impact ?? "",
+      d.scoreBreakdown?.effort ?? "",
+      d.scoreBreakdown?.confidence ?? "",
+      d.scoreBreakdown?.demand ?? "",
+      d.score ?? "",
+      d.justification ?? "",
+      d.tradeoffs ?? "",
+    ]);
+    downloadCSV([header, ...rows], "decisions");
+    toast.success("Decisions exported", `${scoredSuggestions.length} decisions saved as CSV`);
+  };
+
   return (
     <div className="flex flex-col h-full bg-background transition-all duration-300">
       {/* Header */}
@@ -494,16 +514,28 @@ export function DecisionView() {
           <Compass className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">Decisions</span>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 text-xs"
-          onClick={handleGenerate}
-          disabled={isLoading || !currentDocId}
-        >
-          {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-          {isLoading ? "Thinking…" : "What should we build next?"}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs"
+            onClick={handleExportCSV}
+            disabled={scoredSuggestions.length === 0}
+            title="Export decisions as CSV"
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" /> Export CSV
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs"
+            onClick={handleGenerate}
+            disabled={isLoading || !currentDocId}
+          >
+            {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+            {isLoading ? "Thinking…" : "What should we build next?"}
+          </Button>
+        </div>
       </div>
 
       <Dialog open={Boolean(prdPreview)} onOpenChange={(open) => {

@@ -1,4 +1,5 @@
 import { auth } from "../firebase/config";
+import { activity } from "@/store/useActivityStore";
 import {
   createDocument,
   getUserDocuments,
@@ -648,6 +649,9 @@ export const extractInsightsAction = async (userId: string, docContent: unknown,
     await saveInsight(userId, { ...insight, sourceDocId });
   }
 
+  if (insights.length > 0) {
+    activity.push("Signals extracted", `${insights.length} new signal${insights.length > 1 ? "s" : ""} added`);
+  }
   return insights;
 };
 
@@ -668,6 +672,7 @@ export const generatePRDAction = async (userId: string, docContent: unknown, tit
     status: "draft",
     sourceDocId,
   });
+  activity.push("Spec generated", `PRD: ${title}`);
   return data.content;
 };
 
@@ -1132,7 +1137,7 @@ Output ONLY a JSON array with this structure:
       throw new Error("Tasks response was not an array.");
     }
     
-    return tasks.map(t => {
+    const result2 = tasks.map(t => {
       const rawEffort = Number(t.effort);
       const effort = Number.isFinite(rawEffort) ? Math.min(10, Math.max(1, Math.round(rawEffort))) : 5;
       return {
@@ -1145,6 +1150,8 @@ Output ONLY a JSON array with this structure:
         milestone: t.milestone,
       };
     }) as TaskWithMetadata[];
+    activity.push("Tasks generated", `${result2.length} tasks from ${prdTitle ?? "PRD"}`);
+    return result2;
   } catch (e) {
     console.error("[generateTasksFromPRDAction] Failed to parse tasks JSON:", e);
     throw e;

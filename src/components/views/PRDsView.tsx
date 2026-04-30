@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { LayoutDashboard, Plus, FileText, Clock, Loader2, Download, Sparkles } from "lucide-react";
+import { LayoutDashboard, Plus, FileText, Clock, Loader2, Download, Copy, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
 import { getPRDs, getDocument, type PRD } from "@/lib/firebase/db";
 import { generatePRDAction } from "@/lib/ai/actions";
+import { downloadMarkdown, copyToClipboard, slugify } from "@/lib/export";
+import { toast } from "@/store/useToastStore";
 
 const statusConfig = {
   draft: { label: "Draft", className: "bg-muted/10 text-muted-foreground border-border" },
@@ -41,6 +43,21 @@ export function PRDsView() {
   useEffect(() => {
     setSelectedPRD(null);
   }, [currentDocId]);
+
+  const handleExport = () => {
+    if (!selectedPRD) return;
+    const md = `# ${selectedPRD.title}\n\n${selectedPRD.content}`;
+    downloadMarkdown(md, slugify(selectedPRD.title));
+    toast.success("Spec exported", "Saved as Markdown file");
+  };
+
+  const handleCopy = async () => {
+    if (!selectedPRD) return;
+    const md = `# ${selectedPRD.title}\n\n${selectedPRD.content}`;
+    const ok = await copyToClipboard(md);
+    if (ok) toast.success("Copied to clipboard");
+    else toast.error("Copy failed", "Try selecting and copying manually");
+  };
 
   const handleGenerate = async () => {
     if (!user || !currentDocId || isGenerating) return;
@@ -170,9 +187,14 @@ export function PRDsView() {
                   </div>
                 </div>
               </div>
-              <Button size="sm" variant="outline" className="h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-4 bg-card transition-all">
-                <Download className="h-3 w-3 mr-1.5" /> Export Specs
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={handleCopy} className="h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-3 bg-card transition-all">
+                  <Copy className="h-3 w-3 mr-1.5" /> Copy
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleExport} className="h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-3 bg-card transition-all">
+                  <Download className="h-3 w-3 mr-1.5" /> Export .md
+                </Button>
+              </div>
             </div>
             <div className="flex-1 overflow-auto p-12 custom-scrollbar">
               <div className="max-w-3xl mx-auto">

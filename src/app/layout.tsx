@@ -3,6 +3,7 @@ import { Sora, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/firebase/AuthProvider";
+import { Toaster } from "@/components/ui/toaster";
 
 const sora = Sora({
   subsets: ["latin"],
@@ -47,6 +48,7 @@ export default function RootLayout({
       <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
+          <Toaster />
         </AuthProvider>
       </body>
     </html>

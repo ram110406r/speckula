@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { CheckSquare, Plus, Circle, CheckCircle2, Clock, Loader2, ArrowRight, Zap, Users, Trash2 } from "lucide-react";
+import { CheckSquare, Plus, Circle, CheckCircle2, Clock, Loader2, ArrowRight, Zap, Users, Trash2, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
 import { getTasks, updateTask, deleteTask, getDocument, type ExecutionTask, getPRDs, type PRD, saveTask } from "@/lib/firebase/db";
 import { generateTasksFromPRDAction, analyzeDependenciesAction, intelligentPrioritizeAction } from "@/lib/ai/actions";
+import { downloadCSV } from "@/lib/export";
+import { toast } from "@/store/useToastStore";
 
 type TaskStatus = "todo" | "in-progress" | "done";
 type TaskPriority = "high" | "medium" | "low";
@@ -260,6 +262,14 @@ export function TasksView() {
     return tasks.filter(t => task.dependsOn?.includes(t.id || ""));
   };
 
+  const handleExportCSV = () => {
+    if (tasks.length === 0) { toast.warning("No tasks to export"); return; }
+    const header = ["Title", "Status", "Priority", "Effort", "Category", "Description"];
+    const rows = tasks.map(t => [t.title, t.status, t.priority ?? "", t.effort ?? "", t.category ?? "", t.description ?? ""]);
+    downloadCSV([header, ...rows], "tasks");
+    toast.success("Tasks exported", `${tasks.length} tasks saved as CSV`);
+  };
+
   return (
     <div className="flex flex-col h-full bg-background transition-all duration-300">
       <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0">
@@ -287,6 +297,16 @@ export function TasksView() {
           >
             {isGenerating ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Zap className="mr-1.5 h-3.5 w-3.5" />}
             {isGenerating ? "Generating…" : "Generate from PRD"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs"
+            onClick={handleExportCSV}
+            disabled={tasks.length === 0}
+            title="Export tasks as CSV"
+          >
+            <Download className="mr-1 h-3.5 w-3.5" /> Export CSV
           </Button>
           <Button
             size="sm"
