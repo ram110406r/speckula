@@ -9,9 +9,9 @@ import { firebaseConfig } from "@/lib/env";
 // when NEXT_PUBLIC_FIREBASE_* env vars haven't been set in the deployment
 // platform yet. useEffect hooks (onAuthStateChanged etc.) don't run during
 // prerender, so undefined auth/db here never reach actual Firebase calls.
-let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
+let app!: FirebaseApp;
+let auth!: Auth;
+let db!: Firestore;
 
 try {
   app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -23,4 +23,4 @@ try {
   }
 }
 
-export { app: app!, auth: auth!, db: db! };
+export { app, auth, db };
