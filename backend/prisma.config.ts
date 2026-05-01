@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
@@ -13,6 +14,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env.DATABASE_URL ?? "postgresql://localhost:5432/speckula",
+    url: process.env.DATABASE_URL ?? "postgresql://localhost:5432/buildcase",
   },
 });

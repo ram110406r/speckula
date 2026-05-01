@@ -16,7 +16,8 @@
     "noImplicitAny": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
-    "moduleResolution": "nodenext"
+    "moduleResolution": "nodenext",
+    "types": ["node"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]
