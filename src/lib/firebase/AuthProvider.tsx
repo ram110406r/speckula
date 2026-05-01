@@ -32,6 +32,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
     let initializedFor: string | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
@@ -61,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Cross-tab token sync: react to revocations / refreshes immediately
     // instead of waiting for the in-tab token to expire (~1h).
-    const unsubscribeToken = onIdTokenChanged(auth, (nextUser) => {
+    const unsubscribeToken = onIdTokenChanged(auth!, (nextUser) => {
       // We don't need to do anything with the token itself — Firebase JS
       // SDK keeps it cached. This listener guarantees that any code calling
       // `auth.currentUser?.getIdToken()` after the next tick sees the
@@ -78,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loginWithGoogle = async () => {
+    if (!auth) throw new Error("Firebase is not configured.");
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
@@ -91,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await signOut(auth);
+      if (auth) await signOut(auth);
     } finally {
       // resetState even if signOut throws so the UI doesn't sit in a
       // half-authed state on flaky networks.
