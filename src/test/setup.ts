@@ -6,8 +6,7 @@ if (!('ResizeObserver' in globalThis)) {
     unobserve() {}
     disconnect() {}
   }
-  // @ts-expect-error - test-only polyfill.
-  globalThis.ResizeObserver = ResizeObserver;
+  globalThis.ResizeObserver = ResizeObserver as unknown as typeof ResizeObserver;
 }
 
 if (!('matchMedia' in window)) {
