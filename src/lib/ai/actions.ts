@@ -102,7 +102,7 @@ interface TipTapDoc {
 /**
  * Simplistic helper to convert TipTap JSON to plain text for LLM context
  */
-function tipTapToText(json: unknown): string {
+export function tipTapToText(json: unknown): string {
   const doc = (json ?? {}) as TipTapDoc;
   if (!doc.content) return "";
   let text = "";

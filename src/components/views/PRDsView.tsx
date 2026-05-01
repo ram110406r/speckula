@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
 import { getPRDs, getDocument, type PRD } from "@/lib/firebase/db";
-import { generatePRDAction } from "@/lib/ai/actions";
+import { generatePRDAction, tipTapToText } from "@/lib/ai/actions";
 import { downloadMarkdown, downloadPRDDocx, copyToClipboard, slugify } from "@/lib/export";
 import { toast } from "@/store/useToastStore";
 import { exportDialog } from "@/store/useExportDialogStore";
@@ -32,6 +32,7 @@ export function PRDsView() {
       setPrds(currentDocId ? data.filter((prd) => prd.sourceDocId === currentDocId) : []);
     } catch (error) {
       console.error("Failed to fetch PRDs:", error);
+      toast.error("Couldn't load specs", "Check that Firestore rules are deployed and you're signed in.");
     } finally {
       setIsLoading(false);
     }
@@ -78,8 +79,8 @@ export function PRDsView() {
     setIsGenerating(true);
     try {
       const doc = await getDocument(user.uid, currentDocId);
-      if (!doc || !doc.content) {
-        alert("Document is empty. Please add some notes first.");
+      if (!doc || !tipTapToText(doc.content).trim()) {
+        toast.error("Document is empty", "Add some research notes first, then generate a spec.");
         return;
       }
       const title = documents.find(d => d.id === currentDocId)?.title || "Untitled Document";
@@ -87,7 +88,7 @@ export function PRDsView() {
       await fetchPRDs();
     } catch (error) {
       console.error("Generation failed:", error);
-      alert("AI PRD generation failed. Please check your config.");
+      toast.error("Spec generation failed", "Check your API config and try again.");
     } finally {
       setIsGenerating(false);
     }
