@@ -6,7 +6,11 @@
       "Bash(node --input-type=module -e ' *)",
       "Bash(npm ls *)",
       "Bash(npx vitest *)",
-      "Bash(grep -v \"backend/.env$\")"
+      "Bash(grep -v \"backend/.env$\")",
+      "Bash(Get-ChildItem -Path \"e:\\\\buildcase\" -Force)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"e:\\\\buildcase\\\\src\\\\app\" -Filter \"error.tsx\" -Recurse)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }
