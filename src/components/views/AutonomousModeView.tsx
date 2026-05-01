@@ -23,6 +23,7 @@ import type {
 } from "@/lib/ai/actions";
 import type { Verdict, VerdictLabel } from "@/lib/ai/verdict";
 import { saveDecision } from "@/lib/firebase/db";
+import { generatePRDAction, suggestTasksAction, textToTipTap } from "@/lib/ai/actions";
 import { useAppStore } from "@/store/useAppStore";
 import { toast } from "@/store/useToastStore";
 import { activity } from "@/store/useActivityStore";
@@ -72,7 +73,7 @@ function getActiveStep(state: AgentState): number {
 
 export function AutonomousModeView() {
   const { user } = useAuth();
-  const { setActiveView } = useAppStore();
+  const { setActiveView, currentDocId } = useAppStore();
   const [idea, setIdea] = React.useState("");
   const [depth, setDepth] = React.useState<AgentDepth>("standard");
   const [chat, setChat] = React.useState<ChatEntry[]>([]);
@@ -87,6 +88,8 @@ export function AutonomousModeView() {
   const [pendingQuestion, setPendingQuestion] = React.useState<ClarifyingQuestion | null>(null);
   const [answerText, setAnswerText] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isConvertingToSpec, setIsConvertingToSpec] = React.useState(false);
+  const [isCreatingTasks, setIsCreatingTasks] = React.useState(false);
 
   const isRunning = agentState !== "idle" && agentState !== "stopped" && agentState !== "error" && agentState !== "output";
   const isDone = agentState === "output";
@@ -247,6 +250,7 @@ export function AutonomousModeView() {
         risks: topDecision.risks,
         confidence: topDecision.confidence,
         strategyTheme: strategy?.theme ?? null,
+        sourceDocId: currentDocId ?? undefined,
       });
       toast.success("Decision saved", topDecision.title);
       activity.success("Decision saved from Autonomous Mode");
@@ -255,17 +259,79 @@ export function AutonomousModeView() {
     } finally {
       setIsSaving(false);
     }
-  }, [user, topDecision, strategy, isSaving]);
+  }, [user, topDecision, strategy, isSaving, currentDocId]);
 
-  const handleConvertToSpec = React.useCallback(() => {
-    setActiveView("prds");
-    toast.info("Opening PRD builder");
-  }, [setActiveView]);
+  const handleConvertToSpec = React.useCallback(async () => {
+    if (!user || !topDecision || isConvertingToSpec) return;
+    setIsConvertingToSpec(true);
+    try {
+      const parts: string[] = [
+        `Decision: ${topDecision.title}`,
+        topDecision.justification,
+      ];
+      if (topDecision.userStory) parts.push(`User Story: ${topDecision.userStory}`);
+      if (topDecision.keyInsight) parts.push(`Key Insight: ${topDecision.keyInsight}`);
+      if (topDecision.recommendation) parts.push(`Recommendation: ${topDecision.recommendation}`);
+      if (topDecision.tradeoffs) parts.push(`Tradeoffs: ${topDecision.tradeoffs}`);
+      if (topDecision.risks?.length) parts.push(`Risks:\n${topDecision.risks.map(r => `- ${r}`).join("\n")}`);
+      if (strategy) {
+        parts.push(`Strategic Focus: ${strategy.theme}\n${strategy.rationale}`);
+        if (strategy.gaps.length) parts.push(`Gaps:\n${strategy.gaps.map(g => `- ${g}`).join("\n")}`);
+      }
+      if (roadmap.length) {
+        parts.push(`Roadmap:\n${roadmap.map((phase, i) =>
+          `Phase ${i + 1} – ${phase.name}: ${phase.goal}\n${phase.deliverables.map(d => `- ${d}`).join("\n")}`
+        ).join("\n\n")}`);
+      }
 
-  const handleCreateTasks = React.useCallback(() => {
-    setActiveView("tasks");
-    toast.info("Opening Tasks board");
-  }, [setActiveView]);
+      await generatePRDAction(
+        user.uid,
+        textToTipTap(parts.join("\n\n")),
+        topDecision.title,
+        currentDocId ?? undefined,
+      );
+      toast.success("Spec created", `PRD: ${topDecision.title}`);
+      setActiveView("prds");
+    } catch {
+      toast.error("Failed to create spec", "Check your API config and try again.");
+    } finally {
+      setIsConvertingToSpec(false);
+    }
+  }, [user, topDecision, strategy, roadmap, isConvertingToSpec, currentDocId, setActiveView]);
+
+  const handleCreateTasks = React.useCallback(async () => {
+    if (!user || !topDecision || isCreatingTasks) return;
+    setIsCreatingTasks(true);
+    try {
+      const parts: string[] = [
+        `Decision: ${topDecision.title}`,
+        topDecision.justification,
+      ];
+      if (topDecision.recommendation) parts.push(`Recommendation: ${topDecision.recommendation}`);
+      if (strategy) parts.push(`Strategic Focus: ${strategy.theme}\n${strategy.rationale}`);
+      if (roadmap.length) {
+        parts.push(`Roadmap:\n${roadmap.map((phase, i) =>
+          `Phase ${i + 1} – ${phase.name}: ${phase.goal}\n${phase.deliverables.map(d => `- ${d}`).join("\n")}`
+        ).join("\n\n")}`);
+      }
+      const others = decisions.filter(d => d.title !== topDecision.title);
+      if (others.length) {
+        parts.push(`Additional decisions:\n${others.map(d => `- ${d.title}: ${d.summary || d.justification}`).join("\n")}`);
+      }
+
+      const tasks = await suggestTasksAction(
+        user.uid,
+        textToTipTap(parts.join("\n\n")),
+        currentDocId ?? undefined,
+      );
+      toast.success("Tasks created", `${tasks.length} task${tasks.length === 1 ? "" : "s"} added to your board`);
+      setActiveView("tasks");
+    } catch {
+      toast.error("Failed to create tasks", "Check your API config and try again.");
+    } finally {
+      setIsCreatingTasks(false);
+    }
+  }, [user, topDecision, strategy, roadmap, decisions, isCreatingTasks, currentDocId, setActiveView]);
 
   const activeStep = getActiveStep(agentState);
   const hasOutput = decisions.length > 0 || !!strategy || roadmap.length > 0 || !!verdict;
@@ -504,19 +570,23 @@ export function AutonomousModeView() {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  Save Decision
+                  {isSaving ? "Saving…" : "Save Decision"}
                 </button>
                 <button
                   onClick={handleConvertToSpec}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all"
+                  disabled={!topDecision || isConvertingToSpec}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <FileText className="h-3 w-3" /> Convert to Spec
+                  {isConvertingToSpec ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
+                  {isConvertingToSpec ? "Creating spec…" : "Convert to Spec"}
                 </button>
                 <button
                   onClick={handleCreateTasks}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all"
+                  disabled={!topDecision || isCreatingTasks}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <ListTodo className="h-3 w-3" /> Create Tasks
+                  {isCreatingTasks ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListTodo className="h-3 w-3" />}
+                  {isCreatingTasks ? "Creating tasks…" : "Create Tasks"}
                 </button>
               </div>
             </div>

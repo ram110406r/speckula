@@ -1270,7 +1270,7 @@ interface SlackImportResult {
 
 // Wrap raw text into the minimal TipTap document shape so it survives both the
 // editor renderer and tipTapToText() in extractInsightsAction.
-function textToTipTap(text: string) {
+export function textToTipTap(text: string) {
   const paragraphs = text.split(/\n+/).filter((line) => line.length > 0);
   return {
     type: "doc",
