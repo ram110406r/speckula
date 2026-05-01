@@ -85,6 +85,32 @@ export const validateEnv = (): AppEnv => {
     );
   }
 
-  cached = result.data;
+  const env = result.data;
+  
+  // Additional validations for production safety
+  if (env.NODE_ENV === 'production') {
+    // Slack integration must be fully configured in production
+    const hasSlackIntegration = 
+      process.env.SLACK_CLIENT_ID || 
+      process.env.SLACK_CLIENT_SECRET || 
+      process.env.SLACK_SIGNING_SECRET;
+    
+    if (hasSlackIntegration) {
+      const slackMissing = [];
+      if (!process.env.SLACK_CLIENT_ID) slackMissing.push('SLACK_CLIENT_ID');
+      if (!process.env.SLACK_CLIENT_SECRET) slackMissing.push('SLACK_CLIENT_SECRET');
+      if (!process.env.SLACK_REDIRECT_URI) slackMissing.push('SLACK_REDIRECT_URI');
+      if (!process.env.SLACK_SIGNING_SECRET) slackMissing.push('SLACK_SIGNING_SECRET');
+      if (!process.env.ENCRYPTION_KEY_V1) slackMissing.push('ENCRYPTION_KEY_V1');
+      
+      if (slackMissing.length > 0) {
+        throw new Error(
+          `[env] Slack integration partially configured in production. Set all or none: ${slackMissing.join(', ')}`
+        );
+      }
+    }
+  }
+
+  cached = env;
   return cached;
 };
