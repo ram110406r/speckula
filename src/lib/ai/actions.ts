@@ -103,6 +103,7 @@ interface TipTapDoc {
  * Simplistic helper to convert TipTap JSON to plain text for LLM context
  */
 export function tipTapToText(json: unknown): string {
+  if (typeof json === "string") return json;
   const doc = (json ?? {}) as TipTapDoc;
   if (!doc.content) return "";
   let text = "";
