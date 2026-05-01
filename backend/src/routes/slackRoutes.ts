@@ -97,12 +97,20 @@ function verifySlackSignature(
   return timingSafeEqual(a, b);
 }
 
+const MAX_SLACK_PAYLOAD_BYTES = 1024 * 1024; // 1 MB — Slack events are typically < 50 KB
+
 export default async function slackRoutes(fastify: FastifyInstance) {
   fastify.removeContentTypeParser('application/json');
   fastify.addContentTypeParser(
     'application/json',
     { parseAs: 'buffer' },
     (req, body: Buffer, done) => {
+      // Prevent DoS via unbounded payload: Slack events never exceed ~50 KB,
+      // so reject anything larger than 1 MB to prevent memory exhaustion.
+      if (body.length > MAX_SLACK_PAYLOAD_BYTES) {
+        done(new Error(`Payload too large: ${body.length} bytes exceeds ${MAX_SLACK_PAYLOAD_BYTES} byte limit`));
+        return;
+      }
       const text = body.toString('utf-8');
       (req as FastifyRequest & { rawBody?: string }).rawBody = text;
       try {

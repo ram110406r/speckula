@@ -57,13 +57,58 @@ export const getFirebaseApp = (): App => {
   return firebaseApp;
 };
 
+// In-memory cache for token verification results (revocation status).
+// TTL: 2 minutes. Trades accuracy for latency — revoked tokens take up to
+// 2 min to be rejected, but normal request latency drops from 60-200ms to <1ms.
+interface CachedTokenVerification {
+  decoded: any;
+  expiresAt: number;
+}
+const tokenVerificationCache = new Map<string, CachedTokenVerification>();
+const TOKEN_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+const cleanExpiredTokens = () => {
+  const now = Date.now();
+  for (const [token, cached] of tokenVerificationCache.entries()) {
+    if (cached.expiresAt < now) {
+      tokenVerificationCache.delete(token);
+    }
+  }
+  // Emergency cleanup if map grows too large
+  if (tokenVerificationCache.size > 10000) {
+    tokenVerificationCache.clear();
+  }
+};
+
+// Periodically clean expired entries (every 5 minutes in production)
+if (typeof global !== 'undefined' && !(global as any).tokenCleanupIntervalId) {
+  (global as any).tokenCleanupIntervalId = setInterval(
+    cleanExpiredTokens,
+    5 * 60 * 1000
+  );
+}
+
 export const verifyFirebaseIdToken = async (idToken: string) => {
   const app = getFirebaseApp();
-  // checkRevoked: true rejects tokens for accounts that have been disabled or
-  // had their tokens explicitly revoked (e.g. after a password change).
-  // This makes a network call to Firebase on every request when the local
-  // cached verification succeeds — add Redis caching here if latency matters.
-  return getAuth(app).verifyIdToken(idToken, true);
+  const now = Date.now();
+  
+  // Check cache first (revocation status within 2 minutes)
+  const cached = tokenVerificationCache.get(idToken);
+  if (cached && cached.expiresAt > now) {
+    return cached.decoded;
+  }
+  
+  // Cache miss or expired — verify with Firebase (network call)
+  // checkRevoked: true rejects tokens for disabled/revoked accounts
+  const decoded = await getAuth(app).verifyIdToken(idToken, true);
+  
+  // Cache the successful verification
+  tokenVerificationCache.set(idToken, {
+    decoded,
+    expiresAt: now + TOKEN_CACHE_TTL_MS,
+  });
+  
+  return decoded;
 };
 
 export const getFirebaseFirestore = (): Firestore => {

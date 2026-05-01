@@ -5,17 +5,25 @@ import { extractJsonArray } from "./jsonExtract.js";
 import { todayUtcStart } from "../lib/dateUtils.js";
 
 let _groq: Groq | null = null;
+
+// Centralized Groq client initialization — exported for use in chatRoutes
+// and other modules to prevent duplicate instantiation and memory leaks.
+export const getGroqClient = (): Groq => {
+  if (!_groq) {
+    if (!process.env.GROQ_API_KEY) {
+      throw new Error(
+        "GROQ_API_KEY is not set. Set it in backend/.env to use AI features."
+      );
+    }
+    _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  }
+  return _groq;
+};
+
 const groq = new Proxy({} as Groq, {
   get(_, prop) {
-    if (!_groq) {
-      if (!process.env.GROQ_API_KEY) {
-        throw new Error(
-          "GROQ_API_KEY is not set. Set it in backend/.env to use AI features."
-        );
-      }
-      _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    }
-    return (_groq as unknown as Record<string | symbol, unknown>)[prop];
+    const client = getGroqClient();
+    return (client as unknown as Record<string | symbol, unknown>)[prop];
   },
 });
 

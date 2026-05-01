@@ -1,9 +1,9 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
-import Groq from 'groq-sdk';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { db } from '../lib/db.js';
 import { todayUtcStart } from '../lib/dateUtils.js';
+import { getGroqClient } from '../services/groqService.js';
 
 const MODEL = 'llama-3.3-70b-versatile';
 // Llama-3.3-70B-versatile pricing on Groq, USD per million tokens.
@@ -29,20 +29,8 @@ const chatSchema = z.object({
   system: z.string().max(MAX_MESSAGE_CONTENT_CHARS).optional(),
 });
 
-let _groq: Groq | null = null;
-const groq = new Proxy({} as Groq, {
-  get(_, prop) {
-    if (!_groq) {
-      if (!process.env.GROQ_API_KEY) {
-        throw new Error(
-          'GROQ_API_KEY is not set. Set it in backend/.env to use AI features.'
-        );
-      }
-      _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    }
-    return (_groq as unknown as Record<string | symbol, unknown>)[prop];
-  },
-});
+// Use centralized Groq client from groqService to prevent duplicate initialization
+const getGroq = () => getGroqClient();
 
 const DEFAULT_SYSTEM = `You are Speckula AI, a senior product management assistant.
 Your goal is to help product managers discover insights, define product strategy, and build PRDs.
@@ -286,11 +274,12 @@ const readPositiveInt = (raw: string | undefined, fallback: number): number => {
 // Anything else (4xx, network) bubbles up immediately.
 async function callGroqWithRetry(
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
-): Promise<Awaited<ReturnType<typeof groq.chat.completions.create>>> {
+): Promise<Awaited<ReturnType<any>>> {
   const maxAttempts = 3;
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
+      const groq = getGroqClient();
       return await groq.chat.completions.create({
         model: MODEL,
         messages,

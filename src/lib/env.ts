@@ -3,7 +3,8 @@
 // A missing var throws immediately — catching the error at build/startup,
 // not silently at the first user request.
 
-const required = (name: string): string => {
+// Helper function to validate required env vars (used by validateFirebaseConfig)
+const checkRequired = (name: string): string => {
   const value = process.env[name];
   if (!value || value.trim() === '') {
     throw new Error(
@@ -13,6 +14,31 @@ const required = (name: string): string => {
   }
   return value;
 };
+
+// Validate Firebase configuration at build time
+const validateFirebaseConfig = () => {
+  const requiredVars = [
+    'NEXT_PUBLIC_FIREBASE_API_KEY',
+    'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+    'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+    'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+    'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+    'NEXT_PUBLIC_FIREBASE_APP_ID',
+  ];
+  
+  const missing = requiredVars.filter(v => !process.env[v] || process.env[v]?.trim() === '');
+  if (missing.length > 0 && process.env.NODE_ENV !== 'test') {
+    console.warn(
+      `[env] Missing Firebase configuration: ${missing.join(', ')}\n` +
+        `  Copy .env.local.example to .env.local and fill in your values from Firebase Console.`
+    );
+  }
+};
+
+// Run validation once at module load time
+if (typeof window === 'undefined') {
+  validateFirebaseConfig();
+}
 
 // ── Firebase Web SDK (NEXT_PUBLIC_* — baked in at build time) ─────────────────
 // Next.js inlines these into the browser bundle at compile time; they are

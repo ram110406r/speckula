@@ -731,7 +731,7 @@ function SelectionPopup({
     >
       <div className="px-3 py-2 border-b border-border/60 bg-muted/30">
         <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground/60 mb-0.5">Selected</p>
-        <p className="text-[11px] text-foreground/75 max-w-[200px] truncate">"{selection.text}"</p>
+        <p className="text-[11px] text-foreground/75 max-w-[200px] truncate">&quot;{selection.text}&quot;</p>
       </div>
       <div className="p-1">
         {SELECTION_ACTIONS.map((action) => (
