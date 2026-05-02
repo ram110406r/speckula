@@ -45,7 +45,7 @@ interface SlackChannel {
   is_archived: boolean;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE = "/api/slack";
 
 function formatRelativeTime(slackTs: string): string {
   const seconds = parseFloat(slackTs);
@@ -139,7 +139,7 @@ export function SlackView() {
   const handleConnect = async () => {
     if (!user) return;
     try {
-      const res = await authedFetch(`${API_BASE}/auth/slack/install`, { method: "POST" });
+      const res = await authedFetch(`${API_BASE}/install`, { method: "POST" });
       const json = (await res.json()) as { ok: boolean; authorizeUrl?: string; error?: string };
       if (!json.ok || !json.authorizeUrl) throw new Error(json.error || "install init failed");
       window.location.href = json.authorizeUrl;
@@ -154,7 +154,7 @@ export function SlackView() {
     setChannelsLoading(true);
     try {
       const res = await authedFetch(
-        `${API_BASE}/auth/slack/channels?teamId=${encodeURIComponent(activeTeamId)}`
+        `${API_BASE}/channels?teamId=${encodeURIComponent(activeTeamId)}`
       );
       const json = (await res.json()) as { ok: boolean; channels?: SlackChannel[]; error?: string };
       if (!json.ok) throw new Error(json.error || "Failed to list channels");
@@ -181,7 +181,7 @@ export function SlackView() {
     if (!user || !activeTeamId) return;
     setSavingChannels(true);
     try {
-      const res = await authedFetch(`${API_BASE}/auth/slack/channels`, {
+      const res = await authedFetch(`${API_BASE}/channels`, {
         method: "POST",
         body: JSON.stringify({
           teamId: activeTeamId,
@@ -204,7 +204,7 @@ export function SlackView() {
     setBackfilling(true);
     setStatusMessage("Fetching message history…");
     try {
-      const res = await authedFetch(`${API_BASE}/auth/slack/backfill`, {
+      const res = await authedFetch(`${API_BASE}/backfill`, {
         method: "POST",
         body: JSON.stringify({ teamId: activeTeamId, limit: 200 }),
       });
@@ -254,7 +254,7 @@ export function SlackView() {
     if (!confirm(`Disconnect ${activeWorkspace?.teamName ?? "this workspace"}? Existing messages stay in your account.`)) return;
     try {
       const res = await authedFetch(
-        `${API_BASE}/auth/slack/disconnect?teamId=${encodeURIComponent(activeTeamId)}`,
+        `${API_BASE}/disconnect?teamId=${encodeURIComponent(activeTeamId)}`,
         { method: "DELETE" }
       );
       const json = (await res.json()) as { ok: boolean; error?: string };
