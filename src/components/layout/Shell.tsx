@@ -2,7 +2,8 @@
 
 import React from "react";
 import { useAppStore } from "@/store/useAppStore";
-import { Editor } from "@/components/editor/Editor";
+import dynamic from "next/dynamic";
+const Editor = dynamic(() => import("@/components/editor/Editor").then(m => ({ default: m.Editor })), { ssr: false });
 import { AIPanel } from "@/components/ai/AIPanel";
 import { ModernSidebar } from "@/components/ui/modern-side-bar";
 import { InsightsView } from "../views/InsightsView";
