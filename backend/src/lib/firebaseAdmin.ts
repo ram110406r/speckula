@@ -47,7 +47,13 @@ export const getFirebaseApp = (): App => {
 
   const projectId = required('FIREBASE_PROJECT_ID');
   const clientEmail = required('FIREBASE_CLIENT_EMAIL');
-  const privateKey = formatPrivateKey(required('FIREBASE_PRIVATE_KEY'));
+
+  // Accept base64-encoded key (FIREBASE_PRIVATE_KEY_B64) to avoid multiline
+  // value issues in Docker/Dokploy .env file parsers.
+  const rawKey = process.env.FIREBASE_PRIVATE_KEY_B64
+    ? Buffer.from(process.env.FIREBASE_PRIVATE_KEY_B64, 'base64').toString('utf-8')
+    : required('FIREBASE_PRIVATE_KEY');
+  const privateKey = formatPrivateKey(rawKey);
   validatePrivateKeyShape(privateKey);
 
   firebaseApp = initializeApp({

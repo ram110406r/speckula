@@ -28,12 +28,11 @@ const envSchema = z.object({
   FIREBASE_CLIENT_EMAIL: z
     .string()
     .email('FIREBASE_CLIENT_EMAIL must be a valid service account email address'),
-  FIREBASE_PRIVATE_KEY: z
-    .string()
-    .refine(
-      (k) => k.replace(/\\n/g, '\n').includes('-----BEGIN PRIVATE KEY-----'),
-      'FIREBASE_PRIVATE_KEY must be a PEM private key. Copy the full value from the service account JSON, keeping literal \\n separators.'
-    ),
+  // Accept either raw PEM (with literal \n) or base64-encoded PEM.
+  // Use FIREBASE_PRIVATE_KEY_B64 in environments where multiline values
+  // break the .env file parser (e.g. Dokploy/Docker Compose).
+  FIREBASE_PRIVATE_KEY: z.string().optional(),
+  FIREBASE_PRIVATE_KEY_B64: z.string().optional(),
 
   // CORS — exact origin the frontend is served from. No trailing slash.
   FRONTEND_URL: z
@@ -86,7 +85,14 @@ export const validateEnv = (): AppEnv => {
   }
 
   const env = result.data;
-  
+
+  if (!env.FIREBASE_PRIVATE_KEY && !env.FIREBASE_PRIVATE_KEY_B64) {
+    throw new Error(
+      '\n[env] Invalid environment configuration — fix these before starting:\n' +
+      '  • FIREBASE_PRIVATE_KEY or FIREBASE_PRIVATE_KEY_B64: one must be set\n'
+    );
+  }
+
   // Additional validations for production safety
   if (env.NODE_ENV === 'production') {
     // Slack integration must be fully configured in production
