@@ -1,21 +1,4 @@
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: Speckula
-      POSTGRES_USER: Speckula
-      POSTGRES_PASSWORD: Speckula
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U Speckula"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./backend
@@ -26,19 +9,20 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://Speckula:Speckula@db:5432/Speckula
-      DIRECT_DATABASE_URL: postgresql://Speckula:Speckula@db:5432/Speckula
+      DATABASE_URL: ${DATABASE_URL}
+      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL}
       GROQ_API_KEY: ${GROQ_API_KEY}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
       FIREBASE_PRIVATE_KEY_B64: ${FIREBASE_PRIVATE_KEY_B64}
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET}
+      SLACK_REDIRECT_URI: ${SLACK_REDIRECT_URI}
       SLACK_TOKEN_ENCRYPTION_KEY: ${SLACK_TOKEN_ENCRYPTION_KEY}
       FRONTEND_URLS: ${FRONTEND_URLS}
       AI_CACHE_TTL_MINUTES: 60
       DAILY_TOKEN_QUOTA: 200000
-    depends_on:
-      db:
-        condition: service_healthy
     command: >
       sh -c "npx prisma migrate deploy && node dist/index.js"
 
@@ -60,6 +44,3 @@ services:
       BACKEND_URL: http://backend:3001
     depends_on:
       - backend
-
-volumes:
-  pg_data:
