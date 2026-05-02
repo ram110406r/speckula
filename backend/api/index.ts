@@ -38,10 +38,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const app = await getApp();
     app.server.emit('request', req, res);
   } catch (err) {
-    console.error('[api/index] App initialization failed:', err);
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error('[api/index] App initialization failed:', detail);
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: 'Service initialization failed.' }));
+      res.end(JSON.stringify({ ok: false, error: 'Service initialization failed.', detail }));
     }
   }
 }
