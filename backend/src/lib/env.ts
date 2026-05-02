@@ -59,9 +59,9 @@ const envSchema = z.object({
   SLACK_SIGNING_SECRET: z.string().optional(),
   // 64-char hex (32 bytes). Required when Slack integration is enabled.
   // Generate: node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"
-  ENCRYPTION_KEY_V1: z
+  SLACK_TOKEN_ENCRYPTION_KEY: z
     .string()
-    .regex(/^[0-9a-fA-F]{64}$/, 'ENCRYPTION_KEY_V1 must be exactly 64 hex characters (32 bytes)')
+    .regex(/^[0-9a-fA-F]{64}$/, 'SLACK_TOKEN_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)')
     .optional(),
 
   // How many days to keep PromptLog / DecisionReasoning rows (default 60).
@@ -101,7 +101,7 @@ export const validateEnv = (): AppEnv => {
       if (!process.env.SLACK_CLIENT_SECRET) slackMissing.push('SLACK_CLIENT_SECRET');
       if (!process.env.SLACK_REDIRECT_URI) slackMissing.push('SLACK_REDIRECT_URI');
       if (!process.env.SLACK_SIGNING_SECRET) slackMissing.push('SLACK_SIGNING_SECRET');
-      if (!process.env.ENCRYPTION_KEY_V1) slackMissing.push('ENCRYPTION_KEY_V1');
+      if (!process.env.SLACK_TOKEN_ENCRYPTION_KEY) slackMissing.push('SLACK_TOKEN_ENCRYPTION_KEY');
       
       if (slackMissing.length > 0) {
         throw new Error(

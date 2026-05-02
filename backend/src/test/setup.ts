@@ -8,4 +8,4 @@ process.env.FIREBASE_PROJECT_ID ??= 'test-project';
 process.env.FIREBASE_CLIENT_EMAIL ??= 'test@test-project.iam.gserviceaccount.com';
 process.env.FIREBASE_PRIVATE_KEY ??=
   '-----BEGIN PRIVATE KEY-----\nMIItest\n-----END PRIVATE KEY-----\n';
-process.env.ENCRYPTION_KEY_V1 ??= '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+process.env.SLACK_TOKEN_ENCRYPTION_KEY ??= '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';

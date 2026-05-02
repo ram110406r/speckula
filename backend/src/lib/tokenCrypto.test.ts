@@ -7,15 +7,15 @@ describe('tokenCrypto', () => {
   let originalKey: string | undefined;
 
   beforeEach(() => {
-    originalKey = process.env.ENCRYPTION_KEY_V1;
-    process.env.ENCRYPTION_KEY_V1 = TEST_KEY;
+    originalKey = process.env.SLACK_TOKEN_ENCRYPTION_KEY;
+    process.env.SLACK_TOKEN_ENCRYPTION_KEY = TEST_KEY;
   });
 
   afterEach(() => {
     if (originalKey === undefined) {
-      delete process.env.ENCRYPTION_KEY_V1;
+      delete process.env.SLACK_TOKEN_ENCRYPTION_KEY;
     } else {
-      process.env.ENCRYPTION_KEY_V1 = originalKey;
+      process.env.SLACK_TOKEN_ENCRYPTION_KEY = originalKey;
     }
   });
 
@@ -56,17 +56,17 @@ describe('tokenCrypto', () => {
   });
 
   it('throws when the key is missing', () => {
-    delete process.env.ENCRYPTION_KEY_V1;
-    expect(() => encryptToken('x')).toThrow('ENCRYPTION_KEY_V1 is not set');
+    delete process.env.SLACK_TOKEN_ENCRYPTION_KEY;
+    expect(() => encryptToken('x')).toThrow('SLACK_TOKEN_ENCRYPTION_KEY is not set');
   });
 
   it('throws when the key is wrong length', () => {
-    process.env.ENCRYPTION_KEY_V1 = 'short';
+    process.env.SLACK_TOKEN_ENCRYPTION_KEY = 'short';
     expect(() => encryptToken('x')).toThrow('64 hex characters');
   });
 
   it('throws when the key is not valid hex', () => {
-    process.env.ENCRYPTION_KEY_V1 = 'z'.repeat(64); // not valid hex
+    process.env.SLACK_TOKEN_ENCRYPTION_KEY = 'z'.repeat(64); // not valid hex
     expect(() => encryptToken('x')).toThrow('64 hex characters');
   });
 });

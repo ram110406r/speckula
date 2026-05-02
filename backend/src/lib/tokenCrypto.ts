@@ -23,9 +23,9 @@ export class TokenDecryptError extends Error {
 }
 
 // Key lookup is lazy (no module-level caching) so test environments can swap
-// ENCRYPTION_KEY_V1 between tests without cache-busting module reimports.
-const getKey = (version: string): Buffer => {
-  const varName = `ENCRYPTION_KEY_${version.toUpperCase()}`;
+// SLACK_TOKEN_ENCRYPTION_KEY between tests without cache-busting module reimports.
+const getKey = (_version: string): Buffer => {
+  const varName = 'SLACK_TOKEN_ENCRYPTION_KEY';
   const hex = process.env[varName];
   if (!hex) {
     throw new Error(
