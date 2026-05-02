@@ -1,4 +1,19 @@
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: speckula
+      POSTGRES_USER: speckula
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U speckula"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -7,8 +22,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: ${DATABASE_URL}
-      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL}
+      DATABASE_URL: postgresql://speckula:${DB_PASSWORD}@db:5432/speckula
+      DIRECT_DATABASE_URL: postgresql://speckula:${DB_PASSWORD}@db:5432/speckula
       GROQ_API_KEY: ${GROQ_API_KEY}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
@@ -21,8 +36,11 @@ services:
       FRONTEND_URLS: ${FRONTEND_URLS}
       AI_CACHE_TTL_MINUTES: 60
       DAILY_TOKEN_QUOTA: 200000
+    depends_on:
+      db:
+        condition: service_healthy
     command: >
-      sh -c "npx prisma migrate deploy && node dist/index.js"
+      sh -c "npx prisma migrate deploy --schema=/app/prisma/schema.prisma && node dist/index.js"
 
   frontend:
     build:
@@ -40,3 +58,6 @@ services:
       BACKEND_URL: http://backend:3001
     depends_on:
       - backend
+
+volumes:
+  pg_data:
