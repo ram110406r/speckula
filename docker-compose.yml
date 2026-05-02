@@ -40,7 +40,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "npx prisma migrate deploy --schema=/app/prisma/schema.prisma && node dist/index.js"
+      sh -c "npx prisma migrate deploy && node dist/index.js"
 
   frontend:
     build:
