@@ -549,7 +549,7 @@ export function TipTapEditor() {
       )}
 
       {isLoadingContent && (
-        <div className="absolute inset-0 z-10 bg-background/50 backdrop-blur-[1px] flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 z-10 bg-background/50 backdrop-blur-[1px] flex items-center justify-center">
           <div className="flex flex-col items-center gap-2">
             <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">Loading...</span>
