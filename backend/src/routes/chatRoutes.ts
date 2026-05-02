@@ -158,7 +158,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
       db.promptCache
         .update({ where: { promptHash }, data: { hitCount: { increment: 1 } } })
-        .catch((err) => fastify.log.warn({ err }, 'cache hit count update failed'));
+        .catch((err: unknown) => fastify.log.warn({ err }, 'cache hit count update failed'));
 
       recordUsage({
         userId,
@@ -248,7 +248,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
             expiresAt: new Date(Date.now() + cacheTTLMinutes * 60 * 1000),
           },
         })
-        .catch((err) => fastify.log.warn({ err }, 'cache write failed'));
+        .catch((err: unknown) => fastify.log.warn({ err }, 'cache write failed'));
     }
 
     recordUsage({

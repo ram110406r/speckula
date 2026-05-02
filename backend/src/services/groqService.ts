@@ -143,7 +143,7 @@ export const groqService = {
 
     const cached = await db.promptCache
       .findUnique({ where: { promptHash } })
-      .catch((error) => {
+      .catch((error: unknown) => {
         warnDbDegraded("promptCache.findUnique", error);
         return null;
       });
@@ -163,12 +163,12 @@ export const groqService = {
           cost: 0,
           cachedResult: true,
         },
-      }).catch((error) => warnDbDegraded("promptLog.create (hit)", error));
+      }).catch((error: unknown) => warnDbDegraded("promptLog.create (hit)", error));
 
       db.promptCache.update({
         where: { promptHash },
         data: { hitCount: { increment: 1 } },
-      }).catch((error) => warnDbDegraded("promptCache.update", error));
+      }).catch((error: unknown) => warnDbDegraded("promptCache.update", error));
 
       return {
         content: cached.result,
@@ -225,7 +225,7 @@ export const groqService = {
         cost,
         cachedResult: false,
       },
-    }).catch((error) => warnDbDegraded("promptLog.create", error));
+    }).catch((error: unknown) => warnDbDegraded("promptLog.create", error));
 
     const cacheTTLMinutes = readPositiveInt(process.env.AI_CACHE_TTL_MINUTES, 60);
     db.promptCache.upsert({
@@ -240,7 +240,7 @@ export const groqService = {
         result: content,
         expiresAt: new Date(Date.now() + cacheTTLMinutes * 60 * 1000),
       },
-    }).catch((error) => warnDbDegraded("promptCache.upsert", error));
+    }).catch((error: unknown) => warnDbDegraded("promptCache.upsert", error));
 
     // Race-safe daily-rollup via raw SQL ON CONFLICT.
     const date = todayUtcStart();
@@ -530,7 +530,7 @@ Return ONLY this JSON, no other text:
         tokensUsed: result.tokensUsed,
         expiresAt: new Date(Date.now() + 30 * 60 * 1000),
       },
-    }).catch((error) => warnDbDegraded("patternAnalysis.create", error));
+    }).catch((error: unknown) => warnDbDegraded("patternAnalysis.create", error));
 
     return {
       patterns: safe,
