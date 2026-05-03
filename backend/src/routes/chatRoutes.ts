@@ -188,7 +188,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       stream = (await callGroqWithRetry(promptMessages)) as unknown as GroqStream;
     } catch (error) {
       fastify.log.error({ err: error }, 'Groq stream init failed');
-      reply.code(502).send({ ok: false, error: 'Upstream AI error.' });
+      const detail = error instanceof Error ? error.message : String(error);
+      const status = (error as { status?: number })?.status;
+      const clientMsg =
+        status === 401 ? 'Groq API key is invalid or expired.' :
+        status === 429 ? 'Groq rate limit exhausted — try again in a moment.' :
+        status === 400 ? `Groq rejected the request: ${detail}` :
+        `Upstream AI error: ${detail}`;
+      reply.code(502).send({ ok: false, error: clientMsg });
       return;
     }
 
