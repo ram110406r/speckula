@@ -43,7 +43,7 @@ const scoreDecisionSchema = z.object({
 
 const analyzeSignalsSchema = z.object({
   projectId: z.string().min(1).optional(),
-  content: z.string().min(1).max(MAX_CONTENT_CHARS),
+  content: z.string().min(1).max(4_000),
 }).strict();
 
 const usageDateSchema = z.object({

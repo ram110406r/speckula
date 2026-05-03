@@ -206,7 +206,7 @@ export const groqService = {
         messages: [{ role: "user", content: prompt }],
         model: modelName,
         temperature: opts.temperature ?? 0.6,
-        max_tokens: opts.maxTokens ?? 2000,
+        max_tokens: opts.maxTokens ?? 1024,
         ...(opts.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
       })
     );
@@ -708,7 +708,7 @@ ${content}`;
 
     const result = await this.callGroq(
       prompt,
-      { model: 'fast', jsonMode: true, maxTokens: 1000 },
+      { model: 'fast', jsonMode: true, maxTokens: 500 },
       userId,
       projectId
     );

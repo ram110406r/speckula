@@ -52,9 +52,15 @@ export function AIPanel() {
   const messageIdRef = React.useRef(0);
   const nextMessageId = React.useCallback(() => `msg-${++messageIdRef.current}`, []);
 
-  const ANALYZE_DAILY_CAP = 200;
+  // Hard-limit background auto-analysis to 15 calls per session day. At ~500
+  // tokens each, that's 7 500 tokens — a fraction of Groq's free-tier TPD.
+  const ANALYZE_DAILY_CAP = 15;
   const analyzeCountRef = React.useRef<{ date: string; n: number }>({ date: "", n: 0 });
+  // Circuit-breaker: flip to true when Groq returns a TPD/TPM 429 so we stop
+  // all background calls for the rest of the session.
+  const rateLimitedRef = React.useRef(false);
   const incrementAnalyzeCount = React.useCallback((): boolean => {
+    if (rateLimitedRef.current) return false;
     const today = new Date().toISOString().slice(0, 10);
     if (analyzeCountRef.current.date !== today) {
       analyzeCountRef.current = { date: today, n: 0 };
@@ -74,7 +80,9 @@ export function AIPanel() {
   }, []);
 
   const ANALYZE_DEBOUNCE_MS = 4000;
-  const ANALYZE_COOLDOWN_MS = 12000;
+  // 5-minute cooldown keeps background calls to ≤12/hour even with a very
+  // active user, vs the previous 12s which allowed ~300/hour.
+  const ANALYZE_COOLDOWN_MS = 300_000;
   const MAX_CONTEXT_CHARS = 6000;
 
   const hashContent = (value: string) => value.trim().replace(/\s+/g, " ");
@@ -163,6 +171,12 @@ export function AIPanel() {
         lastAnalyzedAtRef.current = Date.now();
       } catch (error) {
         if ((error as { name?: string })?.name === "AbortError") return;
+        const msg = error instanceof Error ? error.message : "";
+        if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
+          // Stop all background auto-analysis for this session — the TPD or
+          // TPM window won't recover within a request cycle.
+          rateLimitedRef.current = true;
+        }
         console.error("Proactive analysis failed:", error);
       } finally {
         if (isMountedRef.current) setIsAnalyzing(false);
