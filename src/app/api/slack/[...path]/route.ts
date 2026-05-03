@@ -24,7 +24,11 @@ async function forward(req: Request, segments: string[]) {
 
   const url = new URL(req.url);
   const upstream_url = `${BACKEND_URL}/auth/slack/${segments.join('/')}${url.search}`;
-  const body = req.method === 'GET' || req.method === 'DELETE' ? undefined : await req.text();
+  const rawBody = req.method === 'GET' || req.method === 'DELETE' ? undefined : await req.text();
+  const body = rawBody || undefined; // treat empty string as no-body
+
+  const upstreamHeaders: Record<string, string> = { authorization: auth };
+  if (body) upstreamHeaders['Content-Type'] = 'application/json';
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
@@ -33,7 +37,7 @@ async function forward(req: Request, segments: string[]) {
   try {
     const upstream = await fetch(upstream_url, {
       method: req.method,
-      headers: { 'Content-Type': 'application/json', authorization: auth },
+      headers: upstreamHeaders,
       body,
       signal: controller.signal,
     });

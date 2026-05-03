@@ -28,7 +28,11 @@ async function forward(req: Request, segments: string[]) {
     });
   }
 
-  const body = req.method === 'GET' ? undefined : await req.text();
+  const rawBody = req.method === 'GET' ? undefined : await req.text();
+  const body = rawBody || undefined;
+
+  const upstreamHeaders: Record<string, string> = { authorization: auth };
+  if (body) upstreamHeaders['Content-Type'] = 'application/json';
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
@@ -37,10 +41,7 @@ async function forward(req: Request, segments: string[]) {
   try {
     const upstream = await fetch(`${BACKEND_URL}/ai/${segments.join('/')}`, {
       method: req.method,
-      headers: {
-        'Content-Type': 'application/json',
-        authorization: auth,
-      },
+      headers: upstreamHeaders,
       body,
       signal: controller.signal,
     });
