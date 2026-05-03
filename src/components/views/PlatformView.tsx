@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Copy, Network, Sparkles, Users, ChevronDown, Clock } from "lucide-react";
+import { Copy, Globe, Link2, Network, Sparkles, Users, ChevronDown, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -307,7 +307,19 @@ export function PlatformView() {
                         ) : (
                           decisions.map((d) => (
                             <div key={d.id} className="rounded-xl border border-border p-3 mb-2">
-                              <p className="font-medium text-sm">{d.title}</p>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-medium text-sm">{d.title}</p>
+                                {d.published && (
+                                  <button
+                                    className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700"
+                                    onClick={() => navigator.clipboard.writeText(`${window.location.origin}/case/${d.id}`).catch(() => {})}
+                                    title="Copy public link"
+                                  >
+                                    <Globe className="h-3 w-3" />
+                                    <Link2 className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground mt-1">Pros/Cons summarized</p>
                             </div>
                           ))
@@ -320,7 +332,18 @@ export function PlatformView() {
                         <p className="text-muted-foreground">No decision yet — open Decisions view to add one.</p>
                       ) : (
                         <div>
-                          <p className="font-medium text-sm">{decisions[0].title}</p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-medium text-sm">{decisions[0].title}</p>
+                            {decisions[0].published && (
+                              <button
+                                className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700"
+                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/case/${decisions[0].id}`).catch(() => {})}
+                                title="Copy public link"
+                              >
+                                <Globe className="h-3 w-3" />Copy link
+                              </button>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground mt-1">Score: {decisions[0].score ?? "—"} · Confidence: {decisions[0].confidence ?? "—"}</p>
                           <p className="mt-2 text-sm">{decisions[0].justification}</p>
                         </div>
