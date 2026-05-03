@@ -100,14 +100,32 @@ interface TipTapDoc {
 }
 
 /**
- * Simplistic helper to convert TipTap JSON to plain text for LLM context
+ * Simplistic helper to convert TipTap JSON to plain text for LLM context.
+ * Also handles the research_blocks_v1 format saved by the structured editor.
  */
 export function tipTapToText(json: unknown): string {
   if (typeof json === "string") return json;
-  const doc = (json ?? {}) as TipTapDoc;
-  if (!doc.content) return "";
+  const doc = (json ?? {}) as Record<string, unknown>;
+
+  // research_blocks_v1 — structured editor format
+  if (doc._type === "research_blocks_v1") {
+    const LABELS: Record<string, string> = {
+      problem: "Problem", context: "Context", userPain: "User Pain",
+      insights: "Insights", assumptions: "Assumptions",
+    };
+    return Object.entries(LABELS)
+      .map(([key, label]) => {
+        const val = typeof doc[key] === "string" ? (doc[key] as string).trim() : "";
+        return val ? `${label}:\n${val}` : "";
+      })
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
+  // TipTap JSON format
+  const tiptap = doc as TipTapDoc;
+  if (!tiptap.content) return "";
   let text = "";
-  
   const processNodes = (nodes: TipTapNode[]) => {
     nodes.forEach(node => {
       if (node.text) text += node.text;
@@ -115,8 +133,7 @@ export function tipTapToText(json: unknown): string {
       if (node.type === 'paragraph' || node.type === 'heading') text += "\n";
     });
   };
-
-  processNodes(doc.content);
+  processNodes(tiptap.content);
   return text;
 }
 
