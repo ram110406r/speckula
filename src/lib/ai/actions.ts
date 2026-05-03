@@ -206,7 +206,10 @@ async function callAI(prompt: string, context: string, externalSignal?: AbortSig
     } catch (error) {
       const isCancellation = error instanceof DOMException &&
         (error.name === "AbortError" || error.name === "TimeoutError");
-      if (attempt === maxAttempts - 1 || isCancellation) {
+      // 429 rate-limits won't resolve within the retry window — rethrow immediately.
+      const isRateLimit = error instanceof Error &&
+        (error.message.includes("rate limit") || error.message.includes("429"));
+      if (attempt === maxAttempts - 1 || isCancellation || isRateLimit) {
         throw error;
       }
     } finally {

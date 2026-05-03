@@ -314,6 +314,10 @@ export function TipTapEditor() {
     };
 
     const requestInlineSuggestion = () => {
+      // Skip during programmatic content loads — setContent fires update/selectionUpdate
+      // events that look like user edits but are just hydration noise.
+      if (isLoadingContentRef.current) return;
+
       const fullText = editor.getText();
       const cursorOffset = editor.state.doc.textBetween(0, editor.state.selection.from, "\n", "\n").length;
 
