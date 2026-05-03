@@ -353,7 +353,6 @@ export function TipTapEditor() {
       });
     };
 
-    requestInlineSuggestion();
     editor.on("update", requestInlineSuggestion);
     editor.on("selectionUpdate", requestInlineSuggestion);
 
