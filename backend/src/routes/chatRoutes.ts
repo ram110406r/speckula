@@ -112,6 +112,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
   // rate-limit keyGenerator can read request.userId. Don't re-register here.
 
   fastify.post('/chat', { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } }, async (request: FastifyRequest, reply) => {
+    let hijacked = false;
+    try {
     if (!process.env.GROQ_API_KEY) {
       reply.code(500).send({ ok: false, error: 'Missing Groq configuration.' });
       return;
@@ -142,11 +144,17 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     const promptText = promptMessages.map((m) => `${m.role}: ${m.content}`).join('\n');
     const inputTokens = estimateInputTokens(promptMessages);
 
-    const cached = await db.promptCache
-      .findUnique({ where: { promptHash } })
-      .catch(() => null);
+    // Use try/catch instead of .catch() so sync throws from the Proxy getter
+    // (e.g. TypeError if the Prisma delegate is undefined) are also caught.
+    let cached: { promptHash: string; result: string; expiresAt: Date } | null = null;
+    try {
+      cached = await db.promptCache.findUnique({ where: { promptHash } });
+    } catch {
+      cached = null;
+    }
 
     if (cached && cached.expiresAt > new Date()) {
+      hijacked = true;
       reply.hijack();
       reply.raw.setHeader('Content-Type', 'text/plain; charset=utf-8');
       reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -184,6 +192,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       return;
     }
 
+    hijacked = true;
     reply.hijack();
     reply.raw.setHeader('Content-Type', 'text/plain; charset=utf-8');
     reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -260,6 +269,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       executionMs,
       cachedResult: false,
     }).catch((err) => fastify.log.warn({ err }, 'usage logging failed'));
+    } catch (error) {
+      fastify.log.error({ err: error }, 'Unhandled error in /chat handler');
+      if (!hijacked && !reply.sent) {
+        reply.code(500).send({ ok: false, error: 'Chat service error. Please try again.' });
+      } else if (hijacked && !reply.raw.destroyed) {
+        reply.raw.end();
+      }
+    }
   });
 }
 
