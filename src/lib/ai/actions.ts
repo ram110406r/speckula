@@ -152,8 +152,8 @@ async function callAI(prompt: string, context: string, externalSignal?: AbortSig
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const token = await getAuthToken(attempt > 0);
     const controller = new AbortController();
-    const timeoutReason = new DOMException("Request timed out after 30s", "TimeoutError");
-    const timeoutId = window.setTimeout(() => controller.abort(timeoutReason), 30000);
+    const timeoutReason = new DOMException("Request timed out after 90s", "TimeoutError");
+    const timeoutId = window.setTimeout(() => controller.abort(timeoutReason), 90000);
     // Forward an outer abort (e.g. from a doc switch) to this attempt.
     const onExternalAbort = () => controller.abort(externalSignal!.reason);
     if (externalSignal) {
@@ -227,8 +227,8 @@ async function callBackendRoute<T>(path: string, body: unknown, externalSignal?:
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const token = await getAuthToken(attempt > 0);
     const controller = new AbortController();
-    const timeoutReason = new DOMException("Request timed out after 30s", "TimeoutError");
-    const timeoutId = window.setTimeout(() => controller.abort(timeoutReason), 30000);
+    const timeoutReason = new DOMException("Request timed out after 90s", "TimeoutError");
+    const timeoutId = window.setTimeout(() => controller.abort(timeoutReason), 90000);
     const onExternalAbort = () => controller.abort(externalSignal!.reason);
     if (externalSignal) {
       if (externalSignal.aborted) { controller.abort(externalSignal.reason); }

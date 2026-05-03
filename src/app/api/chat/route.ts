@@ -7,7 +7,7 @@ import { backendUrl } from '@/lib/env';
 const BACKEND_URL = backendUrl;
 // Stream calls can take a while; cap so a wedged backend doesn't pin a
 // Vercel/Next.js function for the full platform timeout.
-const PROXY_TIMEOUT_MS = 60_000;
+const PROXY_TIMEOUT_MS = 90_000;
 
 export async function POST(req: Request) {
   const auth = req.headers.get('authorization');

@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 import { backendUrl } from '@/lib/env';
 const BACKEND_URL = backendUrl;
-const PROXY_TIMEOUT_MS = 30_000;
+const PROXY_TIMEOUT_MS = 90_000;
 
 // Allow-list of segments we are willing to forward to the backend. Prevents
 // path-traversal-style abuse if the dynamic segment is ever populated by an
