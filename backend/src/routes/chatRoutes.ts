@@ -130,6 +130,20 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       reply.code(401).send({ ok: false, error: 'unauthorized' });
       return;
     }
+
+    // Per-user daily quota guard — mirrors groqService. Checked before the
+    // cache look-up so a quota-hit never touches Groq even on cache miss.
+    const quota = readPositiveInt(process.env.DAILY_TOKEN_QUOTA, 200_000);
+    try {
+      const usage = await db.aPIUsage.findUnique({
+        where: { userId_date: { userId, date: todayUtcStart() } },
+      });
+      if (usage && usage.totalTokens >= quota) {
+        reply.code(429).send({ ok: false, error: `Daily token quota of ${quota.toLocaleString()} tokens reached. Usage resets at UTC midnight.` });
+        return;
+      }
+    } catch { /* db degraded — allow the request through */ }
+
     const { messages, system } = parsed.data;
     const totalChars = messages.reduce((s, m) => s + m.content.length, 0) + (system?.length ?? 0);
     if (totalChars > MAX_TOTAL_PROMPT_CHARS) {

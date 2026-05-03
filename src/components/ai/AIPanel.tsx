@@ -56,10 +56,41 @@ export function AIPanel() {
   // tokens each, that's 7 500 tokens — a fraction of Groq's free-tier TPD.
   const ANALYZE_DAILY_CAP = 15;
   const analyzeCountRef = React.useRef<{ date: string; n: number }>({ date: "", n: 0 });
-  // Circuit-breaker: flip to true when Groq returns a TPD/TPM 429 so we stop
-  // all background calls for the rest of the session.
-  const rateLimitedRef = React.useRef(false);
+
+  // Circuit-breaker that survives page reloads via localStorage.
+  // On 429, we parse Groq's "Please try again in Xm Ys" and block until then.
+  const LS_KEY = "groq_rate_limited_until";
+  const rateLimitedRef = React.useRef<boolean>(false);
+  // Initialise from localStorage on first render (client-side only).
+  React.useEffect(() => {
+    try {
+      const v = localStorage.getItem(LS_KEY);
+      if (v && parseInt(v, 10) > Date.now()) rateLimitedRef.current = true;
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setRateLimitBlock = React.useCallback((errorMsg: string) => {
+    const match = errorMsg.match(/Please try again in (?:(\d+)m)?(?:([\d.]+)s)?/);
+    const minutes = parseFloat(match?.[1] ?? "0");
+    const seconds = parseFloat(match?.[2] ?? "0");
+    const waitMs = Math.ceil((minutes * 60 + seconds) * 1000) + 10_000; // +10s buffer
+    const until = Date.now() + (waitMs > 0 ? waitMs : 5 * 60 * 1000);
+    rateLimitedRef.current = true;
+    try { localStorage.setItem(LS_KEY, String(until)); } catch { /* ignore */ }
+  }, []);
+
   const incrementAnalyzeCount = React.useCallback((): boolean => {
+    // Re-check localStorage on each attempt in case the block expired.
+    if (rateLimitedRef.current) {
+      try {
+        const v = localStorage.getItem(LS_KEY);
+        if (!v || parseInt(v, 10) <= Date.now()) {
+          rateLimitedRef.current = false;
+          localStorage.removeItem(LS_KEY);
+        }
+      } catch { /* ignore */ }
+    }
     if (rateLimitedRef.current) return false;
     const today = new Date().toISOString().slice(0, 10);
     if (analyzeCountRef.current.date !== today) {
@@ -173,9 +204,7 @@ export function AIPanel() {
         if ((error as { name?: string })?.name === "AbortError") return;
         const msg = error instanceof Error ? error.message : "";
         if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
-          // Stop all background auto-analysis for this session — the TPD or
-          // TPM window won't recover within a request cycle.
-          rateLimitedRef.current = true;
+          setRateLimitBlock(msg);
         }
         console.error("Proactive analysis failed:", error);
       } finally {
