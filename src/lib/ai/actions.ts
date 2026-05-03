@@ -189,6 +189,13 @@ async function callAI(prompt: string, context: string, externalSignal?: AbortSig
         continue;
       }
 
+      if (response.status === 429) {
+        const body = await response.text().catch(() => "");
+        let msg = "AI rate limit reached. Groq allows ~6 000 tokens/minute on the free tier. Wait 60 seconds and try again.";
+        try { msg = (JSON.parse(body) as { error?: string }).error ?? msg; } catch { /* keep default */ }
+        throw new Error(msg);
+      }
+
       if (!response.ok) {
         const errorBody = await response.text().catch(() => "");
         throw new Error(`AI call failed (${response.status}): ${errorBody || response.statusText}`);

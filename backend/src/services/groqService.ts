@@ -97,9 +97,16 @@ const parseJsonTolerant = <T = unknown>(raw: string): T | null => {
   }
 };
 
-// Retry transient 429/5xx with exponential backoff.
-// On 429, prefer the Groq-supplied Retry-After header (seconds) over our own
-// jittered schedule — the header tells us the exact window we must wait.
+function getHeader(headers: unknown, name: string): string | null {
+  if (!headers) return null;
+  if (typeof (headers as { get?: unknown }).get === 'function') {
+    return (headers as { get: (n: string) => string | null }).get(name);
+  }
+  return (headers as Record<string, string | undefined>)[name] ?? null;
+}
+
+// Retry transient 5xx only. 429 propagates immediately — the rate-limit
+// window is typically 60 seconds, which short exponential retries can't outlast.
 async function callGroqWithRetry<T>(fn: () => Promise<T>): Promise<T> {
   const maxAttempts = 3;
   let lastErr: unknown;
@@ -108,14 +115,14 @@ async function callGroqWithRetry<T>(fn: () => Promise<T>): Promise<T> {
       return await fn();
     } catch (err) {
       lastErr = err;
-      const errObj = err as { status?: number; statusCode?: number; headers?: Record<string, string> };
+      const errObj = err as { status?: number; statusCode?: number; headers?: unknown };
       const status = errObj?.status ?? errObj?.statusCode;
-      const retriable = status === 429 || (typeof status === 'number' && status >= 500);
+      const retriable = typeof status === 'number' && status >= 500;
       if (!retriable || attempt === maxAttempts - 1) throw err;
-      const retryAfterSec = errObj?.headers?.['retry-after'];
+      const retryAfterSec = getHeader(errObj?.headers, 'retry-after');
       const backoffMs = retryAfterSec
         ? Math.min(parseInt(retryAfterSec, 10) * 1000, 30_000)
-        : 250 * 2 ** attempt + Math.floor(Math.random() * 100);
+        : 1_000 * 2 ** attempt + Math.floor(Math.random() * 200);
       await new Promise((r) => setTimeout(r, backoffMs));
     }
   }

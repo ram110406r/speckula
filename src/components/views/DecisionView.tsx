@@ -395,7 +395,8 @@ export function DecisionView() {
       activity.ai("Decisions analyzed", `${scored.length} decision${scored.length !== 1 ? "s" : ""} scored`);
     } catch (error) {
       console.error("Decision generation failed:", error);
-      toast.error("AI decision engine failed", "Check your API key and try again.");
+      const msg = error instanceof Error ? error.message : "Check your API key and try again.";
+      toast.error("AI decision engine failed", msg);
     } finally {
       setIsLoading(false);
     }
@@ -475,8 +476,9 @@ export function DecisionView() {
       const prdMarkdown = await generatePRDFromDecisionAction(decision);
       setPendingDecisionForPRD({ title: decision.title, priority: decision.priority, userStory: decision.userStory, tradeoffs: decision.tradeoffs });
       setPrdPreview({ title: decision.title, content: prdMarkdown, decision });
-    } catch {
-      toast.error("Failed to generate PRD from this decision.");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to generate PRD from this decision.";
+      toast.error("PRD generation failed", msg);
     } finally {
       setIsGeneratingPRDFor(null);
     }

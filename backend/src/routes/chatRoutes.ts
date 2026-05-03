@@ -190,12 +190,13 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       fastify.log.error({ err: error }, 'Groq stream init failed');
       const detail = error instanceof Error ? error.message : String(error);
       const status = (error as { status?: number })?.status;
-      const clientMsg =
-        status === 401 ? 'Groq API key is invalid or expired.' :
-        status === 429 ? 'Groq rate limit exhausted — try again in a moment.' :
-        status === 400 ? `Groq rejected the request: ${detail}` :
-        `Upstream AI error: ${detail}`;
-      reply.code(502).send({ ok: false, error: clientMsg });
+      if (status === 429) {
+        reply.code(429).send({ ok: false, error: 'Rate limit reached — Groq is busy. Wait ~60 seconds and try again.' });
+      } else if (status === 401) {
+        reply.code(502).send({ ok: false, error: 'Groq API key is invalid or expired.' });
+      } else {
+        reply.code(502).send({ ok: false, error: `Upstream AI error: ${detail}` });
+      }
       return;
     }
 
@@ -293,9 +294,19 @@ const readPositiveInt = (raw: string | undefined, fallback: number): number => {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
-// Retry Groq stream-create on transient 429/5xx with exponential backoff.
-// On 429, honour Groq's Retry-After header before falling back to our schedule.
-// Anything else (4xx, network) bubbles up immediately.
+// Read a header from either a fetch Headers object or a plain Record.
+function getHeader(headers: unknown, name: string): string | null {
+  if (!headers) return null;
+  if (typeof (headers as { get?: unknown }).get === 'function') {
+    return (headers as { get: (n: string) => string | null }).get(name);
+  }
+  return (headers as Record<string, string | undefined>)[name] ?? null;
+}
+
+// Retry Groq stream-create on transient 5xx only.
+// 429 rate-limits are returned immediately to the caller with a 429 status so
+// the client can surface a helpful message rather than waiting through retries
+// that are too short to outlast a per-minute window.
 async function callGroqWithRetry(
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
 ): Promise<Awaited<ReturnType<any>>> {
@@ -309,18 +320,20 @@ async function callGroqWithRetry(
         messages,
         stream: true,
         temperature: 0.6,
-        max_tokens: 4000,
+        max_tokens: 2048,
       });
     } catch (err) {
       lastErr = err;
-      const errObj = err as { status?: number; statusCode?: number; headers?: Record<string, string> };
+      const errObj = err as { status?: number; statusCode?: number; headers?: unknown };
       const status = errObj?.status ?? errObj?.statusCode;
-      const retriable = status === 429 || (typeof status === 'number' && status >= 500);
+      // 429 surfaces to the caller immediately — retrying within a minute-long
+      // window is pointless and would only exceed the client-side timeout.
+      const retriable = typeof status === 'number' && status >= 500;
       if (!retriable || attempt === maxAttempts - 1) throw err;
-      const retryAfterSec = errObj?.headers?.['retry-after'];
+      const retryAfterSec = getHeader(errObj?.headers, 'retry-after');
       const backoffMs = retryAfterSec
         ? Math.min(parseInt(retryAfterSec, 10) * 1000, 30_000)
-        : 250 * 2 ** attempt + Math.floor(Math.random() * 100);
+        : 1_000 * 2 ** attempt + Math.floor(Math.random() * 200);
       await new Promise((r) => setTimeout(r, backoffMs));
     }
   }
