@@ -556,7 +556,7 @@ export function DecisionView() {
   return (
     <div className="flex flex-col h-full bg-background transition-all duration-300">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0">
+      <div className="flex items-center justify-between px-3 md:px-8 h-14 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-2">
           <Compass className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">Decisions</span>
@@ -567,15 +567,15 @@ export function DecisionView() {
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleExport} disabled={!hasDecisions}>
-            <Download className="mr-1.5 h-3.5 w-3.5" /> Export
+          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleExport} disabled={!hasDecisions} title="Export">
+            <Download className="h-3.5 w-3.5" /><span className="hidden sm:inline ml-1.5">Export</span>
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={openNewDecision} disabled={!currentDocId} title={!currentDocId ? "Select a document first" : undefined}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> New Decision
+          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={openNewDecision} disabled={!currentDocId} title={!currentDocId ? "Select a document first" : "New Decision"}>
+            <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline ml-1.5">New Decision</span>
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleGenerate} disabled={isLoading || !currentDocId}>
-            {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-            {isLoading ? "Thinking…" : "AI Analyze"}
+          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleGenerate} disabled={isLoading || !currentDocId} title={isLoading ? "Thinking…" : "AI Analyze"}>
+            {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline ml-1.5">{isLoading ? "Thinking…" : "AI Analyze"}</span>
           </Button>
         </div>
       </div>
@@ -696,7 +696,7 @@ export function DecisionView() {
       </Dialog>
 
       {/* Main scroll area */}
-      <div className="flex-1 overflow-y-auto p-10 space-y-10 max-w-5xl mx-auto w-full custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4 md:p-10 space-y-6 md:space-y-10 max-w-5xl mx-auto w-full custom-scrollbar">
 
         {/* Score header — only once AI has run */}
         {scoreSummary && (

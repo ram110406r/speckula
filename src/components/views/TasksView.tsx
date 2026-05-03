@@ -323,7 +323,7 @@ export function TasksView() {
   return (
     <div className="flex flex-col h-full bg-background transition-all duration-300">
       {/* Header toolbar */}
-      <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0">
+      <div className="flex items-center justify-between px-3 md:px-8 h-14 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <CheckSquare className="h-4 w-4 text-primary" />
@@ -368,10 +368,10 @@ export function TasksView() {
             className="h-8 text-xs"
             onClick={handleGenerateBasic}
             disabled={isGenerating || !currentDocId}
-            title={!currentDocId ? "Select a document first" : undefined}
+            title={!currentDocId ? "Select a document first" : "Generate from PRD"}
           >
-            {isGenerating ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Zap className="mr-1.5 h-3.5 w-3.5" />}
-            {isGenerating ? "Generating…" : "Generate from PRD"}
+            {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline ml-1.5">{isGenerating ? "Generating…" : "Generate"}</span>
           </Button>
           <Button
             size="sm"
@@ -381,7 +381,8 @@ export function TasksView() {
             disabled={tasks.length === 0}
             title="Export tasks as CSV"
           >
-            <Download className="mr-1 h-3.5 w-3.5" /> Export CSV
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline ml-1">Export</span>
           </Button>
           <Button
             size="sm"
@@ -389,16 +390,17 @@ export function TasksView() {
             className="h-8 text-xs"
             onClick={() => setShowNewTask(true)}
             disabled={!currentDocId}
-            title={!currentDocId ? "Select a document first" : undefined}
+            title={!currentDocId ? "Select a document first" : "New task"}
           >
-            <Plus className="mr-1 h-3.5 w-3.5" /> New task
+            <Plus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline ml-1">New task</span>
           </Button>
         </div>
       </div>
 
       {/* Filter pills — only in list view */}
       {viewMode === "list" && (
-        <div className="flex items-center gap-1.5 px-8 py-3 border-b border-border/40 shrink-0">
+        <div className="flex items-center gap-1.5 px-3 md:px-8 py-3 border-b border-border/40 shrink-0 overflow-x-auto">
           {(["all", ...statusOrder] as const).map(s => (
             <button
               key={s}
@@ -417,7 +419,7 @@ export function TasksView() {
 
       {/* ── List view ─────────────────────────────────────────────────────────── */}
       {viewMode === "list" && (
-        <div className="flex-1 overflow-y-auto p-10 space-y-10 max-w-4xl mx-auto w-full custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3 md:p-10 space-y-6 md:space-y-10 max-w-4xl mx-auto w-full custom-scrollbar">
           {isLoading && (
             <div className="flex flex-col items-center justify-center p-20 gap-3">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -517,14 +519,14 @@ export function TasksView() {
 
       {/* ── Board view ────────────────────────────────────────────────────────── */}
       {viewMode === "board" && (
-        <div className="flex-1 overflow-hidden flex gap-0">
+        <div className="flex-1 overflow-auto flex gap-0">
           {isLoading ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               <span className="text-xs text-muted-foreground">Loading tasks…</span>
             </div>
           ) : (
-            <div className="flex-1 grid grid-cols-3 gap-0 overflow-hidden">
+            <div className="flex-1 grid grid-cols-3 gap-0 min-w-[480px]">
               {statusOrder.map((col) => {
                 const colTasks = tasks.filter(t => t.status === col);
                 const isDragTarget = dragOverCol === col;

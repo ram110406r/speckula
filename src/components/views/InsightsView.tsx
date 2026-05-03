@@ -132,14 +132,14 @@ export function InsightsView() {
   return (
     <div className="flex flex-col h-full transition-colors duration-300 bg-background">
       {/* Status bar */}
-      <div className="flex items-center justify-between px-8 py-3.5 border-b border-border shrink-0 bg-card">
+      <div className="flex items-center justify-between px-4 md:px-8 py-3.5 border-b border-border shrink-0 bg-card">
         <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground/60">EVIDENCE</span>
         <span className="font-mono text-[10px] text-muted-foreground/60">speckula</span>
       </div>
 
-      <div className="flex-1 overflow-auto p-8 custom-scrollbar">
+      <div className="flex-1 overflow-auto p-4 md:p-8 custom-scrollbar">
         {/* Feed header */}
-        <div className="flex items-start justify-between gap-4 mb-8">
+        <div className="flex items-start justify-between gap-4 mb-4 md:mb-8 flex-wrap">
           <div className="flex items-center gap-4">
             <Brain className="h-7 w-7 shrink-0 mt-0.5 text-primary" />
             <div>
@@ -208,7 +208,7 @@ export function InsightsView() {
         </div>
 
         {/* Filter pills */}
-        <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-1">
+        <div className="flex items-center gap-2 mb-4 md:mb-8 overflow-x-auto pb-1">
           {FILTER_PILLS.map(({ id, label }) => (
             <button
               key={id}

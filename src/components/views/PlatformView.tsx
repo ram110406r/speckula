@@ -154,7 +154,7 @@ export function PlatformView() {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <div className="flex items-center justify-between border-b border-border/60 bg-card/60 px-8 h-14 shrink-0">
+      <div className="flex items-center justify-between border-b border-border/60 bg-card/60 px-4 md:px-8 h-14 shrink-0">
         <div className="flex items-center gap-3">
           <Network className="h-4 w-4 text-primary" />
           <span className="label-system text-[12px]">Platform Mode</span>
@@ -178,7 +178,7 @@ export function PlatformView() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-border/40 bg-card/20 px-8 py-3 shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-border/40 bg-card/20 px-4 md:px-8 py-3 shrink-0 overflow-x-auto">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -203,7 +203,7 @@ export function PlatformView() {
             <p className="label-system text-[12px] text-muted-foreground">Loading platform</p>
           </div>
         ) : activeTab === "portfolio" ? (
-          <div className="grid h-full gap-6 lg:grid-cols-[320px_1fr]">
+          <div className="grid gap-6 grid-cols-1 lg:grid-cols-[320px_1fr]">
             {/* Left panel: Case selector */}
             <aside className="h-full">
               <div className="sticky top-6 space-y-4">
@@ -242,7 +242,7 @@ export function PlatformView() {
             {/* Main panel */}
             <main className="space-y-6">
               <section className="rounded-2xl border border-border/60 bg-card p-6">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
                   <div>
                     <h1 className="text-2xl font-semibold">{activeDoc?.title ?? "Untitled Case"}</h1>
                     <p className="text-sm text-muted-foreground mt-1">{activeDoc ? "A living record of this case's evolution" : "Open a case to view its decision timeline"}</p>
@@ -252,7 +252,7 @@ export function PlatformView() {
                       <span className="px-2 py-0.5 rounded-full bg-muted/10 text-[11px]">{decisions.length > 0 ? "Active" : "Draft"}</span>
                     </div>
                   </div>
-                  <div className="min-w-[220px]">
+                  <div className="w-full sm:w-auto sm:min-w-[220px]">
                     <div className="sticky top-6 rounded-xl border border-border bg-white p-4 shadow-sm">
                       <div className="flex items-center justify-between">
                         <div>

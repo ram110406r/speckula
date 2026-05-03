@@ -153,7 +153,7 @@ export function Shell() {
     <div className="flex h-screen w-full flex-col overflow-hidden text-foreground selection:bg-primary/10">
       {/* ── Top bar ── */}
       <header className="relative z-30 shrink-0 border-b border-border/70 bg-card/95 backdrop-blur-md">
-        <div className="flex h-12 items-center gap-3 px-4 md:px-5">
+        <div className="flex h-12 items-center gap-3 pl-14 pr-4 md:px-5">
 
           {/* Left — document title + timestamp */}
           <div className="min-w-0 flex-1 flex items-center gap-2">

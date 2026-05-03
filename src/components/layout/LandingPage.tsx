@@ -45,7 +45,7 @@ export function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <header className="relative z-10 text-center max-w-4xl space-y-10 pt-24 pb-32">
+      <header className="relative z-10 text-center max-w-4xl space-y-8 md:space-y-10 pt-12 pb-16 md:pt-24 md:pb-32">
         <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-primary/5 border border-primary/10 label-system text-[12px] text-primary animate-fade-in shadow-sm">
           <Image src="/logo.svg" alt="" width={14} height={14} className="h-3.5 w-3.5 object-contain" />
           <span>The Decision Engine for Product Teams</span>
@@ -84,7 +84,7 @@ export function LandingPage() {
       </header>
 
       {/* Feature Section */}
-      <section id="features" className="relative z-10 w-full max-w-6xl pb-32">
+      <section id="features" className="relative z-10 w-full max-w-6xl pb-16 md:pb-32">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <FeatureCard 
             icon={<Lightbulb className="h-6 w-6" />}

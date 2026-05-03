@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { LayoutDashboard, Plus, FileText, Clock, Loader2, Download, Copy, Sparkles } from "lucide-react";
+import { LayoutDashboard, Plus, FileText, Clock, Loader2, Download, Copy, Sparkles, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
@@ -102,9 +102,9 @@ export function PRDsView() {
   };
 
   return (
-    <div className="flex h-full bg-background transition-all duration-300">
-      {/* PRD List */}
-      <div className="w-80 shrink-0 border-r border-border/60 flex flex-col bg-background">
+    <div className="flex flex-col md:flex-row h-full bg-background transition-all duration-300">
+      {/* PRD List — full width on mobile, fixed sidebar on desktop; hidden on mobile when a PRD is open */}
+      <div className={`${selectedPRD ? "hidden md:flex" : "flex"} flex-col w-full md:w-80 shrink-0 border-b md:border-b-0 md:border-r border-border/60 bg-background`}>
         <div className="flex items-center justify-between px-6 h-14 border-b border-border/60 shrink-0 bg-card/20">
           <div className="flex items-center gap-2.5">
             <LayoutDashboard className="h-4 w-4 text-primary" />
@@ -185,13 +185,21 @@ export function PRDsView() {
         </div>
       </div>
 
-      {/* PRD Preview */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-card/20">
+      {/* PRD Preview — full-screen on mobile when a PRD is selected, flex-1 on desktop */}
+      <div className={`${!selectedPRD ? "hidden md:flex" : "flex"} flex-1 flex-col overflow-hidden bg-card/20`}>
         {selectedPRD ? (
           <>
-            <div className="flex items-center justify-between px-10 h-14 border-b border-border/60 shrink-0 bg-card/50 backdrop-blur-md">
-              <div className="flex items-center gap-4">
-                <FileText className="h-4 w-4 text-primary/60" />
+            <div className="flex items-center justify-between px-4 md:px-10 h-14 border-b border-border/60 shrink-0 bg-card/50 backdrop-blur-md">
+              <div className="flex items-center gap-2 md:gap-4">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPRD(null)}
+                  className="md:hidden p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  aria-label="Back to list"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <FileText className="h-4 w-4 text-primary/60 hidden md:block" />
                 <div>
                   <h1 className="text-sm tracking-tight text-foreground font-semibold uppercase tracking-[0.05em]">Specification</h1>
                   <div className="flex items-center gap-2">
@@ -211,7 +219,7 @@ export function PRDsView() {
                 </Button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-12 custom-scrollbar">
+            <div className="flex-1 overflow-auto p-4 md:p-12 custom-scrollbar">
               <div className="max-w-3xl mx-auto">
                 <h1 className="mb-6">{selectedPRD.title}</h1>
                 <div className="whitespace-pre-wrap text-[16px] font-normal text-foreground leading-[1.6] selection:bg-primary/10 tracking-tight">
@@ -221,7 +229,7 @@ export function PRDsView() {
             </div>
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center p-20 text-center h-full max-w-lg mx-auto">
+          <div className="flex flex-col items-center justify-center p-8 md:p-20 text-center h-full max-w-lg mx-auto">
             <div className="w-16 h-16 rounded-2xl bg-muted/10 border border-border/40 flex items-center justify-center mb-6">
               <FileText className="h-8 w-8 text-muted-foreground/20" />
             </div>
