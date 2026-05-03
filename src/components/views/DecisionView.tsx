@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Compass, Sparkles, Loader2, Zap, Brain, Search, Lightbulb, AlertTriangle, Download, Plus, Pencil, X } from "lucide-react";
+import { Compass, Globe, Link2, Sparkles, Loader2, Zap, Brain, Search, Lightbulb, AlertTriangle, Download, Plus, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
-import { getDocument, saveDecision, savePRD, deleteDecision, getDecisions, updateDecision } from "@/lib/firebase/db";
+import { getDocument, saveDecision, savePRD, deleteDecision, getDecisions, updateDecision, publishCase, unpublishCase } from "@/lib/firebase/db";
 import {
   suggestDirectionAction,
   strategicGuidanceAction,
@@ -66,6 +66,7 @@ interface ScoredDecision extends DecisionSuggestion {
   decisionId: string;
   scoreBreakdown: OpportunityScoreData;
   score: number;
+  published?: boolean;
 }
 
 interface FeedbackCardState {
@@ -143,6 +144,7 @@ export function DecisionView() {
   const [filter, setFilter] = React.useState<DecisionFilter>("all");
   const [searchTerm, setSearchTerm] = React.useState("");
   const [focusPanelData, setFocusPanelData] = React.useState<FocusPanelData | null>(null);
+  const [publishingDecisionId, setPublishingDecisionId] = React.useState<string | null>(null);
 
   // Manual create / edit dialog
   const [decisionForm, setDecisionForm] = React.useState<DecisionFormState | null>(null);
@@ -179,6 +181,7 @@ export function DecisionView() {
             risks: r.risks,
             score: r.score ?? calculateScore(breakdown),
             scoreBreakdown: breakdown,
+            published: r.published,
           } as ScoredDecision;
         });
         setScoredSuggestions(scored);
@@ -229,12 +232,55 @@ export function DecisionView() {
       );
       setBriefDialog({ open: true, loading: false, data, error: null, decisionId: decision.decisionId });
       activity.ai("Case brief ready", decision.title);
+      updateDecision(user.uid, decision.decisionId, { caseBrief: data })
+        .catch((err) => console.warn("Failed to persist case brief:", err));
     } catch (error) {
       setBriefDialog({
         open: true, loading: false, data: null,
         error: error instanceof Error ? error.message : "Failed to draft brief.",
         decisionId: decision.decisionId,
       });
+    }
+  };
+
+  // ── Publish case brief ───────────────────────────────────────────────────────
+  const handlePublishDecision = async () => {
+    const decisionId = briefDialog.decisionId;
+    const data = briefDialog.data;
+    if (!user || !decisionId || !data) return;
+    const decision = scoredSuggestions.find((d) => d.decisionId === decisionId);
+    if (!decision) return;
+    setPublishingDecisionId(decisionId);
+    try {
+      await publishCase(user.uid, decisionId, data, {
+        title: decision.title,
+        score: decision.score,
+        priority: decision.priority,
+      });
+      setScoredSuggestions((prev) =>
+        prev.map((d) => (d.decisionId === decisionId ? { ...d, published: true } : d))
+      );
+      const url = `${window.location.origin}/case/${decisionId}`;
+      await navigator.clipboard.writeText(url).catch(() => {});
+      toast.success("Case published", "Share link copied to clipboard.");
+      activity.success("Case published", decision.title);
+    } catch {
+      toast.error("Failed to publish case");
+    } finally {
+      setPublishingDecisionId(null);
+    }
+  };
+
+  const handleUnpublishDecision = async (decisionId: string) => {
+    if (!user) return;
+    try {
+      await unpublishCase(user.uid, decisionId);
+      setScoredSuggestions((prev) =>
+        prev.map((d) => (d.decisionId === decisionId ? { ...d, published: false } : d))
+      );
+      toast.success("Case unpublished");
+    } catch {
+      toast.error("Failed to unpublish case");
     }
   };
 
@@ -858,6 +904,13 @@ export function DecisionView() {
         data={briefDialog.data}
         error={briefDialog.error}
         onClose={() => setBriefDialog((prev) => ({ ...prev, open: false }))}
+        onPublish={handlePublishDecision}
+        isPublishing={publishingDecisionId === briefDialog.decisionId && publishingDecisionId !== null}
+        publishedUrl={
+          briefDialog.decisionId && scoredSuggestions.find((d) => d.decisionId === briefDialog.decisionId)?.published
+            ? `${typeof window !== "undefined" ? window.location.origin : ""}/case/${briefDialog.decisionId}`
+            : null
+        }
       />
 
       <FocusPanel
@@ -1045,7 +1098,23 @@ function DecisionGrid({
         })}
         isBriefLoading={isBriefLoading}
         isConverting={isConverting}
-        footer={renderFeedbackFooter(decision)}
+        footer={
+          <>
+            {decision.published && (
+              <div className="px-5 py-2 border-t border-border/60 flex items-center gap-2">
+                <Globe className="h-3 w-3 text-emerald-500" />
+                <span className="text-[10px] text-emerald-600 font-medium">Published</span>
+                <button
+                  className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 underline-offset-2 hover:underline"
+                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/case/${decision.decisionId}`).catch(() => {})}
+                >
+                  <Link2 className="h-2.5 w-2.5 mr-0.5" />Copy link
+                </button>
+              </div>
+            )}
+            {renderFeedbackFooter(decision)}
+          </>
+        }
       />
     );
   };

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Loader2, Printer, X } from "lucide-react";
+import { Globe, Link2, Loader2, Printer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CaseBriefData } from "@/lib/ai/actions";
 
@@ -11,6 +11,9 @@ interface CaseBriefDialogProps {
   data: CaseBriefData | null;
   error: string | null;
   onClose: () => void;
+  onPublish?: () => Promise<void>;
+  isPublishing?: boolean;
+  publishedUrl?: string | null;
 }
 
 const verdictTone: Record<CaseBriefData["verdict"]["recommendation"], string> = {
@@ -19,7 +22,7 @@ const verdictTone: Record<CaseBriefData["verdict"]["recommendation"], string> = 
   Validate: "text-primary",
 };
 
-export function CaseBriefDialog({ open, loading, data, error, onClose }: CaseBriefDialogProps) {
+export function CaseBriefDialog({ open, loading, data, error, onClose, onPublish, isPublishing, publishedUrl }: CaseBriefDialogProps) {
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -57,6 +60,34 @@ export function CaseBriefDialog({ open, loading, data, error, onClose }: CaseBri
               <Printer className="mr-1.5 h-3.5 w-3.5" />
               Print
             </Button>
+            {data && onPublish && (
+              publishedUrl ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-xs text-emerald-600 hover:text-emerald-700"
+                  onClick={() => navigator.clipboard.writeText(publishedUrl).catch(() => {})}
+                >
+                  <Link2 className="mr-1.5 h-3.5 w-3.5" />
+                  Copy Link
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-xs"
+                  onClick={onPublish}
+                  disabled={isPublishing}
+                >
+                  {isPublishing ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Globe className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {isPublishing ? "Publishing…" : "Publish"}
+                </Button>
+              )
+            )}
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onClose} aria-label="Close brief">
               <X className="h-4 w-4" />
             </Button>

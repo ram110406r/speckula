@@ -60,6 +60,29 @@ export interface PRD {
   updatedAt: Timestamp | null;
 }
 
+// Mirrors CaseBriefData from @/lib/ai/actions — duplicated here to avoid
+// circular imports (actions.ts imports from this file).
+export interface CaseBriefData {
+  title: string;
+  context: string;
+  evidence: string[];
+  insights: string[];
+  decision: string;
+  scoring: {
+    impact: number;
+    effort: number;
+    confidence: number;
+    demand: number;
+    score: number;
+    reasoning?: string;
+  };
+  risks: string[];
+  verdict: {
+    recommendation: "Build" | "Delay" | "Validate";
+    rationale: string;
+  };
+}
+
 export interface DecisionRecord {
   id?: string;
   title: string;
@@ -79,8 +102,23 @@ export interface DecisionRecord {
   risks?: string[];
   strategyTheme?: string | null;
   sourceDocId?: string;
+  published?: boolean;
+  caseBrief?: CaseBriefData | null;
   userId: string;
   createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+export interface PublicCase {
+  id?: string;
+  userId: string;
+  decisionId: string;
+  visibility: "public" | "private" | "unlisted";
+  brief: CaseBriefData;
+  decisionTitle: string;
+  score?: number;
+  priority?: "high" | "medium" | "low";
+  publishedAt: Timestamp | null;
   updatedAt: Timestamp | null;
 }
 
@@ -140,6 +178,7 @@ const workspacesCollection = () => collection(db, "workspaces");
 
 const userDocRef = (userId: string, docId: string) => doc(db, "users", userId, "documents", docId);
 const publicProfileRef = (userId: string) => doc(db, "publicProfiles", userId);
+const publicCaseRef = (caseId: string) => doc(db, "publicCases", caseId);
 const workspaceRef = (workspaceId: string) => doc(db, "workspaces", workspaceId);
 
 // --- DOCUMENT ACTIONS ---
@@ -316,6 +355,51 @@ export const updateDecision = async (
   } catch (error) {
     logFirestorePermissionHint("updateDecision", error);
     throw error;
+  }
+};
+
+export const publishCase = async (
+  userId: string,
+  decisionId: string,
+  brief: CaseBriefData,
+  meta: Pick<DecisionRecord, "title" | "score" | "priority">
+): Promise<void> => {
+  try {
+    await setDoc(publicCaseRef(decisionId), {
+      userId,
+      decisionId,
+      visibility: "unlisted",
+      brief,
+      decisionTitle: meta.title,
+      score: meta.score,
+      priority: meta.priority,
+      publishedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await updateDecision(userId, decisionId, { published: true, caseBrief: brief });
+  } catch (error) {
+    logFirestorePermissionHint("publishCase", error);
+    throw error;
+  }
+};
+
+export const unpublishCase = async (userId: string, decisionId: string): Promise<void> => {
+  try {
+    await deleteDoc(publicCaseRef(decisionId));
+    await updateDecision(userId, decisionId, { published: false });
+  } catch (error) {
+    logFirestorePermissionHint("unpublishCase", error);
+    throw error;
+  }
+};
+
+export const getPublicCase = async (caseId: string): Promise<PublicCase | null> => {
+  try {
+    const snap = await getDoc(publicCaseRef(caseId));
+    return snap.exists() ? ({ id: snap.id, ...snap.data() } as PublicCase & { id: string }) : null;
+  } catch (error) {
+    console.error("Error fetching public case:", error);
+    return null;
   }
 };
 

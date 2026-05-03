@@ -100,7 +100,7 @@ service cloud.firestore {
 
     // ── Public Cases ────────────────────────────────────────
     match /publicCases/{caseId} {
-      allow read: if (resource != null && resource.data.visibility == "public") ||
+      allow read: if (resource != null && resource.data.visibility in ["public", "unlisted"]) ||
                      (resource != null && isOwner(resource.data.userId));
 
       // On create: caller must be the listed owner, visibility must be a
