@@ -90,6 +90,7 @@ export function AutonomousModeView() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [isConvertingToSpec, setIsConvertingToSpec] = React.useState(false);
   const [isCreatingTasks, setIsCreatingTasks] = React.useState(false);
+  const [mobileTab, setMobileTab] = React.useState<"input" | "stream" | "output">("input");
 
   const isRunning = agentState !== "idle" && agentState !== "stopped" && agentState !== "error" && agentState !== "output";
   const isDone = agentState === "output";
@@ -149,6 +150,7 @@ export function AutonomousModeView() {
         break;
       case "done":
         appendEntry({ kind: "system", text: "Run complete." });
+        setMobileTab("output");
         break;
     }
   }, [appendEntry]);
@@ -168,6 +170,7 @@ export function AutonomousModeView() {
     setPendingQuestion(null);
     setAnswerText("");
     setAgentState("understand_idea");
+    setMobileTab("stream");
     appendEntry({ kind: "user", text: trimmed });
 
     const controller = new AbortController();
@@ -365,11 +368,29 @@ export function AutonomousModeView() {
         </div>
       </header>
 
+      {/* ── Mobile tab bar (xs/sm/md only) ── */}
+      <div className="lg:hidden flex border-b border-border shrink-0 bg-card">
+        {(["input", "stream", "output"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setMobileTab(tab)}
+            className={`flex-1 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] transition-colors ${
+              mobileTab === tab
+                ? "text-primary border-b-2 border-primary bg-primary/5"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab === "input" ? "Input" : tab === "stream" ? "Stream" : "Output"}
+          </button>
+        ))}
+      </div>
+
       {/* ── Three-panel body ── */}
       <div className="flex-1 flex overflow-hidden">
 
         {/* LEFT: Command input + mode cards + stepper */}
-        <aside className="w-[272px] shrink-0 flex flex-col border-r border-border bg-card overflow-y-auto custom-scrollbar">
+        <aside className={`${mobileTab !== "input" ? "hidden lg:flex" : "flex"} w-full lg:w-[272px] lg:shrink-0 flex-col border-r border-border bg-card overflow-y-auto custom-scrollbar`}>
           <div className="p-5 flex flex-col gap-5">
 
             {/* Command input */}
@@ -463,7 +484,7 @@ export function AutonomousModeView() {
         </aside>
 
         {/* CENTER: Agent stream */}
-        <section className="flex flex-col border-r border-border overflow-hidden" style={{ width: "340px", flexShrink: 0 }}>
+        <section className={`${mobileTab !== "stream" ? "hidden lg:flex" : "flex"} flex-col border-r border-border overflow-hidden w-full lg:w-[340px] lg:shrink-0`}>
           <div className="px-4 py-2.5 border-b border-border shrink-0">
             <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/50">Agent stream</span>
           </div>
@@ -534,7 +555,7 @@ export function AutonomousModeView() {
         </section>
 
         {/* RIGHT: Intelligence output */}
-        <section className="flex-1 flex flex-col overflow-hidden">
+        <section className={`${mobileTab !== "output" ? "hidden lg:flex" : "flex"} flex-1 flex-col overflow-hidden`}>
           <div className="px-6 py-2.5 border-b border-border shrink-0 flex items-center justify-between">
             <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/50">Intelligence output</span>
             {isDone && (

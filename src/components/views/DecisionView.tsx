@@ -615,13 +615,13 @@ export function DecisionView() {
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleExport} disabled={!hasDecisions} title="Export">
+          <Button size="sm" variant="ghost" className="h-10 sm:h-8 text-xs" onClick={handleExport} disabled={!hasDecisions} title="Export">
             <Download className="h-3.5 w-3.5" /><span className="hidden sm:inline ml-1.5">Export</span>
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={openNewDecision} disabled={!currentDocId} title={!currentDocId ? "Select a document first" : "New Decision"}>
+          <Button size="sm" variant="ghost" className="h-10 sm:h-8 text-xs" onClick={openNewDecision} disabled={!currentDocId} title={!currentDocId ? "Select a document first" : "New Decision"}>
             <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline ml-1.5">New Decision</span>
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleGenerate} disabled={isLoading || !currentDocId} title={isLoading ? "Thinking…" : "AI Analyze"}>
+          <Button size="sm" variant="ghost" className="h-10 sm:h-8 text-xs" onClick={handleGenerate} disabled={isLoading || !currentDocId} title={isLoading ? "Thinking…" : "AI Analyze"}>
             {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
             <span className="hidden sm:inline ml-1.5">{isLoading ? "Thinking…" : "AI Analyze"}</span>
           </Button>
@@ -716,7 +716,7 @@ export function DecisionView() {
               {/* Metrics row */}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground">Scoring Metrics (1–10)</label>
-                <div className="grid grid-cols-2 gap-3 mt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
                   {(["impact", "effort", "confidence", "demand"] as const).map((key) => (
                     <div key={key}>
                       <label className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-1 block capitalize">{key}</label>
