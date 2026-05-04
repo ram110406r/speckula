@@ -55,12 +55,17 @@ services:
         NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
         NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     environment:
       BACKEND_URL: http://backend:3001
     depends_on:
       - backend
+    networks:
+      - default
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
 
 volumes:
   pg_data_v2:
