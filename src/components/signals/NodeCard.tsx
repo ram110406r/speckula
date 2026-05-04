@@ -58,7 +58,7 @@ export function NodeCard({ insight, animationDelay = 0, onDelete, onUpdate }: No
     >
       <div className="h-[3px] w-full shrink-0" style={{ backgroundColor: cfg.color }} />
 
-      <div className="flex flex-col gap-4 p-6 flex-1">
+      <div className="flex flex-col gap-4 p-4 sm:p-6 flex-1">
         {/* Type badge + actions */}
         <div className="flex items-center justify-between">
           <span
@@ -68,23 +68,25 @@ export function NodeCard({ insight, animationDelay = 0, onDelete, onUpdate }: No
             <Icon className="h-3 w-3 shrink-0" strokeWidth={2.5} />
             {cfg.label}
           </span>
-          <div className="flex items-center gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity">
             {!editing && (
               <button
                 onClick={startEdit}
                 title="Edit"
-                className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Edit signal"
+                className="h-8 w-8 sm:h-6 sm:w-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
-                <Pencil className="h-3 w-3" />
+                <Pencil className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
               </button>
             )}
             {onDelete && !editing && (
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(insight.id!); }}
                 title="Delete"
-                className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                aria-label="Delete signal"
+                className="h-8 w-8 sm:h-6 sm:w-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
               >
-                <Trash2 className="h-3 w-3" />
+                <Trash2 className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
               </button>
             )}
           </div>
@@ -108,10 +110,10 @@ export function NodeCard({ insight, animationDelay = 0, onDelete, onUpdate }: No
               placeholder="Description"
             />
             <div className="flex gap-1.5 justify-end">
-              <button onClick={cancelEdit} className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-muted-foreground hover:bg-muted transition-colors">
+              <button onClick={cancelEdit} className="flex items-center gap-1 px-3 py-1.5 sm:px-2.5 sm:py-1 rounded-md text-xs text-muted-foreground hover:bg-muted transition-colors">
                 <X className="h-3 w-3" /> Cancel
               </button>
-              <button onClick={commitEdit} className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs bg-primary text-primary-foreground hover:opacity-90 transition-opacity">
+              <button onClick={commitEdit} className="flex items-center gap-1 px-3 py-1.5 sm:px-2.5 sm:py-1 rounded-md text-xs bg-primary text-primary-foreground hover:opacity-90 transition-opacity">
                 <Check className="h-3 w-3" /> Save
               </button>
             </div>

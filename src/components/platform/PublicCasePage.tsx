@@ -49,7 +49,7 @@ export function PublicCasePage({ caseId }: { caseId: string }) {
   const { brief, score, priority } = publicCase;
 
   return (
-    <div className="min-h-screen bg-background py-10 px-4">
+    <div className="min-h-screen bg-background py-6 sm:py-10 px-4">
       <div className="mx-auto max-w-[760px]">
         <div className="mb-6 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
@@ -75,9 +75,9 @@ export function PublicCasePage({ caseId }: { caseId: string }) {
             </span>
           </div>
 
-          <div className="px-10 py-10">
+          <div className="px-4 sm:px-8 md:px-10 py-6 sm:py-10">
             <article>
-              <h1 className="text-3xl font-bold leading-tight tracking-[-0.01em] text-foreground">
+              <h1 className="text-2xl sm:text-3xl font-bold leading-tight tracking-[-0.01em] text-foreground">
                 {brief.title}
               </h1>
 
@@ -119,7 +119,7 @@ export function PublicCasePage({ caseId }: { caseId: string }) {
 
               <section className="mt-8">
                 <p className="text-[10px] uppercase tracking-[0.08em] font-medium text-muted-foreground">Scoring</p>
-                <dl className="mt-3 grid grid-cols-4 gap-x-6 gap-y-2 font-sans">
+                <dl className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-x-3 sm:gap-x-6 gap-y-2 font-sans">
                   {(["impact", "effort", "confidence", "demand"] as const).map((dim) => (
                     <div key={dim} className="flex items-baseline justify-between border-b border-border/50 pb-2">
                       <dt className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{dim}</dt>

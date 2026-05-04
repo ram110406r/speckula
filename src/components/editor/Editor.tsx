@@ -306,12 +306,12 @@ export function Editor() {
     <div className="flex flex-col h-full bg-slate-50 dark:bg-background" onMouseUp={handleMouseUp}>
 
       {/* ── Top bar ── */}
-      <div className="border-b border-border bg-card px-6 py-3 shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="border-b border-border bg-card px-3 sm:px-6 py-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Input
             value={currentDoc?.title ?? "Untitled Document"}
             onChange={(e) => handleTitleChange(e.target.value)}
-            className="h-9 flex-1 max-w-[480px] rounded-md border-border/70 bg-transparent px-2 text-sm font-medium focus-visible:bg-background"
+            className="h-10 sm:h-9 flex-1 max-w-full sm:max-w-[480px] rounded-md border-border/70 bg-transparent px-2 text-sm font-medium focus-visible:bg-background"
             placeholder="Document title"
           />
           {isSaving && <span className="text-xs text-muted-foreground">Saving…</span>}
@@ -346,7 +346,7 @@ export function Editor() {
       <div className="flex-1 overflow-hidden flex">
 
         {/* Center: structured blocks */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-5 space-y-4 custom-scrollbar">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/50">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -375,8 +375,8 @@ export function Editor() {
           )}
         </div>
 
-        {/* Right: Insight Engine */}
-        <aside className="w-[300px] shrink-0 border-l border-border bg-card flex flex-col overflow-hidden">
+        {/* Right: Insight Engine — hidden on mobile, visible on lg+ */}
+        <aside className="hidden lg:flex w-[300px] shrink-0 border-l border-border bg-card flex-col overflow-hidden">
           <InsightEngine
             analysis={analysis}
             isAnalyzing={isAnalyzing}
@@ -408,8 +408,8 @@ function scoreColor(v: number, invert = false) {
 
 function HealthScoreBar({ health }: { health: ReturnType<typeof computeHealth> }) {
   return (
-    <div className="px-6 py-2.5 bg-card border-b border-border shrink-0">
-      <div className="flex items-center gap-5">
+    <div className="px-3 sm:px-6 py-2.5 bg-card border-b border-border shrink-0">
+      <div className="flex items-center gap-3 sm:gap-5">
         <div className="flex items-center gap-2 shrink-0">
           <span className={`font-mono text-xl font-bold tabular-nums leading-none ${
             health.overall >= 65 ? "text-emerald-600" : health.overall >= 35 ? "text-amber-500" : "text-rose-500"
@@ -422,7 +422,7 @@ function HealthScoreBar({ health }: { health: ReturnType<typeof computeHealth> }
           </div>
         </div>
         <div className="w-px h-5 bg-border shrink-0" />
-        <div className="flex gap-4 flex-1 min-w-0">
+        <div className="flex gap-2 sm:gap-4 flex-1 min-w-0">
           {[
             { label: "Completeness", value: health.completeness, invert: false },
             { label: "Clarity",      value: health.clarity,      invert: false },

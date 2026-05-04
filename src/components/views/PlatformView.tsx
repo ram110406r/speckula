@@ -163,7 +163,7 @@ export function PlatformView() {
           <Button
             variant="outline"
             size="sm"
-            className="h-8 label-system text-[12px]"
+            className="h-10 sm:h-8 label-system text-[12px]"
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(publicProfileLink);
@@ -197,7 +197,7 @@ export function PlatformView() {
         })}
       </div>
 
-      <div className="flex-1 overflow-auto p-6 custom-scrollbar">
+      <div className="flex-1 overflow-auto p-3 sm:p-6 custom-scrollbar">
         {isLoading ? (
           <div className="flex h-80 items-center justify-center rounded-2xl border border-dashed border-border/40 bg-card">
             <p className="label-system text-[12px] text-muted-foreground">Loading platform</p>
@@ -206,7 +206,7 @@ export function PlatformView() {
           <div className="grid gap-6 grid-cols-1 lg:grid-cols-[320px_1fr]">
             {/* Left panel: Case selector */}
             <aside className="h-full">
-              <div className="sticky top-6 space-y-4">
+              <div className="lg:sticky lg:top-6 space-y-4">
                 <div className="rounded-2xl border border-border/60 bg-card p-4">
                   <p className="label-system text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Cases</p>
                   <div className="mt-3 space-y-2">
@@ -241,19 +241,19 @@ export function PlatformView() {
 
             {/* Main panel */}
             <main className="space-y-6">
-              <section className="rounded-2xl border border-border/60 bg-card p-6">
+              <section className="rounded-2xl border border-border/60 bg-card p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                  <div>
-                    <h1 className="text-2xl font-semibold">{activeDoc?.title ?? "Untitled Case"}</h1>
+                  <div className="min-w-0 w-full sm:w-auto">
+                    <h1 className="text-xl sm:text-2xl font-semibold">{activeDoc?.title ?? "Untitled Case"}</h1>
                     <p className="text-sm text-muted-foreground mt-1">{activeDoc ? "A living record of this case's evolution" : "Open a case to view its decision timeline"}</p>
-                      <div className="mt-3 text-[12px] text-muted-foreground flex items-center gap-4">
+                      <div className="mt-3 text-[12px] text-muted-foreground flex items-center gap-3 sm:gap-4 flex-wrap">
                       <span><Clock className="mr-1 inline h-3 w-3" /> {millisFromTimestamp(activeDoc?.updatedAt) ? new Date(millisFromTimestamp(activeDoc?.updatedAt) as number).toLocaleString() : "-"}</span>
                       <span>{decisions.length} decisions</span>
                       <span className="px-2 py-0.5 rounded-full bg-muted/10 text-[11px]">{decisions.length > 0 ? "Active" : "Draft"}</span>
                     </div>
                   </div>
-                  <div className="w-full sm:w-auto sm:min-w-[220px]">
-                    <div className="sticky top-6 rounded-xl border border-border bg-white p-4 shadow-sm">
+                  <div className="w-full sm:w-auto sm:min-w-[220px] sm:shrink-0">
+                    <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-xs text-muted-foreground">Score</p>
