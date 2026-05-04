@@ -22,7 +22,7 @@ function Btn({ onClick, active, disabled, title, children }: ToolbarButtonProps)
       onMouseDown={(e) => { e.preventDefault(); onClick(); }}
       disabled={disabled}
       title={title}
-      className={`flex items-center justify-center w-7 h-7 rounded-md text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-30 ${
+      className={`flex items-center justify-center w-9 h-9 md:w-7 md:h-7 rounded-md text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-30 ${
         active
           ? "bg-primary/10 text-primary"
           : "text-muted-foreground hover:bg-muted hover:text-foreground"

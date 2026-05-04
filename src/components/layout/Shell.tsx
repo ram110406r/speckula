@@ -229,6 +229,37 @@ export function Shell() {
           </div>
         )}
       </div>
+
+      {/* ── Mobile AI panel overlay (xs/sm/md — below lg) ── */}
+      {showAIPanel && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+            onClick={toggleAiPanel}
+          />
+          {/* Slide-in panel */}
+          <div className="fixed top-0 right-0 h-full w-[90vw] max-w-sm z-50 border-l border-border/70 bg-card shadow-2xl lg:hidden flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 shrink-0">
+              <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                Ask AI
+              </span>
+              <button
+                type="button"
+                onClick={toggleAiPanel}
+                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Close AI panel"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <AIPanel />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
