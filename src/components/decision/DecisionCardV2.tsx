@@ -154,18 +154,18 @@ export function DecisionCardV2({
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit(); }}
                 title="Edit decision"
-                className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+                className="md:opacity-0 md:group-hover:opacity-100 h-8 w-8 sm:h-6 sm:w-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
               >
-                <Pencil className="h-3 w-3" />
+                <Pencil className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
               </button>
             )}
             {onDelete && (
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 title="Delete decision"
-                className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                className="md:opacity-0 md:group-hover:opacity-100 h-8 w-8 sm:h-6 sm:w-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
               >
-                <Trash2 className="h-3 w-3" />
+                <Trash2 className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
               </button>
             )}
           </div>
@@ -213,7 +213,7 @@ export function DecisionCardV2({
 
       {/* Metrics strip */}
       <div className="px-5 py-3 bg-muted/15 border-t border-border/60">
-        <dl className="grid grid-cols-4 gap-x-3">
+        <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2">
           {(
             [
               ["Impact", metrics.impact],

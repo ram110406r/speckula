@@ -153,7 +153,7 @@ export function FocusPanel({
         className="fixed right-0 top-0 bottom-0 z-50 flex w-full max-w-[480px] flex-col border-l border-border/60 bg-card shadow-2xl animate-brief-expand"
       >
         {/* Sticky header */}
-        <div className="shrink-0 flex items-start justify-between gap-4 border-b border-border/60 bg-card/95 backdrop-blur-md px-6 py-4">
+        <div className="shrink-0 flex items-start justify-between gap-2 sm:gap-4 border-b border-border/60 bg-card/95 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center gap-4 min-w-0">
             {/* Score badge */}
             <div
@@ -184,7 +184,7 @@ export function FocusPanel({
           </div>
           <button
             onClick={onClose}
-            className="mt-0.5 shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="mt-0.5 shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Close focus panel"
           >
             <X className="h-4 w-4" />
@@ -192,7 +192,7 @@ export function FocusPanel({
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           {/* AI health reason */}
           {data.health.reason && (
             <div className="flex items-start gap-2.5 rounded-r-md border-l-2 border-l-primary/50 bg-primary/[0.04] px-3 py-2.5">
@@ -335,7 +335,7 @@ export function FocusPanel({
         </div>
 
         {/* Sticky footer actions */}
-        <div className="shrink-0 border-t border-border/60 bg-card/95 backdrop-blur-md px-6 py-4 space-y-2">
+        <div className="shrink-0 border-t border-border/60 bg-card/95 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4 space-y-2">
           <Button
             className="w-full"
             onClick={onGenerateBrief}

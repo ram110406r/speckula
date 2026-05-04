@@ -79,7 +79,7 @@ export function DecisionHeaderCard({
   ];
 
   return (
-    <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
+    <section className="rounded-2xl border border-border/60 bg-card p-4 sm:p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
       <header className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium ${pillCls}`}>
@@ -147,7 +147,7 @@ export function DecisionHeaderCard({
 
       <div className="my-5 h-px bg-border/60" />
 
-      <dl className="grid grid-cols-4 gap-3">
+      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         {metrics.map(([label, value]) => {
           const isLowConfidence = label === "Confidence" && value < 5;
           return (
@@ -187,7 +187,7 @@ export function DecisionHeaderCard({
             <span className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground">Score Trend</span>
             <span className="text-[10px] text-muted-foreground/70 tabular-nums">{visibleHistory.length} runs</span>
           </div>
-          <div className="flex h-10 items-end gap-1">
+          <div className="flex h-10 items-end gap-0.5 sm:gap-1">
             {visibleHistory.map((entry, index) => (
               <div
                 key={`${entry.timestamp}-${index}`}
