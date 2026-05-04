@@ -79,15 +79,21 @@ export function NotificationBell({ collapsed }: Props) {
 
       {open && coords && createPortal(
         <div
-          style={{
-            position: "absolute",
-            top: coords.top,
-            left: Math.max(8, collapsed ? coords.left : coords.right - 320),
-            width: 320,
-            zIndex: 99999,
-            transform: "translateY(-8px) translateY(-100%)",
-          }}
-          className={`rounded-xl border border-border bg-card shadow-2xl overflow-hidden`}
+          style={(() => {
+            const vw = window.innerWidth;
+            const panelWidth = Math.min(320, vw - 16);
+            const idealLeft = collapsed ? coords.left : coords.right - panelWidth;
+            const left = Math.max(8, Math.min(idealLeft, vw - panelWidth - 8));
+            return {
+              position: "absolute" as const,
+              top: coords.top,
+              left,
+              width: panelWidth,
+              zIndex: 99999,
+              transform: "translateY(-8px) translateY(-100%)",
+            };
+          })()}
+          className="rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border/60 bg-muted/20">

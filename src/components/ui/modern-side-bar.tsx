@@ -269,7 +269,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
                         setMobileOpen(false);
                       }}
                       className={`
-                        relative flex h-8 w-full items-center rounded-md text-left text-xs transition-colors
+                        relative flex h-10 md:h-8 w-full items-center rounded-md text-left text-xs transition-colors
                         ${isCollapsed ? "justify-center px-2" : "gap-2.5 px-2.5"}
                         ${isActive
                           ? "bg-accent text-primary font-medium before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-full before:bg-primary"
@@ -325,7 +325,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
                 return (
                   <li
                     key={document.id}
-                    className={`group flex items-center gap-1.5 px-2 h-7 rounded-md transition-colors ${
+                    className={`group flex items-center gap-1.5 px-2 h-9 md:h-7 rounded-md transition-colors ${
                       isActive ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     } ${isRenaming ? "cursor-default" : "cursor-pointer"}`}
                     onClick={() => { if (!isRenaming) { setCurrentDocId(document.id); setActiveView("editor"); } }}
@@ -427,7 +427,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
                 <NotificationBell collapsed={isCollapsed} />
                 <button
                   onClick={toggleTheme}
-                  className="flex items-center gap-1.5 flex-1 justify-center h-7 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2"
+                  className="flex items-center gap-1.5 flex-1 justify-center h-9 md:h-7 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2"
                 >
                   {isDarkMode
                     ? <SunMedium className="h-3.5 w-3.5" />
@@ -437,7 +437,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
                 </button>
                 <button
                   onClick={logout}
-                  className="flex items-center gap-1.5 flex-1 justify-center h-7 rounded-md text-[11px] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors px-2"
+                  className="flex items-center gap-1.5 flex-1 justify-center h-9 md:h-7 rounded-md text-[11px] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors px-2"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                   Sign out
@@ -474,7 +474,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed top-3.5 left-4 z-50 p-1.5 rounded-md bg-card border border-border shadow-sm md:hidden hover:bg-muted transition-colors"
+        className="fixed top-3 left-3 z-50 p-2 rounded-md bg-card border border-border shadow-sm md:hidden hover:bg-muted transition-colors"
         aria-label="Open navigation"
       >
         <Menu className="h-4 w-4 text-muted-foreground" />
@@ -490,13 +490,13 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
 
       {/* Mobile drawer */}
       <div
-        className={`fixed top-0 left-0 h-full w-64 z-50 shadow-xl transition-transform duration-300 md:hidden ${
+        className={`fixed top-0 left-0 h-full w-[80vw] max-w-[280px] z-50 shadow-xl transition-transform duration-300 md:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <button
           onClick={() => setMobileOpen(false)}
-          className="absolute top-3 right-3 z-10 p-1 rounded-md hover:bg-muted transition-colors"
+          className="absolute top-3 right-3 z-10 p-2 rounded-md hover:bg-muted transition-colors"
           aria-label="Close navigation"
         >
           <X className="h-4 w-4 text-muted-foreground" />

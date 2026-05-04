@@ -519,14 +519,14 @@ export function TasksView() {
 
       {/* ── Board view ────────────────────────────────────────────────────────── */}
       {viewMode === "board" && (
-        <div className="flex-1 overflow-auto flex gap-0">
+        <div className="flex-1 overflow-x-auto overflow-y-hidden flex gap-0">
           {isLoading ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               <span className="text-xs text-muted-foreground">Loading tasks…</span>
             </div>
           ) : (
-            <div className="flex-1 grid grid-cols-3 gap-0 min-w-[480px]">
+            <div className="flex-1 grid grid-cols-3 gap-0 min-w-[480px] h-full">
               {statusOrder.map((col) => {
                 const colTasks = tasks.filter(t => t.status === col);
                 const isDragTarget = dragOverCol === col;
@@ -665,7 +665,7 @@ export function TasksView() {
                   <p className="text-sm mt-1 whitespace-pre-wrap">{selectedTask.description}</p>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground">Status</label>
                   <select
@@ -691,7 +691,7 @@ export function TasksView() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-1">
                     <CalendarDays className="h-3.5 w-3.5" /> Due Date
