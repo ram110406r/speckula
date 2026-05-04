@@ -19,8 +19,8 @@ const plexMono = IBM_Plex_Mono({
 
 
 export const metadata: Metadata = {
-  title: "Speckula - AI-Native Product Intelligence",
-  description: "The AI-first workspace for product discovery and execution.",
+  title: "Speckula — Build the Right Product",
+  description: "AI-powered decision intelligence for product teams.",
 };
 
 export default function RootLayout({
