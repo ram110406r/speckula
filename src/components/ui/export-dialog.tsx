@@ -48,7 +48,7 @@ export function ExportDialog() {
       onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}
     >
       <div
-        className="relative w-full max-w-sm rounded-xl border border-border bg-card shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-150"
+        className="relative w-full max-w-sm mx-4 rounded-xl border border-border bg-card shadow-2xl p-4 sm:p-6 animate-in fade-in zoom-in-95 duration-150"
         onKeyDown={handleKey}
       >
         {/* Close */}
@@ -71,7 +71,7 @@ export function ExportDialog() {
             type="text"
             value={filename}
             onChange={(e) => setFilename(e.target.value)}
-            className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
+            className="w-full h-11 sm:h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
             placeholder="filename"
           />
         </div>
@@ -108,15 +108,15 @@ export function ExportDialog() {
         )}
 
         {/* Actions */}
-        <div className="flex gap-2 justify-end">
-          <Button variant="ghost" size="sm" onClick={close} className="h-8 text-xs">
+        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+          <Button variant="ghost" size="sm" onClick={close} className="h-10 sm:h-8 text-xs w-full sm:w-auto">
             Cancel
           </Button>
           <Button
             size="sm"
             onClick={handleExport}
             disabled={exporting || !filename.trim()}
-            className="h-8 text-xs gap-1.5"
+            className="h-10 sm:h-8 text-xs gap-1.5 w-full sm:w-auto"
           >
             <Download className="h-3.5 w-3.5" />
             {exporting ? "Exporting…" : "Export"}
