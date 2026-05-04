@@ -276,7 +276,7 @@ export function SlackView() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-3 border-b border-border/70 px-6 py-4">
+      <div className="flex items-center justify-between gap-3 border-b border-border/70 px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center gap-3">
           <MessageSquare className="h-5 w-5 text-primary" />
           <div>
@@ -294,7 +294,7 @@ export function SlackView() {
             <select
               value={activeTeamId ?? ""}
               onChange={(e) => setActiveTeamId(e.target.value)}
-              className="h-8 rounded-md border border-border bg-card px-2 text-sm"
+              className="h-10 sm:h-8 rounded-md border border-border bg-card px-2 text-sm"
             >
               {workspaces.map((ws) => (
                 <option key={ws.teamId} value={ws.teamId}>
@@ -330,7 +330,7 @@ export function SlackView() {
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-6 py-3">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-4 sm:px-6 py-3">
             <span className="text-xs text-muted-foreground">
               {activeWorkspace?.selectedChannels?.length
                 ? `Syncing ${activeWorkspace.selectedChannels.length} channel${activeWorkspace.selectedChannels.length === 1 ? "" : "s"}`
@@ -350,7 +350,7 @@ export function SlackView() {
             </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
             {messages.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
                 <p>No messages yet for this workspace.</p>

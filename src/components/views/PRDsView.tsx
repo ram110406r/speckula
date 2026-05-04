@@ -194,7 +194,7 @@ export function PRDsView() {
                 <button
                   type="button"
                   onClick={() => setSelectedPRD(null)}
-                  className="md:hidden p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  className="md:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                   aria-label="Back to list"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -211,11 +211,11 @@ export function PRDsView() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={handleCopy} className="h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-3 bg-card transition-all">
-                  <Copy className="h-3 w-3 mr-1.5" /> Copy
+                <Button size="sm" variant="outline" onClick={handleCopy} className="h-10 sm:h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-3 bg-card transition-all">
+                  <Copy className="h-3 w-3 mr-1.5" /><span className="hidden xs:inline">Copy</span>
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleExport} className="h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-3 bg-card transition-all">
-                  <Download className="h-3 w-3 mr-1.5" /> Export .md
+                <Button size="sm" variant="outline" onClick={handleExport} className="h-10 sm:h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-3 bg-card transition-all">
+                  <Download className="h-3 w-3 mr-1.5" /><span className="hidden xs:inline">Export</span>
                 </Button>
               </div>
             </div>

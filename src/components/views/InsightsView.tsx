@@ -143,7 +143,7 @@ export function InsightsView() {
           <div className="flex items-center gap-4">
             <Brain className="h-7 w-7 shrink-0 mt-0.5 text-primary" />
             <div>
-              <h1 className="text-[28px] font-semibold leading-none tracking-tight text-foreground">Intelligence Feed</h1>
+              <h1 className="text-xl sm:text-[28px] font-semibold leading-none tracking-tight text-foreground">Intelligence Feed</h1>
               <span className="font-mono text-[11px] uppercase tracking-[0.08em] mt-1 block text-muted-foreground/60">
                 {insights.length} {insights.length === 1 ? "Node" : "Nodes"}
                 {selectMode && selected.size > 0 && ` · ${selected.size} selected`}
@@ -151,7 +151,7 @@ export function InsightsView() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0 flex-wrap justify-end">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap justify-end w-full sm:w-auto">
             {/* Bulk delete toolbar */}
             {selectMode && (
               <>
@@ -197,7 +197,7 @@ export function InsightsView() {
                 <button
                   onClick={handleExtract}
                   disabled={isExtracting || !currentDocId}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-[4px] font-mono text-[12px] font-medium text-primary-foreground bg-primary transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-[4px] font-mono text-[12px] font-medium text-primary-foreground bg-primary transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isExtracting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {isExtracting ? "Processing…" : "Extract with AI"}
