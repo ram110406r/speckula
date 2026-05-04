@@ -21,6 +21,13 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Speckula — Build the Right Product",
   description: "AI-powered decision intelligence for product teams.",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export const viewport: Viewport = {
