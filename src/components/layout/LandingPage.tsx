@@ -14,7 +14,7 @@ export function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background text-foreground flex flex-col items-center p-6 selection:bg-primary/10">
+    <div className="min-h-screen w-full bg-background text-foreground flex flex-col items-center px-4 py-4 sm:p-6 selection:bg-primary/10">
       {/* Navigation */}
       <nav className="w-full max-w-6xl h-20 flex items-center justify-between px-4 z-10 border-b border-border/40">
         <div className="flex items-center gap-2.5">
@@ -45,25 +45,25 @@ export function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <header className="relative z-10 text-center max-w-4xl space-y-8 md:space-y-10 pt-12 pb-16 md:pt-24 md:pb-32">
+      <header className="relative z-10 text-center max-w-4xl space-y-6 md:space-y-10 pt-8 pb-10 md:pt-24 md:pb-32">
         <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-primary/5 border border-primary/10 label-system text-[12px] text-primary animate-fade-in shadow-sm">
           <Image src="/logo.svg" alt="" width={14} height={14} className="h-3.5 w-3.5 object-contain" />
           <span>The Decision Engine for Product Teams</span>
         </div>
         
-        <h1 className="text-3xl md:text-5xl font-semibold tracking-tight leading-[1.1] text-foreground">
+        <h1 className="text-2xl sm:text-3xl md:text-5xl font-semibold tracking-tight leading-[1.1] text-foreground">
           Build better products. <br /> 
           <span className="text-primary/90 italic serif">With precision.</span>
         </h1>
         
-        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed font-medium">
+        <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed font-medium">
           The first AI-native workspace that transforms raw notes into insights, PRDs, and structured roadmaps in seconds.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-5 pt-6">
-          <Button 
-            size="lg" 
-            className="h-11 px-8 label-system text-[12px] bg-primary text-white hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all rounded-lg group"
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-5 pt-4 sm:pt-6 w-full sm:w-auto">
+          <Button
+            size="lg"
+            className="h-12 sm:h-11 w-full sm:w-auto px-8 label-system text-[12px] bg-primary text-white hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all rounded-lg group"
             onClick={loginWithGoogle}
             disabled={loading}
           >
@@ -71,10 +71,10 @@ export function LandingPage() {
             <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </Button>
           
-          <Button 
-            size="lg" 
+          <Button
+            size="lg"
             variant="secondary"
-            className="h-11 px-8 label-system text-[12px] bg-card border border-border shadow-sm hover:bg-secondary/20 transition-all"
+            className="h-12 sm:h-11 w-full sm:w-auto px-8 label-system text-[12px] bg-card border border-border shadow-sm hover:bg-secondary/20 transition-all"
             type="button"
             onClick={() => scrollToSection("features")}
           >
@@ -84,7 +84,7 @@ export function LandingPage() {
       </header>
 
       {/* Feature Section */}
-      <section id="features" className="relative z-10 w-full max-w-6xl pb-16 md:pb-32">
+      <section id="features" className="relative z-10 w-full max-w-6xl pb-10 md:pb-32">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <FeatureCard 
             icon={<Lightbulb className="h-6 w-6" />}
@@ -105,17 +105,17 @@ export function LandingPage() {
       </section>
 
       {/* Philosophy Section */}
-      <section id="philosophy" className="w-full bg-card border-y border-border py-24 flex flex-col items-center">
-        <div className="max-w-3xl text-center space-y-6 px-6">
-          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">Calm. Focused. Precise.</h2>
-          <p className="text-lg text-muted-foreground leading-relaxed">
+      <section id="philosophy" className="w-full bg-card border-y border-border py-14 md:py-24 flex flex-col items-center">
+        <div className="max-w-3xl text-center space-y-4 md:space-y-6 px-4 sm:px-6">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight">Calm. Focused. Precise.</h2>
+          <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
             Product tools are noisy. Speckula is built as a focused environment where the logic of your product wins — no distractions, no dashboards for the sake of dashboards.
           </p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="mt-auto py-12 w-full max-w-6xl flex flex-col items-center gap-4 border-t border-border/40">
+      <footer className="mt-auto py-8 md:py-12 w-full max-w-6xl flex flex-col items-center gap-4 border-t border-border/40">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5 text-primary/60" />
           <span>Secured with Google Cloud Identity</span>
@@ -128,7 +128,7 @@ export function LandingPage() {
 
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
-    <div className="bg-card border border-border p-8 rounded-xl hover:border-primary/30 transition-colors flex flex-col gap-5">
+    <div className="bg-card border border-border p-5 sm:p-8 rounded-xl hover:border-primary/30 transition-colors flex flex-col gap-4 sm:gap-5">
       <div className="w-10 h-10 rounded-lg bg-primary/5 flex items-center justify-center text-primary">
         {icon}
       </div>

@@ -204,6 +204,14 @@
   .caption { @apply text-[12px] leading-[1.6]; }
 }
 
+/* ── Tiptap responsive typography (mobile-first) ─────────────────────────── */
+@media (max-width: 640px) {
+  .tiptap h1 { font-size: 24px; }
+  .tiptap h2 { font-size: 20px; }
+  .tiptap h3 { font-size: 17px; }
+  .tiptap p, .tiptap li { font-size: 15px; }
+}
+
 .tiptap p.is-editor-empty:first-child::before {
   color: var(--muted-foreground);
   content: attr(data-placeholder);
@@ -277,8 +285,27 @@
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
+/* Safe area support (notches, Dynamic Island, home indicator)                */
+/* ────────────────────────────────────────────────────────────────────────── */
+:root {
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
 /* Animations                                                                 */
 /* ────────────────────────────────────────────────────────────────────────── */
+@keyframes bc-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: bc-fade-in 400ms ease-out both;
+}
+
 @keyframes bc-fade-up {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -307,6 +334,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
   .animate-fade-up,
   .animate-pushback-flash,
   .animate-brief-expand {
