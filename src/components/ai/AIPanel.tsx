@@ -695,8 +695,8 @@ export function AIPanel() {
                 key={m.id}
                 className={`rounded-xl text-sm p-3 ${
                   m.role === "user"
-                    ? "bg-primary/10 text-foreground ml-4 border border-primary/20"
-                    : "bg-card border border-border/60 mr-4"
+                    ? "bg-primary/10 text-foreground ml-2 sm:ml-4 border border-primary/20"
+                    : "bg-card border border-border/60 mr-2 sm:mr-4"
                 }`}
               >
                 <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground mb-1.5 block">
@@ -752,7 +752,7 @@ export function AIPanel() {
             type="submit"
             disabled={isLoading || !input.trim()}
             size="icon"
-            className="h-9 w-9 shrink-0 rounded-xl text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+            className="h-11 w-11 sm:h-9 sm:w-9 shrink-0 rounded-xl text-white hover:opacity-90 transition-opacity disabled:opacity-40"
             style={{ backgroundColor: "#7E43F5" }}
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-3.5 w-3.5" />}

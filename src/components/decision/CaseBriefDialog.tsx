@@ -40,7 +40,7 @@ export function CaseBriefDialog({ open, loading, data, error, onClose, onPublish
       onClick={onClose}
     >
       <div
-        className="my-8 w-full max-w-[760px] rounded-xl border border-border bg-card shadow-2xl animate-brief-expand print:my-0 print:max-w-none print:w-full print:rounded-none print:border-0 print:shadow-none"
+        className="my-4 sm:my-8 w-full max-w-[760px] rounded-xl border border-border bg-card shadow-2xl animate-brief-expand print:my-0 print:max-w-none print:w-full print:rounded-none print:border-0 print:shadow-none"
         onClick={(e) => e.stopPropagation()}
         data-print-region
       >
@@ -95,7 +95,7 @@ export function CaseBriefDialog({ open, loading, data, error, onClose, onPublish
         </div>
 
         {/* Body */}
-        <div className="px-12 py-12 print:px-0 print:py-0 case-brief-body">
+        <div className="px-4 sm:px-8 md:px-12 py-6 sm:py-10 md:py-12 print:px-0 print:py-0 case-brief-body">
           {loading && (
             <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -111,7 +111,7 @@ export function CaseBriefDialog({ open, loading, data, error, onClose, onPublish
 
           {!loading && data && (
             <article className="case-brief-article">
-              <h1 className="text-3xl font-bold leading-tight tracking-[-0.01em] text-foreground">
+              <h1 className="text-2xl sm:text-3xl font-bold leading-tight tracking-[-0.01em] text-foreground">
                 {data.title}
               </h1>
 
@@ -153,7 +153,7 @@ export function CaseBriefDialog({ open, loading, data, error, onClose, onPublish
 
               <section className="mt-8">
                 <p className="case-brief-meta">Scoring</p>
-                <dl className="grid grid-cols-4 gap-x-6 gap-y-2 mt-3 font-sans">
+                <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 sm:gap-x-6 gap-y-2 mt-3 font-sans">
                   {(["impact", "effort", "confidence", "demand"] as const).map((dim) => (
                     <div key={dim} className="flex items-baseline justify-between border-b border-border/50 pb-2">
                       <dt className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{dim}</dt>
