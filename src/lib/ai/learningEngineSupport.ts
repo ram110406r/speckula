@@ -1,8 +1,9 @@
 import { auth } from "../firebase/config";
+import type { PromptMeta } from "./promptLibrary";
 
 const REQUEST_TIMEOUT_MS = 30000;
 
-export async function callAI(prompt: string, context: string) {
+export async function callAI(prompt: string, context: string, meta?: PromptMeta) {
   const user = auth.currentUser;
   if (!user) {
     throw new Error("Authentication required.");
@@ -30,6 +31,7 @@ export async function callAI(prompt: string, context: string) {
             content: `Product Notes:\n${context}\n\nTask: ${prompt}`,
           },
         ],
+        ...(meta ? { _meta: meta } : {}),
       }),
       signal: controller.signal,
     });
