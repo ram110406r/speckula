@@ -92,6 +92,57 @@ function fmtPercent(n: number | null): string {
   return `${(n * 100).toFixed(0)}%`;
 }
 
+// Leaderboard: per promptId, sort versions DESC by avgAccuracyNorm and
+// compute the delta to the next-best version. Only versions with at least
+// some outcome data participate.
+interface LeaderboardEntry {
+  promptId: string;
+  versions: Array<{
+    version: string;
+    avgAccuracyNorm: number | null;
+    hitRate: number | null;
+    avgCalibrationError: number | null;
+    runs: number;
+    deltaVsNext: number | null; // accuracy delta to the next-best version
+  }>;
+}
+
+function buildLeaderboard(rows: MergedRow[]): LeaderboardEntry[] {
+  const byPrompt = new Map<string, MergedRow[]>();
+  for (const r of rows) {
+    if (!r.promptId || r.outcomeRuns === 0) continue;
+    const list = byPrompt.get(r.promptId) ?? [];
+    list.push(r);
+    byPrompt.set(r.promptId, list);
+  }
+
+  return Array.from(byPrompt.entries())
+    .map(([promptId, rs]) => {
+      const sorted = [...rs].sort(
+        (a, b) => (b.avgAccuracyNorm ?? -Infinity) - (a.avgAccuracyNorm ?? -Infinity)
+      );
+      return {
+        promptId,
+        versions: sorted.map((r, i) => {
+          const next = sorted[i + 1];
+          const delta =
+            next && r.avgAccuracyNorm !== null && next.avgAccuracyNorm !== null
+              ? r.avgAccuracyNorm - next.avgAccuracyNorm
+              : null;
+          return {
+            version: r.promptVersion ?? "—",
+            avgAccuracyNorm: r.avgAccuracyNorm,
+            hitRate: r.hitRate,
+            avgCalibrationError: r.avgCalibrationError,
+            runs: r.outcomeRuns,
+            deltaVsNext: delta,
+          };
+        }),
+      };
+    })
+    .sort((a, b) => a.promptId.localeCompare(b.promptId));
+}
+
 export default function PromptHealthPage() {
   const { user } = useAuth();
   const [rows, setRows] = React.useState<MergedRow[]>([]);
@@ -106,7 +157,7 @@ export default function PromptHealthPage() {
     setError(null);
     try {
       const token = await user.getIdToken();
-      const [backendRes, outcomeRows] = await Promise.all([
+      const [backendRes, outcomeResult] = await Promise.all([
         fetch("/api/ai/internal/prompt-health", {
           headers: { Authorization: `Bearer ${token}` },
         }),
@@ -116,7 +167,7 @@ export default function PromptHealthPage() {
       if (!backendRes.ok || !envelope?.ok || !envelope.data) {
         throw new Error(envelope?.error || `Request failed (${backendRes.status})`);
       }
-      setRows(mergeRows(envelope.data.rows, outcomeRows));
+      setRows(mergeRows(envelope.data.rows, outcomeResult.rows));
       setSinceIso(envelope.data.sinceIso);
       setRollbacks(getRollbackDecisions());
     } catch (e) {
@@ -182,8 +233,11 @@ export default function PromptHealthPage() {
             {rollbacks.map((r) => (
               <li key={r.promptId} className="text-foreground/80">
                 <span className="font-mono">{r.promptId}</span>: rolled back from{" "}
-                <span className="font-mono">v{r.fromVersion}</span> (acc {fmtPercent(r.pinnedAccuracy)}, {r.pinnedRuns} runs) →{" "}
-                <span className="font-mono">v{r.toVersion}</span> (acc {fmtPercent(r.rollbackAccuracy)}, {r.rollbackRuns} runs)
+                <span className="font-mono">v{r.fromVersion}</span> →{" "}
+                <span className="font-mono">v{r.toVersion}</span>{" "}
+                <span className="text-muted-foreground/70">
+                  (recent {fmtPercent(r.recentAccuracy)} over {r.recentRuns} runs vs previous {fmtPercent(r.previousAccuracy)} over {r.previousRuns} runs)
+                </span>
               </li>
             ))}
           </ul>
@@ -195,6 +249,43 @@ export default function PromptHealthPage() {
           No prompts logged with registry metadata yet. Run the autonomous agent to populate.
         </p>
       )}
+
+      {/* Leaderboard — versions ranked by accuracy per prompt */}
+      {(() => {
+        const board = buildLeaderboard(rows);
+        if (board.length === 0) return null;
+        return (
+          <section className="mb-6 rounded border border-border p-4 bg-card">
+            <h2 className="text-sm font-semibold mb-3">Leaderboard</h2>
+            <div className="space-y-4">
+              {board.map((entry) => (
+                <div key={entry.promptId}>
+                  <div className="font-mono text-xs text-foreground/80 mb-1.5">{entry.promptId}</div>
+                  <ul className="space-y-1">
+                    {entry.versions.map((v, i) => (
+                      <li key={v.version} className="flex items-center gap-2 text-xs">
+                        <span className="w-4 text-muted-foreground/50 tabular-nums">{i + 1}.</span>
+                        <span className="font-mono text-foreground/85">v{v.version}</span>
+                        <span className="tabular-nums text-foreground/70">→ {fmtPercent(v.avgAccuracyNorm)}</span>
+                        {v.deltaVsNext !== null && v.deltaVsNext > 0 && (
+                          <span className="tabular-nums text-success/80">
+                            ({v.deltaVsNext >= 0 ? "+" : ""}{(v.deltaVsNext * 100).toFixed(0)}%)
+                          </span>
+                        )}
+                        <span className="text-muted-foreground/50">·</span>
+                        <span className="tabular-nums text-muted-foreground/70">hit {fmtPercent(v.hitRate)}</span>
+                        <span className="text-muted-foreground/50">·</span>
+                        <span className="tabular-nums text-muted-foreground/70">calib. err {fmtPercent(v.avgCalibrationError)}</span>
+                        <span className="text-muted-foreground/40 ml-auto">{v.runs} runs</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })()}
 
       {rows.length > 0 && (
         <div className="overflow-x-auto rounded border border-border">

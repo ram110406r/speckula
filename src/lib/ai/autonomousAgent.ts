@@ -27,9 +27,21 @@ import {
   type Verdict,
 } from "./verdict";
 import { adjustedConfidence, type AccuracyContext } from "./scoreEngine";
-import { renderPrompt, computeAndApplyRollbacks } from "./promptLibrary";
-import type { PromptRef } from "./promptLibrary";
-import { savePastRun, getRecentPastRuns, getUserFeedbackSignals, getPromptOutcomeMetrics } from "../firebase/db";
+import {
+  renderPrompt,
+  computeAndApplyRollbacks,
+  hydratePromptOverrides,
+  hydrateRollbackOverrides,
+} from "./promptLibrary";
+import type { PromptRef, PromptId } from "./promptLibrary";
+import {
+  savePastRun,
+  getRecentPastRuns,
+  getUserFeedbackSignals,
+  getPromptOutcomeMetrics,
+  getPromptOverrides,
+  setPromptOverride,
+} from "../firebase/db";
 
 export type AgentState =
   | "idle"
@@ -206,18 +218,63 @@ export async function runAutonomousAgent({
 
   if (userId) {
     try {
-      const [pastRuns, signals, outcomeMetrics] = await Promise.all([
+      // v2.5: parallel-fetch all the signals the run depends on, including
+      // the authoritative Firestore prompt overrides. One round-trip at
+      // startup; subsequent renderPrompt calls read the cache synchronously.
+      const [pastRuns, signals, outcomeMetrics, fsOverrides] = await Promise.all([
         getRecentPastRuns(userId, 3),
         getUserFeedbackSignals(userId, 12),
         getPromptOutcomeMetrics(userId, 30),
+        getPromptOverrides(userId),
       ]);
-      // v2.4: refresh rollback overrides before any renderPrompt call this
-      // run will make. Deterministic, no LLM, returns immediately if no
-      // statistically meaningful degradation exists.
+
+      // Populate the version-resolution cache so any renderPrompt(userId, ...)
+      // below sees the authoritative override before falling back to local.
+      const overrideMap: Partial<Record<PromptId, string>> = {};
+      const decisionMap: Record<string, { promptId: PromptId; toVersion: string; fromVersion: string; recentAccuracy: number; previousAccuracy: number; delta: number; recentRuns: number; previousRuns: number; decidedAt: string }> = {};
+      for (const [pid, rec] of Object.entries(fsOverrides)) {
+        const key = pid as PromptId;
+        if (typeof rec.version === "string" && rec.version.length > 0) {
+          overrideMap[key] = rec.version;
+          if (rec.source === "rollback") {
+            const decidedAtIso = rec.decidedAt?.toDate?.()?.toISOString() ?? new Date().toISOString();
+            decisionMap[key] = {
+              promptId: key,
+              toVersion: rec.version,
+              fromVersion: rec.fromVersion ?? "",
+              recentAccuracy: rec.recentAccuracy ?? 0,
+              previousAccuracy: rec.previousAccuracy ?? 0,
+              delta: (rec.recentAccuracy ?? 0) - (rec.previousAccuracy ?? 0),
+              recentRuns: 0,
+              previousRuns: 0,
+              decidedAt: decidedAtIso,
+            };
+          }
+        }
+      }
+      hydratePromptOverrides(userId, overrideMap);
+      hydrateRollbackOverrides(overrideMap, decisionMap);
+
+      // Rolling-window rollback compute. Reads samples that were just
+      // pulled in parallel — no extra DB call. Returns only NEW decisions,
+      // which the agent persists to Firestore so other devices pick them up.
+      let newRollbacks: ReturnType<typeof computeAndApplyRollbacks> = [];
       try {
-        computeAndApplyRollbacks(outcomeMetrics);
+        newRollbacks = computeAndApplyRollbacks(outcomeMetrics.samplesByPromptId);
       } catch (err) {
         console.warn("[autonomousAgent] rollback compute failed:", err);
+      }
+      // Fire-and-forget Firestore writes for any new rollback decisions —
+      // never block the run on this; if the network's flaky we still run
+      // with the in-memory + localStorage override and converge later.
+      for (const d of newRollbacks) {
+        void setPromptOverride(userId, d.promptId, {
+          version: d.toVersion,
+          source: "rollback",
+          fromVersion: d.fromVersion,
+          recentAccuracy: d.recentAccuracy,
+          previousAccuracy: d.previousAccuracy,
+        });
       }
       pastIdeas = pastRuns.map((run) => run.idea).filter((s) => s.length > 0);
       userAccuracy = signals.userAccuracy;

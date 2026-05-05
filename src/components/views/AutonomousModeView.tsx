@@ -575,16 +575,21 @@ export function AutonomousModeView() {
             )}
 
             {/* Prompt improvement signal — surfaces when the agent has rolled
-                back to a previously-better-performing prompt version. */}
+                back to a previously-better-performing prompt version. Uses
+                the rolling-window delta (previous − recent) so the percentage
+                reflects the actual shift the rollback is responding to. */}
             {rollbacks.length > 0 && (
-              <div className="rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-[10px] text-foreground/70">
+              <div className="rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-[10px] text-foreground/70 space-y-1">
                 {rollbacks.slice(0, 2).map((r) => {
-                  const improvementPct = Math.round((r.rollbackAccuracy - r.pinnedAccuracy) * 100);
+                  // Skip rollbacks without enough sample data on either window.
+                  if (r.recentRuns < 30 || r.previousRuns < 30) return null;
+                  const improvementPct = Math.round((r.previousAccuracy - r.recentAccuracy) * 100);
+                  if (improvementPct <= 0) return null;
                   return (
                     <div key={r.promptId} className="flex items-start gap-1.5">
                       <TrendingUp className="h-3 w-3 text-success/80 shrink-0 mt-0.5" />
                       <span>
-                        Prompt <span className="font-mono text-foreground/85">v{r.toVersion}</span> improving outcomes (+{improvementPct}% vs <span className="font-mono">v{r.fromVersion}</span>)
+                        Prompt <span className="font-mono text-foreground/85">v{r.toVersion}</span> improving outcomes (+{improvementPct}% vs previous)
                       </span>
                     </div>
                   );
