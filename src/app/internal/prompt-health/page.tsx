@@ -15,7 +15,12 @@
 
 import React from "react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
-import { getPromptOutcomeMetrics, type PromptOutcomeMetricsRow } from "@/lib/firebase/db";
+import {
+  getPromptOutcomeMetrics,
+  getUserFeedbackSignals,
+  type PromptOutcomeMetricsRow,
+  type CalibrationBucket,
+} from "@/lib/firebase/db";
 import { getRollbackDecisions, type RollbackDecision } from "@/lib/ai/promptLibrary";
 
 interface BackendRow {
@@ -107,6 +112,97 @@ interface LeaderboardEntry {
   }>;
 }
 
+// v2.6 calibration curve. Dependency-free SVG: x = predicted confidence,
+// y = realised accuracy. The y=x dashed line represents perfect calibration.
+// Points to the right of perfect are overconfident; left are under.
+function CalibrationCurve({
+  buckets,
+  bias,
+}: {
+  buckets: CalibrationBucket[];
+  bias: number | null;
+}) {
+  const filled = buckets.filter((b) => b.count > 0);
+  if (filled.length < 2) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Not enough confidence/outcome pairs yet. Record more outcomes to populate the curve.
+      </p>
+    );
+  }
+
+  const W = 320;
+  const H = 220;
+  const PAD = 28;
+  const innerW = W - PAD * 2;
+  const innerH = H - PAD * 2;
+
+  const px = (v: number) => PAD + v * innerW;
+  const py = (v: number) => PAD + (1 - v) * innerH;
+
+  const polyline = filled
+    .map((b) => `${px(b.avgConfidence).toFixed(1)},${py(b.avgAccuracy).toFixed(1)}`)
+    .join(" ");
+
+  const biasPct = bias === null ? null : Math.round(bias * 100);
+  const summary =
+    biasPct === null
+      ? "Calibration data is too thin to draw a verdict."
+      : Math.abs(biasPct) < 3
+      ? "You are well-calibrated — confidence tracks reality."
+      : biasPct > 0
+      ? `You are overconfident by +${biasPct}%.`
+      : `You are underconfident by ${biasPct}%.`;
+
+  return (
+    <div className="space-y-2">
+      <svg width={W} height={H} className="bg-muted/20 rounded">
+        {/* Axis frame */}
+        <rect x={PAD} y={PAD} width={innerW} height={innerH} fill="none" stroke="currentColor" strokeOpacity="0.15" />
+        {/* y = x reference */}
+        <line
+          x1={px(0)} y1={py(0)} x2={px(1)} y2={py(1)}
+          stroke="currentColor" strokeOpacity="0.35" strokeDasharray="4 4"
+        />
+        {/* Actual curve */}
+        <polyline points={polyline} fill="none" stroke="currentColor" strokeOpacity="0.85" strokeWidth="2" />
+        {/* Bucket points */}
+        {filled.map((b, i) => (
+          <circle
+            key={i}
+            cx={px(b.avgConfidence)}
+            cy={py(b.avgAccuracy)}
+            r={Math.min(8, 3 + Math.log2(b.count + 1))}
+            fill="currentColor"
+            fillOpacity="0.7"
+          >
+            <title>
+              {`bucket ${b.range[0].toFixed(1)}–${b.range[1].toFixed(1)} · n=${b.count} · conf ${(b.avgConfidence * 100).toFixed(0)}% · acc ${(b.avgAccuracy * 100).toFixed(0)}%`}
+            </title>
+          </circle>
+        ))}
+        {/* Axis labels */}
+        <text x={px(0)} y={H - 8} fontSize="9" fill="currentColor" fillOpacity="0.5">0</text>
+        <text x={px(1) - 6} y={H - 8} fontSize="9" fill="currentColor" fillOpacity="0.5">1</text>
+        <text x={4} y={py(1) + 3} fontSize="9" fill="currentColor" fillOpacity="0.5">1</text>
+        <text x={4} y={py(0) + 3} fontSize="9" fill="currentColor" fillOpacity="0.5">0</text>
+        <text x={W / 2} y={H - 2} fontSize="9" fill="currentColor" fillOpacity="0.5" textAnchor="middle">
+          predicted confidence
+        </text>
+        <text
+          x={10} y={H / 2}
+          fontSize="9" fill="currentColor" fillOpacity="0.5"
+          textAnchor="middle"
+          transform={`rotate(-90 10 ${H / 2})`}
+        >
+          actual accuracy
+        </text>
+      </svg>
+      <p className="text-xs text-foreground/80">{summary}</p>
+    </div>
+  );
+}
+
 function buildLeaderboard(rows: MergedRow[]): LeaderboardEntry[] {
   const byPrompt = new Map<string, MergedRow[]>();
   for (const r of rows) {
@@ -148,6 +244,8 @@ export default function PromptHealthPage() {
   const [rows, setRows] = React.useState<MergedRow[]>([]);
   const [sinceIso, setSinceIso] = React.useState<string | null>(null);
   const [rollbacks, setRollbacks] = React.useState<RollbackDecision[]>([]);
+  const [calibrationBuckets, setCalibrationBuckets] = React.useState<CalibrationBucket[]>([]);
+  const [calibrationBias, setCalibrationBias] = React.useState<number | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -157,11 +255,12 @@ export default function PromptHealthPage() {
     setError(null);
     try {
       const token = await user.getIdToken();
-      const [backendRes, outcomeResult] = await Promise.all([
+      const [backendRes, outcomeResult, signals] = await Promise.all([
         fetch("/api/ai/internal/prompt-health", {
           headers: { Authorization: `Bearer ${token}` },
         }),
         getPromptOutcomeMetrics(user.uid, 30),
+        getUserFeedbackSignals(user.uid, 100),
       ]);
       const envelope = (await backendRes.json().catch(() => null)) as { ok?: boolean; data?: BackendData; error?: string } | null;
       if (!backendRes.ok || !envelope?.ok || !envelope.data) {
@@ -170,6 +269,8 @@ export default function PromptHealthPage() {
       setRows(mergeRows(envelope.data.rows, outcomeResult.rows));
       setSinceIso(envelope.data.sinceIso);
       setRollbacks(getRollbackDecisions());
+      setCalibrationBuckets(signals.calibrationBuckets);
+      setCalibrationBias(signals.calibrationBias);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load prompt health");
     } finally {
@@ -248,6 +349,14 @@ export default function PromptHealthPage() {
         <p className="text-sm text-muted-foreground">
           No prompts logged with registry metadata yet. Run the autonomous agent to populate.
         </p>
+      )}
+
+      {/* v2.6 Calibration curve — confidence vs reality. */}
+      {(calibrationBuckets.length > 0 || calibrationBias !== null) && (
+        <section className="mb-6 rounded border border-border p-4 bg-card">
+          <h2 className="text-sm font-semibold mb-3">Calibration Curve</h2>
+          <CalibrationCurve buckets={calibrationBuckets} bias={calibrationBias} />
+        </section>
       )}
 
       {/* Leaderboard — versions ranked by accuracy per prompt */}

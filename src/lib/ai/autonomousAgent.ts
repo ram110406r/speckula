@@ -128,9 +128,11 @@ function throwIfAborted(signal: AbortSignal) {
 // Pattern factor is intentionally NOT applied here — we don't know the metric
 // for each candidate yet, so pattern-level learning is applied only to the
 // top decision after prediction.
+// v2.6: also accepts the global calibrationBias so over/under-confidence
+// gets corrected uniformly across all candidates.
 function applyFeedbackToDecisions(
   decisions: DecisionSuggestion[],
-  ctx: Pick<AccuracyContext, "userAccuracy" | "calibrationError">
+  ctx: Pick<AccuracyContext, "userAccuracy" | "calibrationError" | "calibrationBias">
 ): DecisionSuggestion[] {
   return decisions.map((d) => {
     if (typeof d.confidence !== "number" || !Number.isFinite(d.confidence)) return d;
@@ -214,7 +216,10 @@ export async function runAutonomousAgent({
   let pastIdeas: string[] = [];
   let userAccuracy: number | null = null;
   let calibrationError: number | null = null;
+  let calibrationBias: number | null = null;
   let patternAccuracies: Record<string, number> = {};
+  let patternBiases: Record<string, number> = {};
+  let themeBiases: Record<string, number> = {};
 
   if (userId) {
     try {
@@ -279,7 +284,10 @@ export async function runAutonomousAgent({
       pastIdeas = pastRuns.map((run) => run.idea).filter((s) => s.length > 0);
       userAccuracy = signals.userAccuracy;
       calibrationError = signals.calibrationError;
+      calibrationBias = signals.calibrationBias;
       patternAccuracies = signals.patternAccuracies;
+      patternBiases = signals.patternBiases;
+      themeBiases = signals.themeBiases;
 
       if (pastIdeas.length > 0) {
         emit({ type: "memoryLoaded", pastIdeas });
@@ -300,6 +308,14 @@ export async function runAutonomousAgent({
         emit({
           type: "thinking",
           message: `High past calibration error (${(calibrationError * 100).toFixed(0)}%) — past confidence didn't track outcomes. Squeezing further.`,
+        });
+      }
+      if (calibrationBias !== null && Math.abs(calibrationBias) >= 0.05) {
+        const direction = calibrationBias > 0 ? "overconfident" : "underconfident";
+        const biasPct = Math.round(Math.abs(calibrationBias) * 100);
+        emit({
+          type: "thinking",
+          message: `Calibration bias: ${direction} by ${biasPct}%. Confidence ${calibrationBias > 0 ? "reduced 10%" : "boosted 10%"} to compensate.`,
         });
       }
     } catch (error) {
@@ -356,7 +372,7 @@ export async function runAutonomousAgent({
     };
     let decisions = await suggestDirectionAction(userId ?? "", context, { pastIdeas });
     throwIfAborted(signal);
-    decisions = applyFeedbackToDecisions(decisions, { userAccuracy, calibrationError });
+    decisions = applyFeedbackToDecisions(decisions, { userAccuracy, calibrationError, calibrationBias });
     emit({ type: "decisions", decisions });
     emit({ type: "checkpoint", message: `${decisions.length} directions generated` });
 
@@ -460,19 +476,31 @@ export async function runAutonomousAgent({
         // Pattern-level learning: the predicted metric is now known, so we can
         // bias the top decision's confidence by the user's track record on
         // *this specific metric*. Replace top decision with the adjusted copy.
+        // v2.6: also fold in pattern-level calibration bias so the per-pattern
+        // over/under-confidence signal pulls the score toward reality. Theme
+        // bias isn't applied here because the strategy step (which knows the
+        // theme) hasn't run yet — the global calibrationBias on the broader
+        // applyFeedbackToDecisions pass already covers that surface.
         patternKey = predictedOutcome.metric.trim();
         const patternKeyNorm = patternKey.toLowerCase();
-        if (patternKeyNorm in patternAccuracies) {
-          patternAccuracy = patternAccuracies[patternKeyNorm];
-          if (typeof top.confidence === "number" && Number.isFinite(top.confidence)) {
-            const adjusted = adjustedConfidence(top.confidence, {
-              // Pattern-only adjustment here; user/calibration were already applied.
-              similarPatternAccuracy: patternAccuracy,
-            });
-            top = { ...top, confidence: adjusted };
-            // Re-emit so the UI updates the top-decision card.
-            emit({ type: "topDecision", decision: top });
-          }
+
+        const matchedPatternAccuracy = patternKeyNorm in patternAccuracies ? patternAccuracies[patternKeyNorm] : null;
+        const matchedPatternBias = patternKeyNorm in patternBiases ? patternBiases[patternKeyNorm] : null;
+
+        if (matchedPatternAccuracy !== null) {
+          patternAccuracy = matchedPatternAccuracy;
+        }
+
+        if ((matchedPatternAccuracy !== null || matchedPatternBias !== null) &&
+            typeof top.confidence === "number" && Number.isFinite(top.confidence)) {
+          const adjusted = adjustedConfidence(top.confidence, {
+            // Pattern-only adjustment here; user/calibration were already applied.
+            similarPatternAccuracy: matchedPatternAccuracy,
+            similarPatternBias: matchedPatternBias,
+          });
+          top = { ...top, confidence: adjusted };
+          // Re-emit so the UI updates the top-decision card.
+          emit({ type: "topDecision", decision: top });
         }
       } else {
         emit({
