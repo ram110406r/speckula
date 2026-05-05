@@ -91,25 +91,30 @@ model PatternAnalysis {
 /// Prompt history and results for cost tracking and deduplication.
 /// Has a retention sweeper; see services/retention.ts.
 model PromptLog {
-  id           String   @id @default(uuid())
-  userId       String
-  projectId    String
-  promptHash   String
-  prompt       String
-  modelUsed    String
-  inputTokens  Int
-  outputTokens Int
-  totalTokens  Int
-  executionMs  Int
-  cost         Float
-  cachedResult Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  id            String   @id @default(uuid())
+  userId        String
+  projectId     String
+  promptHash    String
+  prompt        String
+  modelUsed     String
+  inputTokens   Int
+  outputTokens  Int
+  totalTokens   Int
+  executionMs   Int
+  cost          Float
+  cachedResult  Boolean  @default(false)
+  // v2.3 prompt registry correlation. Forwarded from the frontend in `_meta`.
+  // Both nullable for back-compat with legacy log rows.
+  promptId      String?
+  promptVersion String?
+  createdAt     DateTime @default(now())
 
   @@index([userId])
   @@index([projectId])
   @@index([promptHash])
   @@index([createdAt])
   @@index([userId, createdAt])
+  @@index([promptId])
 }
 
 /// TTL-based cache of prompt results to avoid duplicate Groq calls.
