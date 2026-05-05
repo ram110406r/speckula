@@ -7,7 +7,7 @@
 // first-class signals derived from the CostModel and demand fields that
 // suggestDirectionAction embeds in every CandidateDirection.
 
-import type { DecisionSuggestion } from "./actions";
+import type { DecisionSuggestion, PredictedOutcome } from "./actions";
 
 export type VerdictLabel = "PROCEED" | "VALIDATE_FIRST" | "DO_NOT_BUILD";
 
@@ -63,7 +63,10 @@ function deriveDemandSignal(decisions: DecisionSuggestion[]): number {
   return withDemand.reduce((sum, d) => sum + (d.demand ?? 0), 0) / withDemand.length;
 }
 
-export function computeVerdict(decisions: DecisionSuggestion[]): Verdict {
+export function computeVerdict(
+  decisions: DecisionSuggestion[],
+  predictedOutcome?: PredictedOutcome | null
+): Verdict {
   if (decisions.length === 0) {
     const factors: VerdictFactors = { confidence: 0, costViability: 0, demandSignal: 0, strategicFit: 0 };
     return {
@@ -122,7 +125,14 @@ export function computeVerdict(decisions: DecisionSuggestion[]): Verdict {
     };
   }
 
-  if (compositeScore >= 7.0 && highRiskCount === 0) {
+  // v2.1 prediction guardrail: a PROCEED verdict requires a measurable
+  // expected outcome with reasonable confidence (≥0.5). Without one, the team
+  // can't grade the bet later, so we hold scope at VALIDATE_FIRST.
+  const predictionMissing = !predictedOutcome;
+  const predictionWeak = !!predictedOutcome && predictedOutcome.confidence < 0.5;
+  const predictionGate = predictionMissing || predictionWeak;
+
+  if (compositeScore >= 7.0 && highRiskCount === 0 && !predictionGate) {
     return {
       label: "PROCEED",
       reason: `Strong signal across confidence, cost, and demand (composite ${rounded}/10). ${topDecision ? `Start with "${topDecision.title}".` : "Pick the top-priority decision and ship."}`,
@@ -133,9 +143,15 @@ export function computeVerdict(decisions: DecisionSuggestion[]): Verdict {
     };
   }
 
+  const validateReasonPrefix = predictionGate
+    ? predictionMissing
+      ? "No measurable outcome was produced — define a metric, baseline, and target before committing engineering time. "
+      : `Prediction confidence is only ${(predictedOutcome!.confidence * 100).toFixed(0)}% — run a small test before scaling. `
+    : "";
+
   return {
     label: "VALIDATE_FIRST",
-    reason: `Promising but not fully validated (composite ${rounded}/10). ${topDecision ? `Run a focused test on "${topDecision.title}" before scaling.` : "Pick one direction and run a validation experiment."}`,
+    reason: `${validateReasonPrefix}Promising but not fully validated (composite ${rounded}/10). ${topDecision ? `Run a focused test on "${topDecision.title}" before scaling.` : "Pick one direction and run a validation experiment."}`,
     compositeScore: rounded,
     averageConfidence,
     highRiskCount,
