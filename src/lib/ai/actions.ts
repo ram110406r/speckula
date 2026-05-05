@@ -860,6 +860,10 @@ export interface SuggestDirectionOptions {
   refinement?: string;
   // Optional memory of recent runs to discourage repeating weak patterns.
   pastIdeas?: string[];
+  // v2.7: signed calibration bias forwarded to the registry template so the
+  // model gets a steering note when the user is systematically over- or
+  // under-confident.
+  calibrationBias?: number | null;
 }
 
 export const suggestDirectionAction = async (
@@ -871,7 +875,7 @@ export const suggestDirectionAction = async (
 
   const { prompt, promptId, version, hash } = renderPrompt(
     "suggest_direction",
-    { pastIdeas: options.pastIdeas, refinement: options.refinement },
+    { pastIdeas: options.pastIdeas, refinement: options.refinement, calibrationBias: options.calibrationBias },
     { userId: userId || null }
   );
   const meta: PromptMeta = { promptId, promptVersion: version, promptHash: hash };
@@ -1074,7 +1078,8 @@ export const predictOutcomeAction = async (
   decision: DecisionSuggestion,
   insights?: string[],
   strictness: PredictionStrictness = "balanced",
-  userId?: string
+  userId?: string,
+  calibrationBias?: number | null
 ): Promise<PredictedOutcome | null> => {
   const { prompt, promptId, version, hash } = renderPrompt(
     "expected_outcome",
@@ -1088,6 +1093,7 @@ export const predictOutcomeAction = async (
       },
       insights,
       strictness,
+      calibrationBias,
     },
     { userId: userId ?? null }
   );

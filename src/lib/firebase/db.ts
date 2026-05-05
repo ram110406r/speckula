@@ -131,6 +131,10 @@ export interface DecisionRecord {
   // Lets the empirical optimization layer aggregate accuracy by (promptId,
   // version) without re-querying pastRuns and matching by title.
   predictionPromptRef?: { id: string; version: string; hash: string };
+  // v2.7: which decision mode produced this record. Persisted alongside so
+  // getPromptOutcomeMetrics can group by mode and surface "performance by
+  // mode" in the internal panel without a new collection.
+  decisionMode?: DecisionMode;
   // v2.5: explicit success flag (actual ≥ target) replaces the old
   // `accuracyNorm ≥ 0.5` proxy for hitRate. outcomeRecordedAt anchors the
   // rolling-window rollback so we compare recent vs prior batches by the
@@ -209,6 +213,8 @@ const userPastRunsCollection = (userId: string) => collection(db, "users", userI
 const userPromptOverridesCollection = (userId: string) => collection(db, "users", userId, "promptOverrides");
 const userPromptOverrideRef = (userId: string, promptId: string) =>
   doc(db, "users", userId, "promptOverrides", promptId);
+const userSettingRef = (userId: string, settingId: string) =>
+  doc(db, "users", userId, "settings", settingId);
 const publicProfilesCollection = () => collection(db, "publicProfiles");
 const workspacesCollection = () => collection(db, "workspaces");
 
@@ -724,6 +730,19 @@ export interface OutcomeSample {
 export interface PromptOutcomeMetricsResult {
   rows: PromptOutcomeMetricsRow[];
   samplesByPromptId: Record<string, OutcomeSample[]>;
+  // v2.7: per-decision-mode rollup. Lets the internal panel compare how the
+  // three modes perform without joining anything new — derived from
+  // DecisionRecord.decisionMode.
+  modeBreakdown: ModeBreakdownRow[];
+}
+
+export interface ModeBreakdownRow {
+  mode: DecisionMode;
+  runs: number;
+  outcomesRecorded: number;
+  avgAccuracyNorm: number | null;
+  hitRate: number | null;
+  avgCalibrationError: number | null;
 }
 
 export const getPromptOutcomeMetrics = async (
@@ -749,6 +768,15 @@ export const getPromptOutcomeMetrics = async (
     const buckets = new Map<string, Bucket & { promptId: string; promptVersion: string }>();
     const samplesByPromptId: Record<string, OutcomeSample[]> = {};
     const bucketKey = (id: string, v: string) => `${id}::${v}`;
+
+    // v2.7 mode buckets — same shape as a per-version bucket but keyed by the
+    // saved DecisionRecord.decisionMode. Only seeded for the three known
+    // modes; legacy decisions without the field are excluded.
+    const modeBuckets: Record<DecisionMode, Bucket> = {
+      conservative: { runs: 0, accSum: 0, accCount: 0, finalSum: 0, finalCount: 0, calibSum: 0, calibCount: 0, confSum: 0, confCount: 0, hits: 0, outcomes: 0 },
+      balanced:     { runs: 0, accSum: 0, accCount: 0, finalSum: 0, finalCount: 0, calibSum: 0, calibCount: 0, confSum: 0, confCount: 0, hits: 0, outcomes: 0 },
+      aggressive:   { runs: 0, accSum: 0, accCount: 0, finalSum: 0, finalCount: 0, calibSum: 0, calibCount: 0, confSum: 0, confCount: 0, hits: 0, outcomes: 0 },
+    };
 
     for (const d of snap.docs) {
       const data = d.data() as DecisionRecord;
@@ -798,6 +826,22 @@ export const getPromptOutcomeMetrics = async (
 
       buckets.set(key, b);
 
+      // v2.7: also fan out into the per-mode rollup. Using the same Bucket
+      // shape lets us reuse the averaging code below without copy-pasting.
+      const mode = data.decisionMode;
+      if (mode && (DECISION_MODE_VALUES as readonly string[]).includes(mode)) {
+        const mb = modeBuckets[mode as DecisionMode];
+        mb.runs += 1;
+        if (accValid) { mb.accSum += acc; mb.accCount += 1; }
+        if (Number.isFinite(fin)) { mb.finalSum += fin; mb.finalCount += 1; }
+        if (Number.isFinite(cal)) { mb.calibSum += cal; mb.calibCount += 1; }
+        if (Number.isFinite(conf)) { mb.confSum += conf / 10; mb.confCount += 1; }
+        if (success !== null) {
+          mb.outcomes += 1;
+          if (success) mb.hits += 1;
+        }
+      }
+
       // Push a sample for rolling-window rollback. We require accuracy +
       // a usable success bool; without those the sample has no signal.
       if (accValid && success !== null && ts) {
@@ -830,12 +874,210 @@ export const getPromptOutcomeMetrics = async (
       outcomesRecorded: b.outcomes,
     }));
 
-    return { rows, samplesByPromptId };
+    const modeBreakdown: ModeBreakdownRow[] = (DECISION_MODE_VALUES as ReadonlyArray<DecisionMode>).map((m) => {
+      const mb = modeBuckets[m];
+      return {
+        mode: m,
+        runs: mb.runs,
+        outcomesRecorded: mb.outcomes,
+        avgAccuracyNorm: mb.accCount > 0 ? mb.accSum / mb.accCount : null,
+        hitRate: mb.outcomes > 0 ? mb.hits / mb.outcomes : null,
+        avgCalibrationError: mb.calibCount > 0 ? mb.calibSum / mb.calibCount : null,
+      };
+    });
+
+    return { rows, samplesByPromptId, modeBreakdown };
   } catch (error) {
     logFirestorePermissionHint("getPromptOutcomeMetrics", error);
-    return { rows: [], samplesByPromptId: {} };
+    return { rows: [], samplesByPromptId: {}, modeBreakdown: [] };
   }
 };
+
+// v2.7 — decision mode (conservative / balanced / aggressive). Driven from
+// the AutonomousModeView toggle, persisted globally per user, snapshotted on
+// every decision the agent saves so future analysis can group by mode.
+//
+// Same shape as PredictionStrictness in the prompt registry — kept aliased
+// at this boundary so the Firestore layer stays independent of the registry
+// import graph.
+export type DecisionMode = "conservative" | "balanced" | "aggressive";
+
+const DEFAULT_DECISION_MODE: DecisionMode = "balanced";
+const DECISION_MODE_VALUES: ReadonlyArray<DecisionMode> = ["conservative", "balanced", "aggressive"];
+
+// v2.8: settings doc now carries { mode, auto } so the agent can pick between
+// the user-selected mode and the system-recommended one. `auto` defaults to
+// false so existing users keep manual control without an opt-in surprise.
+export interface DecisionModeSettings {
+  mode: DecisionMode;
+  auto: boolean;
+}
+
+export const getDecisionModeSettings = async (userId: string): Promise<DecisionModeSettings> => {
+  try {
+    const snap = await getDoc(userSettingRef(userId, "decisionMode"));
+    if (!snap.exists()) return { mode: DEFAULT_DECISION_MODE, auto: false };
+    const data = snap.data() as { mode?: unknown; auto?: unknown };
+    const mode = typeof data.mode === "string" && (DECISION_MODE_VALUES as readonly string[]).includes(data.mode)
+      ? (data.mode as DecisionMode)
+      : DEFAULT_DECISION_MODE;
+    const auto = data.auto === true;
+    return { mode, auto };
+  } catch (error) {
+    logFirestorePermissionHint("getDecisionModeSettings", error);
+    return { mode: DEFAULT_DECISION_MODE, auto: false };
+  }
+};
+
+export const setDecisionModeSettings = async (
+  userId: string,
+  patch: Partial<DecisionModeSettings>
+): Promise<void> => {
+  try {
+    await setDoc(
+      userSettingRef(userId, "decisionMode"),
+      { ...patch, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  } catch (error) {
+    logFirestorePermissionHint("setDecisionModeSettings", error);
+  }
+};
+
+// Back-compat shims. New code should prefer the *Settings variants above.
+export const getDecisionMode = async (userId: string): Promise<DecisionMode> => {
+  const s = await getDecisionModeSettings(userId);
+  return s.mode;
+};
+
+export const setDecisionMode = async (userId: string, mode: DecisionMode): Promise<void> => {
+  await setDecisionModeSettings(userId, { mode });
+};
+
+// v2.8 mode-recommendation metadata.
+// Persisted at users/{uid}/settings/decisionModeMeta to keep separate from
+// the user-controlled `decisionMode` doc so writes from auto-mode logic
+// don't clobber the user's manual selection.
+export interface DecisionModeMeta {
+  recommendedMode: DecisionMode;
+  score: number;
+  evaluatedAt: Timestamp | null;
+  lastSwitchAt: Timestamp | null;
+}
+
+export const getDecisionModeMeta = async (userId: string): Promise<DecisionModeMeta | null> => {
+  try {
+    const snap = await getDoc(userSettingRef(userId, "decisionModeMeta"));
+    if (!snap.exists()) return null;
+    const data = snap.data() as Partial<DecisionModeMeta>;
+    const mode = typeof data.recommendedMode === "string" && (DECISION_MODE_VALUES as readonly string[]).includes(data.recommendedMode)
+      ? (data.recommendedMode as DecisionMode)
+      : DEFAULT_DECISION_MODE;
+    const score = typeof data.score === "number" && Number.isFinite(data.score) ? data.score : 0;
+    return {
+      recommendedMode: mode,
+      score,
+      evaluatedAt: data.evaluatedAt ?? null,
+      lastSwitchAt: data.lastSwitchAt ?? null,
+    };
+  } catch (error) {
+    logFirestorePermissionHint("getDecisionModeMeta", error);
+    return null;
+  }
+};
+
+export const setDecisionModeMeta = async (
+  userId: string,
+  meta: { recommendedMode: DecisionMode; score: number; markSwitched?: boolean }
+): Promise<void> => {
+  try {
+    const payload: Record<string, unknown> = {
+      recommendedMode: meta.recommendedMode,
+      score: meta.score,
+      evaluatedAt: serverTimestamp(),
+    };
+    if (meta.markSwitched) {
+      payload.lastSwitchAt = serverTimestamp();
+    }
+    await setDoc(userSettingRef(userId, "decisionModeMeta"), payload, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("setDecisionModeMeta", error);
+  }
+};
+
+// v2.8 — pure recommendation logic. Run against modeBreakdown[] from
+// getPromptOutcomeMetrics; deterministic, no I/O, no LLM.
+//
+// Composite score:
+//   0.6 × accuracy + 0.3 × hitRate + 0.1 × (1 − calibrationError)
+// Filter: a mode must have ≥15 runs and ≥10 recorded outcomes to be eligible.
+// When no mode qualifies the recommendation falls back to "balanced".
+export interface ModeRecommendation {
+  recommendedMode: DecisionMode;
+  score: number;
+  qualified: boolean;                              // true if at least one mode met thresholds
+  scoresPerMode: Partial<Record<DecisionMode, number>>;
+}
+
+const MIN_RUNS_FOR_RECOMMENDATION = 15;
+const MIN_OUTCOMES_FOR_RECOMMENDATION = 10;
+
+export function recommendDecisionMode(modeBreakdown: ModeBreakdownRow[]): ModeRecommendation {
+  const scoresPerMode: Partial<Record<DecisionMode, number>> = {};
+  for (const m of modeBreakdown) {
+    if (m.runs < MIN_RUNS_FOR_RECOMMENDATION) continue;
+    if (m.outcomesRecorded < MIN_OUTCOMES_FOR_RECOMMENDATION) continue;
+    if (m.avgAccuracyNorm === null || m.hitRate === null) continue;
+    const calibrationComponent = 1 - (m.avgCalibrationError ?? 0);
+    scoresPerMode[m.mode] = 0.6 * m.avgAccuracyNorm + 0.3 * m.hitRate + 0.1 * calibrationComponent;
+  }
+
+  let bestMode: DecisionMode | null = null;
+  let bestScore = -Infinity;
+  for (const mode of DECISION_MODE_VALUES) {
+    const s = scoresPerMode[mode];
+    if (typeof s === "number" && s > bestScore) {
+      bestMode = mode;
+      bestScore = s;
+    }
+  }
+
+  if (bestMode === null) {
+    return { recommendedMode: "balanced", score: 0, qualified: false, scoresPerMode };
+  }
+  return { recommendedMode: bestMode, score: bestScore, qualified: true, scoresPerMode };
+}
+
+// v2.8 — hysteresis guard. Returns true only when:
+//   1. recommended differs from current
+//   2. recommended score beats current's score by ≥ 0.03
+//   3. >= 7 days since the last automated switch
+// Prevents thrashing when mode performance is essentially tied.
+const SWITCH_THRESHOLD = 0.03;
+const SWITCH_COOLDOWN_DAYS = 7;
+
+export function shouldSwitchMode(
+  currentMode: DecisionMode,
+  recommendation: ModeRecommendation,
+  lastSwitchAt: Date | null
+): boolean {
+  if (!recommendation.qualified) return false;
+  if (currentMode === recommendation.recommendedMode) return false;
+
+  const currentScore = recommendation.scoresPerMode[currentMode];
+  if (typeof currentScore !== "number") {
+    // No data on the user's current mode yet — don't switch until we know
+    // whether it's actually under-performing.
+    return false;
+  }
+  if (recommendation.score < currentScore + SWITCH_THRESHOLD) return false;
+
+  if (lastSwitchAt) {
+    const daysSince = (Date.now() - lastSwitchAt.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSince < SWITCH_COOLDOWN_DAYS) return false;
+  }
+  return true;
+}
 
 // v2.5 — per-user prompt version overrides persisted in Firestore.
 // users/{uid}/promptOverrides/{promptId} — { version, source, decidedAt }

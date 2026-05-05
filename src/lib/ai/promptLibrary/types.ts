@@ -30,12 +30,17 @@ export interface PromptVarsMap {
   suggest_direction: {
     pastIdeas?: string[];
     refinement?: string;
+    // v2.7: signed calibration bias (-1..+1). When |bias| ≥ 0.05 the template
+    // appends a calibration note steering the model toward conservative or
+    // ambitious framing without changing the JSON schema or call count.
+    calibrationBias?: number | null;
   };
   expected_outcome: {
     idea: string;
     decision: DecisionShapeForPrompt;
     insights?: string[];
     strictness: PredictionStrictness;
+    calibrationBias?: number | null;
   };
   prd_generator: { title: string; notes: string; decisions: string };
   task_generator: { prdTitle?: string };

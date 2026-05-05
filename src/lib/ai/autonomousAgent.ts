@@ -41,6 +41,10 @@ import {
   getPromptOutcomeMetrics,
   getPromptOverrides,
   setPromptOverride,
+  getDecisionModeMeta,
+  setDecisionModeMeta,
+  recommendDecisionMode,
+  shouldSwitchMode,
 } from "../firebase/db";
 
 export type AgentState =
@@ -83,6 +87,7 @@ export type AgentEvent =
   | { type: "expectedOutcome"; outcome: PredictedOutcome; promptRef?: PromptRef }
   | { type: "feedbackApplied"; userAccuracy: number }
   | { type: "confidenceExplanation"; items: ConfidenceExplanationItem[] }
+  | { type: "modeAutoSwitched"; from: PredictionStrictness; to: PredictionStrictness; score: number; previousScore: number | null }
   | { type: "error"; message: string }
   | { type: "done" };
 
@@ -96,6 +101,13 @@ export interface AgentRunOptions {
   userId?: string;
   // v2.2: tone the prediction step. Defaults to "balanced".
   strictness?: PredictionStrictness;
+  // v2.8: if true, the agent ignores the user-selected strictness when a
+  // hysteresis-passing recommendation exists. Defaults to false.
+  autoMode?: boolean;
+  // Epoch ms of the last automated mode switch. The view loads this once on
+  // mount via getDecisionModeMeta() and passes it through so the agent
+  // doesn't add a per-run Firestore read.
+  lastSwitchAtMs?: number | null;
 }
 
 const stateLabels: Record<AgentState, string> = {
@@ -122,6 +134,25 @@ function throwIfAborted(signal: AbortSignal) {
     err.name = "AbortError";
     throw err;
   }
+}
+
+// v2.7 — deterministic post-prediction math. Conservative mode pulls targets
+// down and pushes confidence up; aggressive does the opposite. Balanced is a
+// no-op. Targets are clamped to ≥ baseline (when known) so we never invert
+// the direction of the bet; confidence stays in [0, 1].
+function applyModeAdjustment(
+  outcome: PredictedOutcome,
+  mode: PredictionStrictness
+): PredictedOutcome {
+  if (mode === "balanced") return outcome;
+  const targetMul = mode === "conservative" ? 0.9 : 1.1;
+  const confMul = mode === "conservative" ? 1.1 : 0.9;
+  let newTarget = outcome.target * targetMul;
+  if (typeof outcome.baseline === "number" && Number.isFinite(outcome.baseline)) {
+    newTarget = Math.max(newTarget, outcome.baseline);
+  }
+  const newConfidence = Math.max(0, Math.min(1, outcome.confidence * confMul));
+  return { ...outcome, target: newTarget, confidence: newConfidence };
 }
 
 // Apply the deterministic feedback signal to every direction's confidence.
@@ -202,6 +233,8 @@ export async function runAutonomousAgent({
   alreadyAsked,
   userId,
   strictness = "balanced",
+  autoMode = false,
+  lastSwitchAtMs = null,
 }: AgentRunOptions): Promise<void> {
   const enterState = (state: AgentState) => {
     throwIfAborted(signal);
@@ -280,6 +313,44 @@ export async function runAutonomousAgent({
           recentAccuracy: d.recentAccuracy,
           previousAccuracy: d.previousAccuracy,
         });
+      }
+
+      // v2.8: auto-mode resolution. Recommend the best-performing mode from
+      // modeBreakdown, gate by hysteresis, and override the user's selected
+      // strictness when warranted. Pure deterministic compute — no LLM —
+      // and no extra Firestore read because the view already provided
+      // lastSwitchAtMs.
+      if (autoMode) {
+        const recommendation = recommendDecisionMode(outcomeMetrics.modeBreakdown);
+        const lastSwitchDate = lastSwitchAtMs ? new Date(lastSwitchAtMs) : null;
+        const switchOk = shouldSwitchMode(strictness, recommendation, lastSwitchDate);
+
+        // Always update the recommendation snapshot. Only mark a switch when
+        // hysteresis passed — that's what advances the cooldown timer.
+        void setDecisionModeMeta(userId, {
+          recommendedMode: recommendation.recommendedMode,
+          score: recommendation.score,
+          markSwitched: switchOk,
+        });
+
+        if (switchOk) {
+          const previousScore = recommendation.scoresPerMode[strictness] ?? null;
+          emit({
+            type: "modeAutoSwitched",
+            from: strictness,
+            to: recommendation.recommendedMode,
+            score: recommendation.score,
+            previousScore,
+          });
+          const deltaPct = previousScore !== null
+            ? ((recommendation.score - previousScore) * 100).toFixed(1)
+            : "—";
+          emit({
+            type: "thinking",
+            message: `Auto mode: ${strictness} → ${recommendation.recommendedMode} (composite +${deltaPct}% over current).`,
+          });
+          strictness = recommendation.recommendedMode;
+        }
       }
       pastIdeas = pastRuns.map((run) => run.idea).filter((s) => s.length > 0);
       userAccuracy = signals.userAccuracy;
@@ -370,7 +441,10 @@ export async function runAutonomousAgent({
       version: directionsRefRaw.version,
       hash: directionsRefRaw.hash,
     };
-    let decisions = await suggestDirectionAction(userId ?? "", context, { pastIdeas });
+    let decisions = await suggestDirectionAction(userId ?? "", context, {
+      pastIdeas,
+      calibrationBias,
+    });
     throwIfAborted(signal);
     decisions = applyFeedbackToDecisions(decisions, { userAccuracy, calibrationError, calibrationBias });
     emit({ type: "decisions", decisions });
@@ -405,6 +479,7 @@ export async function runAutonomousAgent({
         const refined = await suggestDirectionAction("", context, {
           pastIdeas,
           refinement: reflection,
+          calibrationBias,
         });
         throwIfAborted(signal);
         if (refined.length > 0) {
@@ -460,10 +535,27 @@ export async function runAutonomousAgent({
         hash: predictionRefRaw.hash,
       };
       try {
-        predictedOutcome = await predictOutcomeAction(idea, top, assumptions, strictness, userId);
+        predictedOutcome = await predictOutcomeAction(idea, top, assumptions, strictness, userId, calibrationBias);
         throwIfAborted(signal);
       } catch (error) {
         console.warn("[autonomousAgent] outcome prediction failed:", error);
+      }
+
+      // v2.7: deterministic mode adjustment on top of the LLM-shaped prompt.
+      // The prompt already steers toward the chosen strictness, but the LLM's
+      // numbers can drift. This re-pins targets and confidence to the spec'd
+      // multipliers and emits a stream message so the user sees the change.
+      if (predictedOutcome && strictness !== "balanced") {
+        const before = predictedOutcome;
+        const adjusted = applyModeAdjustment(before, strictness);
+        if (adjusted.target !== before.target || adjusted.confidence !== before.confidence) {
+          predictedOutcome = adjusted;
+          const direction = strictness === "conservative" ? "safer targets, higher confidence" : "stretch targets, lower confidence";
+          emit({
+            type: "thinking",
+            message: `Decision mode: ${strictness} — ${direction} (target ${before.target} → ${adjusted.target}, confidence ${(before.confidence * 100).toFixed(0)}% → ${(adjusted.confidence * 100).toFixed(0)}%).`,
+          });
+        }
       }
 
       if (predictedOutcome) {

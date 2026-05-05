@@ -25,6 +25,22 @@ const STRICTNESS_INSTRUCTIONS: Record<PredictionStrictness, string> = {
 const BACKEND_STUB =
   "[backend-resident prompt — see backend/src/services/groqService.ts]";
 
+// v2.7 calibration-aware instruction block. Appended to suggest_direction
+// and expected_outcome templates when the user's signed bias is large enough
+// to warrant nudging the model. Empty string when bias is null, undefined,
+// or within the dead zone (±5%) — keeps the rendered prompt byte-identical
+// to the legacy version when there's no signal.
+const CALIBRATION_DEAD_ZONE = 0.05;
+
+function calibrationInstruction(bias: number | null | undefined): string {
+  if (typeof bias !== "number" || !Number.isFinite(bias)) return "";
+  if (Math.abs(bias) < CALIBRATION_DEAD_ZONE) return "";
+  if (bias > 0) {
+    return `\n\nCalibration note: your predictions have been overconfident historically. Prefer conservative estimates and highlight risks.`;
+  }
+  return `\n\nCalibration note: your predictions have been underconfident historically. Do not undershoot targets; consider stronger upside.`;
+}
+
 // Helper to keep entries narrow while indexing the broad PromptDef map type.
 const def = <K extends PromptId>(d: PromptDef<K>): PromptDef<K> => d;
 
@@ -49,7 +65,7 @@ export const REGISTRY: { [K in PromptId]: PromptDef<K> } = {
     description:
       "Propose 3 candidate product directions with scoring (impact/effort/confidence/demand), risks, assumptions, and a production cost model. Bundled by design — splitting would 3–5× LLM round-trips per run.",
     location: "frontend",
-    template: ({ pastIdeas, refinement }) => {
+    template: ({ pastIdeas, refinement, calibrationBias }) => {
       const memoryBlock =
         pastIdeas && pastIdeas.length > 0
           ? `\n\nThe user has explored these ideas recently. Avoid repeating the same weak framings — push for sharper angles:\n${pastIdeas.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}`
@@ -58,6 +74,8 @@ export const REGISTRY: { [K in PromptId]: PromptDef<K> } = {
       const refinementBlock = refinement
         ? `\n\nReflection note — your previous attempt was weak. ${refinement} Be sharper this time.`
         : "";
+
+      const calibrationBlock = calibrationInstruction(calibrationBias);
 
       return `${PM_VOICE_PROMPT}
 
@@ -93,7 +111,7 @@ For each decision, return a JSON object with EXACTLY these keys:
 Hard rules:
 - Be specific. "Improve user experience" is not an insight or a recommendation.
 - Risks and assumptions must be falsifiable, not generic.
-- If the notes are too thin to support a claim, lower confidence and priority — do not invent evidence.${memoryBlock}${refinementBlock}
+- If the notes are too thin to support a claim, lower confidence and priority — do not invent evidence.${memoryBlock}${refinementBlock}${calibrationBlock}
 
 Return ONLY a JSON array of 3 objects. No prose, no markdown fences.`;
     },
@@ -106,13 +124,14 @@ Return ONLY a JSON array of 3 objects. No prose, no markdown fences.`;
     description:
       "Predict ONE measurable outcome (metric, baseline, target, timeframe, confidence) for the top candidate direction. Strictness mode shapes target ambition.",
     location: "frontend",
-    template: ({ idea, decision, insights, strictness }) => {
+    template: ({ idea, decision, insights, strictness, calibrationBias }) => {
       const insightsBlock =
         insights && insights.length > 0
           ? `\n\nKey insights from the notes:\n${insights.slice(0, 5).map((i) => `- ${i}`).join("\n")}`
           : "";
 
       const decisionSummary = decision.summary || decision.justification;
+      const calibrationBlock = calibrationInstruction(calibrationBias);
 
       return `${PM_VOICE_PROMPT}
 
@@ -148,7 +167,7 @@ Return ONLY this JSON, no prose, no markdown fences:
   "confidence": 0.68,
   "unit": "%",
   "rationale": "..."
-}`;
+}${calibrationBlock}`;
     },
   }),
 

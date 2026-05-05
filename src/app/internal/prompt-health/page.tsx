@@ -18,8 +18,15 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 import {
   getPromptOutcomeMetrics,
   getUserFeedbackSignals,
+  getDecisionModeSettings,
+  getDecisionModeMeta,
+  recommendDecisionMode,
   type PromptOutcomeMetricsRow,
   type CalibrationBucket,
+  type ModeBreakdownRow,
+  type DecisionMode,
+  type DecisionModeMeta,
+  type DecisionModeSettings,
 } from "@/lib/firebase/db";
 import { getRollbackDecisions, type RollbackDecision } from "@/lib/ai/promptLibrary";
 
@@ -246,6 +253,9 @@ export default function PromptHealthPage() {
   const [rollbacks, setRollbacks] = React.useState<RollbackDecision[]>([]);
   const [calibrationBuckets, setCalibrationBuckets] = React.useState<CalibrationBucket[]>([]);
   const [calibrationBias, setCalibrationBias] = React.useState<number | null>(null);
+  const [modeBreakdown, setModeBreakdown] = React.useState<ModeBreakdownRow[]>([]);
+  const [modeSettings, setModeSettings] = React.useState<DecisionModeSettings | null>(null);
+  const [modeMeta, setModeMeta] = React.useState<DecisionModeMeta | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -255,12 +265,14 @@ export default function PromptHealthPage() {
     setError(null);
     try {
       const token = await user.getIdToken();
-      const [backendRes, outcomeResult, signals] = await Promise.all([
+      const [backendRes, outcomeResult, signals, settings, meta] = await Promise.all([
         fetch("/api/ai/internal/prompt-health", {
           headers: { Authorization: `Bearer ${token}` },
         }),
         getPromptOutcomeMetrics(user.uid, 30),
         getUserFeedbackSignals(user.uid, 100),
+        getDecisionModeSettings(user.uid),
+        getDecisionModeMeta(user.uid),
       ]);
       const envelope = (await backendRes.json().catch(() => null)) as { ok?: boolean; data?: BackendData; error?: string } | null;
       if (!backendRes.ok || !envelope?.ok || !envelope.data) {
@@ -271,6 +283,9 @@ export default function PromptHealthPage() {
       setRollbacks(getRollbackDecisions());
       setCalibrationBuckets(signals.calibrationBuckets);
       setCalibrationBias(signals.calibrationBias);
+      setModeBreakdown(outcomeResult.modeBreakdown);
+      setModeSettings(settings);
+      setModeMeta(meta);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load prompt health");
     } finally {
@@ -356,6 +371,90 @@ export default function PromptHealthPage() {
         <section className="mb-6 rounded border border-border p-4 bg-card">
           <h2 className="text-sm font-semibold mb-3">Calibration Curve</h2>
           <CalibrationCurve buckets={calibrationBuckets} bias={calibrationBias} />
+        </section>
+      )}
+
+      {/* v2.8 Mode Recommendation — current vs recommended, score delta,
+          last automated switch. Pure client-side compute; reuses
+          modeBreakdown and the settings/meta we already loaded. */}
+      {modeSettings && (() => {
+        const recommendation = recommendDecisionMode(modeBreakdown);
+        if (!recommendation.qualified && !modeMeta) return null;
+        const currentMode: DecisionMode = modeSettings.mode;
+        const currentScore = recommendation.scoresPerMode[currentMode];
+        const recommendedScore = recommendation.score;
+        const scoreDelta =
+          typeof currentScore === "number" ? recommendedScore - currentScore : null;
+        const lastSwitch = modeMeta?.lastSwitchAt?.toDate?.() ?? null;
+        return (
+          <section className="mb-6 rounded border border-border p-4 bg-card">
+            <h2 className="text-sm font-semibold mb-3">Mode Recommendation</h2>
+            <ul className="space-y-1 text-xs">
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Current mode</span>
+                <span className="font-mono capitalize">
+                  {currentMode}
+                  {modeSettings.auto && <span className="ml-1 text-muted-foreground/60">(auto)</span>}
+                </span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Recommended mode</span>
+                <span className="font-mono capitalize">
+                  {recommendation.qualified ? recommendation.recommendedMode : "—"}
+                  {!recommendation.qualified && (
+                    <span className="ml-1 text-muted-foreground/60 normal-case">(insufficient data)</span>
+                  )}
+                </span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Score delta vs current</span>
+                <span className="tabular-nums font-mono">
+                  {scoreDelta === null
+                    ? "—"
+                    : `${scoreDelta >= 0 ? "+" : ""}${(scoreDelta * 100).toFixed(1)}%`}
+                </span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Last automated switch</span>
+                <span className="font-mono text-muted-foreground/80">
+                  {lastSwitch ? lastSwitch.toLocaleString() : "never"}
+                </span>
+              </li>
+            </ul>
+          </section>
+        );
+      })()}
+
+      {/* v2.7 Performance by Mode — only renders when at least one mode has runs */}
+      {modeBreakdown.some((m) => m.runs > 0) && (
+        <section className="mb-6 rounded border border-border p-4 bg-card">
+          <h2 className="text-sm font-semibold mb-3">Performance by Mode</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/40 text-muted-foreground">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium">Mode</th>
+                  <th className="text-right px-3 py-2 font-medium">Runs</th>
+                  <th className="text-right px-3 py-2 font-medium">Outcomes</th>
+                  <th className="text-right px-3 py-2 font-medium">Avg accuracy</th>
+                  <th className="text-right px-3 py-2 font-medium">Hit rate</th>
+                  <th className="text-right px-3 py-2 font-medium">Avg calib. err</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modeBreakdown.map((m) => (
+                  <tr key={m.mode} className="border-t border-border">
+                    <td className="px-3 py-2 font-mono capitalize">{m.mode}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{m.runs}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{m.outcomesRecorded}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmtPercent(m.avgAccuracyNorm)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmtPercent(m.hitRate)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmtPercent(m.avgCalibrationError)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 

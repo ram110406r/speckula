@@ -29,7 +29,14 @@ import type {
   PredictionStrictness,
 } from "@/lib/ai/actions";
 import type { Verdict, VerdictLabel, VerdictFactors } from "@/lib/ai/verdict";
-import { saveDecision } from "@/lib/firebase/db";
+import {
+  saveDecision,
+  getDecisionModeSettings,
+  setDecisionModeSettings,
+  getDecisionModeMeta,
+  type DecisionMode,
+  type DecisionModeMeta,
+} from "@/lib/firebase/db";
 import { generatePRDAction, suggestTasksAction, textToTipTap } from "@/lib/ai/actions";
 import { useAppStore } from "@/store/useAppStore";
 import { toast } from "@/store/useToastStore";
@@ -97,6 +104,8 @@ export function AutonomousModeView() {
   const [userAccuracy, setUserAccuracy] = React.useState<number | null>(null);
   const [confidenceExplanation, setConfidenceExplanation] = React.useState<ConfidenceExplanationItem[]>([]);
   const [strictness, setStrictness] = React.useState<PredictionStrictness>("balanced");
+  const [autoMode, setAutoModeState] = React.useState<boolean>(false);
+  const [modeMeta, setModeMeta] = React.useState<DecisionModeMeta | null>(null);
   const [rollbacks, setRollbacks] = React.useState<RollbackDecision[]>([]);
   const [pastIdeas, setPastIdeas] = React.useState<string[]>([]);
   const [pendingQuestion, setPendingQuestion] = React.useState<ClarifyingQuestion | null>(null);
@@ -123,6 +132,42 @@ export function AutonomousModeView() {
     // so the UI hint is accurate before the user kicks off a new analysis.
     setRollbacks(getRollbackDecisions());
   }, []);
+
+  // v2.7+v2.8: hydrate decision-mode settings (mode + auto flag) and the
+  // recommendation metadata (score + lastSwitchAt) from Firestore on mount.
+  // The agent reuses lastSwitchAtMs for hysteresis without doing its own read.
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    let cancelled = false;
+    void Promise.all([
+      getDecisionModeSettings(user.uid),
+      getDecisionModeMeta(user.uid),
+    ]).then(([settings, meta]) => {
+      if (cancelled) return;
+      setStrictness(settings.mode);
+      setAutoModeState(settings.auto);
+      setModeMeta(meta);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
+
+  const handleStrictnessChange = React.useCallback(
+    (next: PredictionStrictness) => {
+      setStrictness(next);
+      if (user?.uid) void setDecisionModeSettings(user.uid, { mode: next as DecisionMode });
+    },
+    [user?.uid]
+  );
+
+  const handleAutoModeChange = React.useCallback(
+    (next: boolean) => {
+      setAutoModeState(next);
+      if (user?.uid) void setDecisionModeSettings(user.uid, { auto: next });
+    },
+    [user?.uid]
+  );
 
   const appendEntry = React.useCallback((entry: ChatEntryInput) => {
     setChat((prev) => [...prev, { ...entry, id: nextEntryId() }]);
@@ -188,6 +233,16 @@ export function AutonomousModeView() {
       case "confidenceExplanation":
         setConfidenceExplanation(event.items);
         break;
+      case "modeAutoSwitched":
+        // Reflect the auto-switch in the toggle so the visible state matches
+        // what the agent is now running. Refresh the meta so the cooldown
+        // timer is accurate for any subsequent run in this session.
+        setStrictness(event.to);
+        if (user?.uid) {
+          void getDecisionModeMeta(user.uid).then((meta) => setModeMeta(meta));
+        }
+        appendEntry({ kind: "system", text: `Auto mode switched to ${event.to}` });
+        break;
       case "checkpoint":
         appendEntry({ kind: "checkpoint", text: event.message });
         break;
@@ -199,7 +254,7 @@ export function AutonomousModeView() {
         setMobileTab("output");
         break;
     }
-  }, [appendEntry]);
+  }, [appendEntry, user?.uid]);
 
   const start = React.useCallback(async () => {
     const trimmed = idea.trim();
@@ -235,6 +290,8 @@ export function AutonomousModeView() {
         alreadyAsked: [],
         userId: user?.uid,
         strictness,
+        autoMode,
+        lastSwitchAtMs: modeMeta?.lastSwitchAt?.toDate?.()?.getTime?.() ?? null,
         awaitUserResponse: (question) =>
           new Promise<string>((resolve, reject) => {
             answerResolverRef.current = resolve;
@@ -247,7 +304,7 @@ export function AutonomousModeView() {
       answerResolverRef.current = null;
       answerRejecterRef.current = null;
     }
-  }, [idea, depth, isRunning, appendEntry, handleAgentEvent, user?.uid, strictness]);
+  }, [idea, depth, isRunning, appendEntry, handleAgentEvent, user?.uid, strictness, autoMode, modeMeta]);
 
   const stop = React.useCallback(() => {
     abortRef.current?.abort();
@@ -325,6 +382,7 @@ export function AutonomousModeView() {
         expectedOutcome: expectedOutcomePayload,
         metric: predictedOutcome?.metric.trim().toLowerCase(),
         predictionPromptRef: predictionPromptRef ?? undefined,
+        decisionMode: strictness,
       });
       toast.success("Decision saved", topDecision.title);
       activity.success("Decision saved from Autonomous Mode");
@@ -333,7 +391,7 @@ export function AutonomousModeView() {
     } finally {
       setIsSaving(false);
     }
-  }, [user, topDecision, strategy, predictedOutcome, predictionPromptRef, isSaving, currentDocId]);
+  }, [user, topDecision, strategy, predictedOutcome, predictionPromptRef, isSaving, currentDocId, strictness]);
 
   const handleConvertToSpec = React.useCallback(async () => {
     if (!user || !topDecision || isConvertingToSpec) return;
@@ -527,7 +585,46 @@ export function AutonomousModeView() {
               <label className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">
                 Prediction strictness
               </label>
-              <StrictnessSelector value={strictness} onChange={setStrictness} disabled={isRunning} />
+              <StrictnessSelector value={strictness} onChange={handleStrictnessChange} disabled={isRunning || autoMode} />
+              <p className="font-mono text-[9px] text-muted-foreground/55 leading-snug">
+                {strictness === "conservative" && "Mode: Conservative — safer targets, higher confidence"}
+                {strictness === "balanced" && "Mode: Balanced — honest uncertainty"}
+                {strictness === "aggressive" && "Mode: Aggressive — stretch targets, lower confidence"}
+              </p>
+
+              {/* v2.8: Auto mode toggle + recommendation hint. The hint only
+                  appears when there's a meaningful recommendation different
+                  from the current selection — otherwise stays out of the way. */}
+              <label className="flex items-center justify-between gap-2 pt-1.5 cursor-pointer">
+                <span className="font-mono text-[10px] text-muted-foreground/70">Auto mode</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoMode}
+                  onClick={() => !isRunning && handleAutoModeChange(!autoMode)}
+                  disabled={isRunning}
+                  className={`relative h-3.5 w-7 rounded-full transition-colors disabled:opacity-50 ${autoMode ? "bg-primary/80" : "bg-muted"}`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-card transition-all ${autoMode ? "left-3.5" : "left-0.5"}`}
+                  />
+                </button>
+              </label>
+
+              {(() => {
+                if (autoMode || !modeMeta) return null;
+                if (modeMeta.recommendedMode === strictness) return null;
+                const currentScore = (modeMeta as DecisionModeMeta & { score?: number }).score;
+                if (typeof currentScore !== "number" || !Number.isFinite(currentScore)) return null;
+                // Heuristic improvement % — score deltas across modes typically
+                // sit in the [0, 0.3] range, so ×100 gives a friendly number.
+                const deltaText = `recommended by your outcome history`;
+                return (
+                  <p className="font-mono text-[9px] text-success/80 leading-snug">
+                    Recommended: <span className="capitalize font-medium">{modeMeta.recommendedMode}</span> — {deltaText}
+                  </p>
+                );
+              })()}
             </div>
 
             {/* Analyze button */}
