@@ -3,6 +3,7 @@
 // prompt revision.
 
 import type { PromptId } from "./types";
+import { getRollbackOverride } from "./rollback";
 
 export const PINNED_VERSIONS: Record<PromptId, string> = {
   insight_extractor: "1.0",
@@ -27,12 +28,17 @@ export function clearUserOverrides(userId: string): void {
   delete userOverrides[userId];
 }
 
-// Resolve the active version for a (user, prompt) pair. Falls back to the
-// pinned default when no userId is provided or no override exists.
+// Resolve the active version for a (user, prompt) pair.
+// Resolution order (first match wins):
+//   1. Per-user override (manual A/B from setUserOverride)
+//   2. Auto-rollback override (v2.4 — degradation guard)
+//   3. PINNED_VERSIONS default
 export function getVersionForUser(userId: string | null | undefined, promptId: PromptId): string {
   if (userId) {
     const v = userOverrides[userId]?.[promptId];
     if (typeof v === "string" && v.length > 0) return v;
   }
+  const rollback = getRollbackOverride(promptId);
+  if (typeof rollback === "string" && rollback.length > 0) return rollback;
   return PINNED_VERSIONS[promptId];
 }

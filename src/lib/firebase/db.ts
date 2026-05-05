@@ -127,6 +127,10 @@ export interface DecisionRecord {
   };
   // v2.2: indexable copy of the predicted metric (lowercase) for pattern lookups.
   metric?: string;
+  // v2.4: snapshot of the prompt that produced this decision's prediction.
+  // Lets the empirical optimization layer aggregate accuracy by (promptId,
+  // version) without re-querying pastRuns and matching by title.
+  predictionPromptRef?: { id: string; version: string; hash: string };
   userId: string;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -510,10 +514,17 @@ export interface UserFeedbackSignals {
   userAccuracy: number | null;
   calibrationError: number | null;
   patternAccuracies: Record<string, number>;
+  // v2.4: same shape, keyed by lowercased strategicTheme.
+  themeAccuracies: Record<string, number>;
 }
 
 export const getUserFeedbackSignals = async (userId: string, max = 12): Promise<UserFeedbackSignals> => {
-  const empty: UserFeedbackSignals = { userAccuracy: null, calibrationError: null, patternAccuracies: {} };
+  const empty: UserFeedbackSignals = {
+    userAccuracy: null,
+    calibrationError: null,
+    patternAccuracies: {},
+    themeAccuracies: {},
+  };
   try {
     const q = query(
       userDecisionsCollection(userId),
@@ -524,15 +535,24 @@ export const getUserFeedbackSignals = async (userId: string, max = 12): Promise<
     const accuracies: number[] = [];
     const errors: number[] = [];
     const patternBuckets: Record<string, number[]> = {};
+    const themeBuckets: Record<string, number[]> = {};
 
     for (const d of snap.docs) {
-      const data = d.data() as { finalAccuracy?: unknown; accuracyNorm?: unknown; calibrationError?: unknown; metric?: unknown };
+      const data = d.data() as {
+        finalAccuracy?: unknown;
+        accuracyNorm?: unknown;
+        calibrationError?: unknown;
+        metric?: unknown;
+        strategyTheme?: unknown;
+      };
 
       const accRaw = Number(data.finalAccuracy ?? data.accuracyNorm);
       if (Number.isFinite(accRaw) && accRaw >= 0 && accRaw <= 1) {
         accuracies.push(accRaw);
         const m = typeof data.metric === "string" ? data.metric.trim().toLowerCase() : "";
         if (m) (patternBuckets[m] ??= []).push(accRaw);
+        const t = typeof data.strategyTheme === "string" ? data.strategyTheme.trim().toLowerCase() : "";
+        if (t) (themeBuckets[t] ??= []).push(accRaw);
       }
 
       const errRaw = Number(data.calibrationError);
@@ -548,8 +568,12 @@ export const getUserFeedbackSignals = async (userId: string, max = 12): Promise<
     for (const [m, vals] of Object.entries(patternBuckets)) {
       if (vals.length > 0) patternAccuracies[m] = avg(vals);
     }
+    const themeAccuracies: Record<string, number> = {};
+    for (const [t, vals] of Object.entries(themeBuckets)) {
+      if (vals.length > 0) themeAccuracies[t] = avg(vals);
+    }
 
-    return { userAccuracy, calibrationError, patternAccuracies };
+    return { userAccuracy, calibrationError, patternAccuracies, themeAccuracies };
   } catch (error) {
     logFirestorePermissionHint("getUserFeedbackSignals", error);
     return empty;
@@ -560,6 +584,105 @@ export const getUserFeedbackSignals = async (userId: string, max = 12): Promise<
 export const getUserAccuracySignal = async (userId: string, max = 10): Promise<number | null> => {
   const signals = await getUserFeedbackSignals(userId, max);
   return signals.userAccuracy;
+};
+
+// v2.4 empirical optimization layer (Step 1 + 6).
+// Aggregates per-(promptId, promptVersion) outcome metrics from saved
+// decisions. Source = Firestore (decisions carry expectedOutcome + actuals
+// via the sub-collection feedback flow). Backend PromptLog already provides
+// the cost / latency side; this fills in the accuracy side.
+export interface PromptOutcomeMetricsRow {
+  promptId: string;
+  promptVersion: string;
+  runs: number;
+  avgAccuracyNorm: number | null;
+  avgFinalAccuracy: number | null;
+  avgCalibrationError: number | null;
+  avgPredictionConfidence: number | null;
+  hitRate: number | null;          // share of recorded outcomes where actual >= target
+  outcomesRecorded: number;        // denominator behind hitRate / accuracy
+}
+
+export const getPromptOutcomeMetrics = async (
+  userId: string,
+  windowDays = 30
+): Promise<PromptOutcomeMetricsRow[]> => {
+  try {
+    const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+    // Pull recent decisions; we filter by predictionPromptRef.id presence
+    // client-side because composite-field filters on nested fields require
+    // a Firestore index we don't want to demand.
+    const q = query(userDecisionsCollection(userId), orderBy("updatedAt", "desc"), firestoreLimit(500));
+    const snap = await getDocs(q);
+
+    interface Bucket {
+      runs: number;
+      accSum: number; accCount: number;
+      finalSum: number; finalCount: number;
+      calibSum: number; calibCount: number;
+      confSum: number; confCount: number;
+      hits: number; outcomes: number;
+    }
+    const buckets = new Map<string, Bucket & { promptId: string; promptVersion: string }>();
+    const bucketKey = (id: string, v: string) => `${id}::${v}`;
+
+    for (const d of snap.docs) {
+      const data = d.data() as DecisionRecord & {
+        predictionPromptRef?: { id: string; version: string };
+        expectedOutcome?: { target_value?: number };
+        updatedAt?: Timestamp;
+      };
+      const ref = data.predictionPromptRef;
+      if (!ref?.id || !ref.version) continue;
+      // updatedAt timestamp filter
+      const ts = data.updatedAt?.toDate?.();
+      if (ts && ts < since) continue;
+
+      const key = bucketKey(ref.id, ref.version);
+      const b = buckets.get(key) ?? {
+        promptId: ref.id, promptVersion: ref.version,
+        runs: 0,
+        accSum: 0, accCount: 0,
+        finalSum: 0, finalCount: 0,
+        calibSum: 0, calibCount: 0,
+        confSum: 0, confCount: 0,
+        hits: 0, outcomes: 0,
+      };
+      b.runs += 1;
+
+      const acc = Number(data.accuracyNorm);
+      if (Number.isFinite(acc)) { b.accSum += acc; b.accCount += 1; }
+      const fin = Number(data.finalAccuracy);
+      if (Number.isFinite(fin)) { b.finalSum += fin; b.finalCount += 1; }
+      const cal = Number(data.calibrationError);
+      if (Number.isFinite(cal)) { b.calibSum += cal; b.calibCount += 1; }
+      const conf = Number(data.confidence);
+      if (Number.isFinite(conf)) { b.confSum += conf / 10; b.confCount += 1; }
+
+      // hitRate from accuracyNorm — accuracy >= 0.5 means actual met-or-beat
+      // the target (accuracy_norm of 0.5 corresponds to delta=0).
+      if (Number.isFinite(acc)) {
+        b.outcomes += 1;
+        if (acc >= 0.5) b.hits += 1;
+      }
+      buckets.set(key, b);
+    }
+
+    return Array.from(buckets.values()).map((b) => ({
+      promptId: b.promptId,
+      promptVersion: b.promptVersion,
+      runs: b.runs,
+      avgAccuracyNorm: b.accCount > 0 ? b.accSum / b.accCount : null,
+      avgFinalAccuracy: b.finalCount > 0 ? b.finalSum / b.finalCount : null,
+      avgCalibrationError: b.calibCount > 0 ? b.calibSum / b.calibCount : null,
+      avgPredictionConfidence: b.confCount > 0 ? b.confSum / b.confCount : null,
+      hitRate: b.outcomes > 0 ? b.hits / b.outcomes : null,
+      outcomesRecorded: b.outcomes,
+    }));
+  } catch (error) {
+    logFirestorePermissionHint("getPromptOutcomeMetrics", error);
+    return [];
+  }
 };
 
 // --- PRD ACTIONS ---
