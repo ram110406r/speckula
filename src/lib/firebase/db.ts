@@ -131,6 +131,12 @@ export interface DecisionRecord {
   // Lets the empirical optimization layer aggregate accuracy by (promptId,
   // version) without re-querying pastRuns and matching by title.
   predictionPromptRef?: { id: string; version: string; hash: string };
+  // v2.5: explicit success flag (actual ≥ target) replaces the old
+  // `accuracyNorm ≥ 0.5` proxy for hitRate. outcomeRecordedAt anchors the
+  // rolling-window rollback so we compare recent vs prior batches by the
+  // moment outcomes were recorded, not when the decision was first saved.
+  success?: boolean;
+  outcomeRecordedAt?: Timestamp | null;
   userId: string;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -200,6 +206,9 @@ const userDecisionsCollection = (userId: string) => collection(db, "users", user
 const userPrdsCollection = (userId: string) => collection(db, "users", userId, "prds");
 const userTasksCollection = (userId: string) => collection(db, "users", userId, "tasks");
 const userPastRunsCollection = (userId: string) => collection(db, "users", userId, "pastRuns");
+const userPromptOverridesCollection = (userId: string) => collection(db, "users", userId, "promptOverrides");
+const userPromptOverrideRef = (userId: string, promptId: string) =>
+  doc(db, "users", userId, "promptOverrides", promptId);
 const publicProfilesCollection = () => collection(db, "publicProfiles");
 const workspacesCollection = () => collection(db, "workspaces");
 
@@ -599,14 +608,33 @@ export interface PromptOutcomeMetricsRow {
   avgFinalAccuracy: number | null;
   avgCalibrationError: number | null;
   avgPredictionConfidence: number | null;
-  hitRate: number | null;          // share of recorded outcomes where actual >= target
-  outcomesRecorded: number;        // denominator behind hitRate / accuracy
+  // v2.5: hitRate now derives from the explicit `success` flag persisted on
+  // each decision. Falls back to accuracyNorm >= 0.5 when older records
+  // didn't record a success boolean.
+  hitRate: number | null;
+  outcomesRecorded: number;
+}
+
+// v2.5: per-decision sample used by the rolling-window rollback algorithm.
+// Sorted DESC by recordedAt by getPromptOutcomeMetrics so consumers can
+// slice the recent window without re-sorting.
+export interface OutcomeSample {
+  promptId: string;
+  promptVersion: string;
+  accuracyNorm: number;
+  success: boolean;
+  recordedAt: number; // ms epoch
+}
+
+export interface PromptOutcomeMetricsResult {
+  rows: PromptOutcomeMetricsRow[];
+  samplesByPromptId: Record<string, OutcomeSample[]>;
 }
 
 export const getPromptOutcomeMetrics = async (
   userId: string,
   windowDays = 30
-): Promise<PromptOutcomeMetricsRow[]> => {
+): Promise<PromptOutcomeMetricsResult> => {
   try {
     const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
     // Pull recent decisions; we filter by predictionPromptRef.id presence
@@ -624,18 +652,21 @@ export const getPromptOutcomeMetrics = async (
       hits: number; outcomes: number;
     }
     const buckets = new Map<string, Bucket & { promptId: string; promptVersion: string }>();
+    const samplesByPromptId: Record<string, OutcomeSample[]> = {};
     const bucketKey = (id: string, v: string) => `${id}::${v}`;
 
     for (const d of snap.docs) {
-      const data = d.data() as DecisionRecord & {
-        predictionPromptRef?: { id: string; version: string };
-        expectedOutcome?: { target_value?: number };
-        updatedAt?: Timestamp;
-      };
+      const data = d.data() as DecisionRecord;
       const ref = data.predictionPromptRef;
       if (!ref?.id || !ref.version) continue;
-      // updatedAt timestamp filter
-      const ts = data.updatedAt?.toDate?.();
+
+      // updatedAt is the agent-bumped timestamp; outcomeRecordedAt is the
+      // explicit feedback time. Prefer the latter when present so the
+      // rolling-window rollback partitions by *outcome* time, not by save.
+      const ts =
+        data.outcomeRecordedAt?.toDate?.() ??
+        data.updatedAt?.toDate?.() ??
+        null;
       if (ts && ts < since) continue;
 
       const key = bucketKey(ref.id, ref.version);
@@ -651,7 +682,8 @@ export const getPromptOutcomeMetrics = async (
       b.runs += 1;
 
       const acc = Number(data.accuracyNorm);
-      if (Number.isFinite(acc)) { b.accSum += acc; b.accCount += 1; }
+      const accValid = Number.isFinite(acc);
+      if (accValid) { b.accSum += acc; b.accCount += 1; }
       const fin = Number(data.finalAccuracy);
       if (Number.isFinite(fin)) { b.finalSum += fin; b.finalCount += 1; }
       const cal = Number(data.calibrationError);
@@ -659,16 +691,39 @@ export const getPromptOutcomeMetrics = async (
       const conf = Number(data.confidence);
       if (Number.isFinite(conf)) { b.confSum += conf / 10; b.confCount += 1; }
 
-      // hitRate from accuracyNorm — accuracy >= 0.5 means actual met-or-beat
-      // the target (accuracy_norm of 0.5 corresponds to delta=0).
-      if (Number.isFinite(acc)) {
+      // v2.5: prefer the explicit `success` boolean. Legacy records without
+      // it fall back to the accuracyNorm >= 0.5 proxy so historical data
+      // still contributes a hit-rate signal.
+      const explicitSuccess = typeof data.success === "boolean" ? data.success : null;
+      const success = explicitSuccess ?? (accValid ? acc >= 0.5 : null);
+      if (success !== null) {
         b.outcomes += 1;
-        if (acc >= 0.5) b.hits += 1;
+        if (success) b.hits += 1;
       }
+
       buckets.set(key, b);
+
+      // Push a sample for rolling-window rollback. We require accuracy +
+      // a usable success bool; without those the sample has no signal.
+      if (accValid && success !== null && ts) {
+        (samplesByPromptId[ref.id] ??= []).push({
+          promptId: ref.id,
+          promptVersion: ref.version,
+          accuracyNorm: acc,
+          success,
+          recordedAt: ts.getTime(),
+        });
+      }
     }
 
-    return Array.from(buckets.values()).map((b) => ({
+    // Each promptId's samples already arrive in DESC-by-updatedAt order from
+    // the Firestore query. Re-sort defensively since outcomeRecordedAt may
+    // diverge from updatedAt for legacy rows.
+    for (const pid of Object.keys(samplesByPromptId)) {
+      samplesByPromptId[pid].sort((a, b) => b.recordedAt - a.recordedAt);
+    }
+
+    const rows: PromptOutcomeMetricsRow[] = Array.from(buckets.values()).map((b) => ({
       promptId: b.promptId,
       promptVersion: b.promptVersion,
       runs: b.runs,
@@ -679,9 +734,70 @@ export const getPromptOutcomeMetrics = async (
       hitRate: b.outcomes > 0 ? b.hits / b.outcomes : null,
       outcomesRecorded: b.outcomes,
     }));
+
+    return { rows, samplesByPromptId };
   } catch (error) {
     logFirestorePermissionHint("getPromptOutcomeMetrics", error);
-    return [];
+    return { rows: [], samplesByPromptId: {} };
+  }
+};
+
+// v2.5 — per-user prompt version overrides persisted in Firestore.
+// users/{uid}/promptOverrides/{promptId} — { version, source, decidedAt }
+//
+// Authority order at version-resolve time:
+//   1. Firestore override (this collection)
+//   2. localStorage rollback override (offline fallback)
+//   3. PINNED_VERSIONS default
+//
+// Source values:
+//   - "rollback"  — auto-rollback decided by computeAndApplyRollbacks
+//   - "manual"    — admin / experiment toggle (future)
+export interface PromptOverrideRecord {
+  version: string;
+  source: "rollback" | "manual";
+  decidedAt: Timestamp | null;
+  // Optional metadata: which decision led to this override
+  fromVersion?: string;
+  recentAccuracy?: number;
+  previousAccuracy?: number;
+}
+
+export const getPromptOverrides = async (userId: string): Promise<Record<string, PromptOverrideRecord>> => {
+  try {
+    const snap = await getDocs(userPromptOverridesCollection(userId));
+    const out: Record<string, PromptOverrideRecord> = {};
+    for (const d of snap.docs) {
+      out[d.id] = d.data() as PromptOverrideRecord;
+    }
+    return out;
+  } catch (error) {
+    logFirestorePermissionHint("getPromptOverrides", error);
+    return {};
+  }
+};
+
+export const setPromptOverride = async (
+  userId: string,
+  promptId: string,
+  data: Omit<PromptOverrideRecord, "decidedAt">
+): Promise<void> => {
+  try {
+    await setDoc(userPromptOverrideRef(userId, promptId), {
+      ...data,
+      decidedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    logFirestorePermissionHint("setPromptOverride", error);
+    // Non-blocking: agent flow should continue even if override write fails.
+  }
+};
+
+export const clearPromptOverride = async (userId: string, promptId: string): Promise<void> => {
+  try {
+    await deleteDoc(userPromptOverrideRef(userId, promptId));
+  } catch (error) {
+    logFirestorePermissionHint("clearPromptOverride", error);
   }
 };
 
