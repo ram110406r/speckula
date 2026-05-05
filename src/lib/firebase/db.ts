@@ -104,6 +104,29 @@ export interface DecisionRecord {
   sourceDocId?: string;
   published?: boolean;
   caseBrief?: CaseBriefData | null;
+  // v2.1: persisted 0–1 accuracy of expected vs actual outcomes for this
+  // decision. Populated by persistOutcomeFeedback. Read by the agent's
+  // feedback layer so future runs can bias scoring.
+  accuracyNorm?: number;
+  // v2.2: prediction-quality (0.5–2) penalizes low-ambition predictions and
+  // rewards ambitious targets. finalAccuracy = clamp(accuracyNorm × quality, 0, 1)
+  // is what the feedback loop actually consumes.
+  predictionQuality?: number;
+  finalAccuracy?: number;
+  // v2.2: |confidence/9 − accuracyNorm|. High calibrationError means the user
+  // was overconfident. Used to add an extra confidence penalty on the next run.
+  calibrationError?: number;
+  // v2.2: snapshot of the prediction at save time so outcome-record + pattern
+  // queries can read it without joining.
+  expectedOutcome?: {
+    metric: string;
+    target_value: number;
+    baseline?: number | null;
+    unit?: string;
+    timeframe: string;
+  };
+  // v2.2: indexable copy of the predicted metric (lowercase) for pattern lookups.
+  metric?: string;
   userId: string;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -424,6 +447,19 @@ export interface PastRunRecord {
   topDecisions: string[];
   verdictLabel: string;
   verdictReason: string;
+  // v2.1: structured prediction emitted DURING the run. Lets future runs
+  // surface "you predicted X for a similar idea — actual was Y" and seeds the
+  // outcome-comparison flow when the user later records actuals.
+  predictedOutcome?: {
+    metric: string;
+    baseline: number | null;
+    target: number;
+    timeframeDays: number;
+    confidence: number;
+    unit?: string;
+  };
+  // Snapshot of the user's rolling accuracy at run time, for trend analysis.
+  userAccuracyAtRun?: number;
   createdAt: Timestamp | null;
 }
 
@@ -455,6 +491,70 @@ export const getRecentPastRuns = async (userId: string, max = 3): Promise<PastRu
     logFirestorePermissionHint("getRecentPastRuns", error);
     return [];
   }
+};
+
+// v2.2 feedback loop signals (Stages 11 + prediction-quality + calibration).
+// One Firestore query → three derived signals so the autonomous agent doesn't
+// fan out three independent reads at startup.
+//   userAccuracy       : avg finalAccuracy (or accuracyNorm fallback) across
+//                        the most recent N decisions with recorded outcomes.
+//   calibrationError   : avg |confidenceNorm − accuracyNorm|, 0–1.
+//   patternAccuracies  : map of normalized metric → avg accuracy. Lookups are
+//                        case-insensitive and trimmed.
+export interface UserFeedbackSignals {
+  userAccuracy: number | null;
+  calibrationError: number | null;
+  patternAccuracies: Record<string, number>;
+}
+
+export const getUserFeedbackSignals = async (userId: string, max = 12): Promise<UserFeedbackSignals> => {
+  const empty: UserFeedbackSignals = { userAccuracy: null, calibrationError: null, patternAccuracies: {} };
+  try {
+    const q = query(
+      userDecisionsCollection(userId),
+      orderBy("updatedAt", "desc"),
+      firestoreLimit(max * 3)
+    );
+    const snap = await getDocs(q);
+    const accuracies: number[] = [];
+    const errors: number[] = [];
+    const patternBuckets: Record<string, number[]> = {};
+
+    for (const d of snap.docs) {
+      const data = d.data() as { finalAccuracy?: unknown; accuracyNorm?: unknown; calibrationError?: unknown; metric?: unknown };
+
+      const accRaw = Number(data.finalAccuracy ?? data.accuracyNorm);
+      if (Number.isFinite(accRaw) && accRaw >= 0 && accRaw <= 1) {
+        accuracies.push(accRaw);
+        const m = typeof data.metric === "string" ? data.metric.trim().toLowerCase() : "";
+        if (m) (patternBuckets[m] ??= []).push(accRaw);
+      }
+
+      const errRaw = Number(data.calibrationError);
+      if (Number.isFinite(errRaw) && errRaw >= 0 && errRaw <= 1) errors.push(errRaw);
+
+      if (accuracies.length >= max && errors.length >= max) break;
+    }
+
+    const avg = (xs: number[]) => xs.reduce((s, v) => s + v, 0) / xs.length;
+    const userAccuracy = accuracies.length > 0 ? avg(accuracies.slice(0, max)) : null;
+    const calibrationError = errors.length > 0 ? avg(errors.slice(0, max)) : null;
+    const patternAccuracies: Record<string, number> = {};
+    for (const [m, vals] of Object.entries(patternBuckets)) {
+      if (vals.length > 0) patternAccuracies[m] = avg(vals);
+    }
+
+    return { userAccuracy, calibrationError, patternAccuracies };
+  } catch (error) {
+    logFirestorePermissionHint("getUserFeedbackSignals", error);
+    return empty;
+  }
+};
+
+// Back-compat shim. Prefer getUserFeedbackSignals.
+export const getUserAccuracySignal = async (userId: string, max = 10): Promise<number | null> => {
+  const signals = await getUserFeedbackSignals(userId, max);
+  return signals.userAccuracy;
 };
 
 // --- PRD ACTIONS ---
