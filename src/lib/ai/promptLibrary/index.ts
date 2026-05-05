@@ -19,6 +19,16 @@ export {
   validateLearningInsightText,
   withRetryOnParseFail,
 } from "./validators";
+export {
+  computeAndApplyRollbacks,
+  getRollbackDecisions,
+  getRollbackOverride,
+  clearRollbacks,
+} from "./rollback";
+export type {
+  RollbackDecision,
+  PromptOutcomeMetricsRow as RollbackInputRow,
+} from "./rollback";
 export type {
   PromptId,
   PromptDef,

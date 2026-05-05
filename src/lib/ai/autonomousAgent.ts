@@ -27,9 +27,9 @@ import {
   type Verdict,
 } from "./verdict";
 import { adjustedConfidence, type AccuracyContext } from "./scoreEngine";
-import { renderPrompt } from "./promptLibrary";
+import { renderPrompt, computeAndApplyRollbacks } from "./promptLibrary";
 import type { PromptRef } from "./promptLibrary";
-import { savePastRun, getRecentPastRuns, getUserFeedbackSignals } from "../firebase/db";
+import { savePastRun, getRecentPastRuns, getUserFeedbackSignals, getPromptOutcomeMetrics } from "../firebase/db";
 
 export type AgentState =
   | "idle"
@@ -68,7 +68,7 @@ export type AgentEvent =
   | { type: "verdict"; verdict: Verdict }
   | { type: "topDecision"; decision: DecisionSuggestion }
   | { type: "memoryLoaded"; pastIdeas: string[] }
-  | { type: "expectedOutcome"; outcome: PredictedOutcome }
+  | { type: "expectedOutcome"; outcome: PredictedOutcome; promptRef?: PromptRef }
   | { type: "feedbackApplied"; userAccuracy: number }
   | { type: "confidenceExplanation"; items: ConfidenceExplanationItem[] }
   | { type: "error"; message: string }
@@ -206,10 +206,19 @@ export async function runAutonomousAgent({
 
   if (userId) {
     try {
-      const [pastRuns, signals] = await Promise.all([
+      const [pastRuns, signals, outcomeMetrics] = await Promise.all([
         getRecentPastRuns(userId, 3),
         getUserFeedbackSignals(userId, 12),
+        getPromptOutcomeMetrics(userId, 30),
       ]);
+      // v2.4: refresh rollback overrides before any renderPrompt call this
+      // run will make. Deterministic, no LLM, returns immediately if no
+      // statistically meaningful degradation exists.
+      try {
+        computeAndApplyRollbacks(outcomeMetrics);
+      } catch (err) {
+        console.warn("[autonomousAgent] rollback compute failed:", err);
+      }
       pastIdeas = pastRuns.map((run) => run.idea).filter((s) => s.length > 0);
       userAccuracy = signals.userAccuracy;
       calibrationError = signals.calibrationError;
@@ -385,7 +394,7 @@ export async function runAutonomousAgent({
       }
 
       if (predictedOutcome) {
-        emit({ type: "expectedOutcome", outcome: predictedOutcome });
+        emit({ type: "expectedOutcome", outcome: predictedOutcome, promptRef: predictionPromptRef });
         emit({
           type: "checkpoint",
           message: `Outcome predicted: ${predictedOutcome.metric} → ${predictedOutcome.target}${predictedOutcome.unit ?? ""} in ${predictedOutcome.timeframeDays}d`,
