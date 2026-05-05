@@ -460,6 +460,11 @@ export interface PastRunRecord {
   };
   // Snapshot of the user's rolling accuracy at run time, for trend analysis.
   userAccuracyAtRun?: number;
+  // v2.3 forensic prompt snapshots. Refs let us prove which exact prompt
+  // version + content produced this run's decisions and prediction without
+  // having to retain the full prompt text.
+  directionsPromptRef?: { id: string; version: string; hash: string };
+  predictionPromptRef?: { id: string; version: string; hash: string };
   createdAt: Timestamp | null;
 }
 

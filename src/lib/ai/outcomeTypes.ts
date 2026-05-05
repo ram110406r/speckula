@@ -8,6 +8,10 @@ export interface ExpectedOutcome {
   // Numeric target. Older code sometimes stored this as a string; consumers
   // should `Number()` defensively if reading legacy data.
   target_value: number;
+  // v2.2: current value at prediction time. Optional for backward compat with
+  // outcomes recorded before baseline tracking. Used by computePredictionQuality
+  // to penalize low-ambition predictions ("hit 12% but should have aimed for 40%").
+  baseline?: number | null;
   // Human-friendly unit ("DAU", "% retention", "$/mo"). Compared
   // case-insensitively in the Comparison Engine.
   unit?: string;
