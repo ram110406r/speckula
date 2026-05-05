@@ -52,6 +52,10 @@ export async function persistOutcomeFeedback(
   // v2.2: full feedback signal — accuracyNorm + predictionQuality →
   // finalAccuracy, plus calibrationError. Persisted both on the outcome doc
   // (audit trail) and on the decision (denormalized for fast feedback queries).
+  // v2.5: explicit `success = actual >= target` replaces the accuracyNorm>=0.5
+  // proxy for hitRate. Assumes higher-is-better (the dominant case for product
+  // metrics: DAU, retention, conversion). Lower-is-better metrics will need a
+  // direction flag once the outcome flow supports it.
   const target = Number(feedback.expected.target_value);
   const actualValue = Number(feedback.actual.value);
   const baseline = feedback.expected.baseline ?? null;
@@ -60,9 +64,11 @@ export async function persistOutcomeFeedback(
   const predictionQuality = computePredictionQuality(target, baseline);
   const finalAccuracy = computeFinalAccuracy(accuracyNorm, predictionQuality);
   const calibrationError = computeCalibrationError(updatedScore.confidence, accuracyNorm);
+  const success =
+    Number.isFinite(target) && Number.isFinite(actualValue) ? actualValue >= target : feedback.success;
 
   await setDoc(outcomeRef, {
-    success: feedback.success,
+    success,
     expected: feedback.expected,
     actual: feedback.actual,
     confidence: updatedScore.confidence,
@@ -84,6 +90,8 @@ export async function persistOutcomeFeedback(
       predictionQuality,
       finalAccuracy,
       calibrationError,
+      success,
+      outcomeRecordedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },
     { merge: true }

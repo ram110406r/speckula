@@ -9,6 +9,8 @@ export {
   setUserOverride,
   clearUserOverrides,
   getVersionForUser,
+  hydratePromptOverrides,
+  clearPromptOverridesCache,
 } from "./versions";
 export { PM_VOICE_PROMPT } from "./persona";
 export {
@@ -23,10 +25,12 @@ export {
   computeAndApplyRollbacks,
   getRollbackDecisions,
   getRollbackOverride,
+  hydrateRollbackOverrides,
   clearRollbacks,
 } from "./rollback";
 export type {
   RollbackDecision,
+  RollbackSample,
   PromptOutcomeMetricsRow as RollbackInputRow,
 } from "./rollback";
 export type {
