@@ -22,11 +22,20 @@ const messageSchema = z.object({
   content: z.string().min(1).max(MAX_MESSAGE_CONTENT_CHARS),
 });
 
+// v2.3: optional prompt-registry correlation. The frontend renderPrompt
+// returns { promptId, version, hash } and the action layer threads it here.
+const promptMetaSchema = z.object({
+  promptId: z.string().min(1).max(64).optional(),
+  promptVersion: z.string().min(1).max(32).optional(),
+  promptHash: z.string().min(1).max(32).optional(),
+}).strict();
+
 const chatSchema = z.object({
   messages: z.array(messageSchema).min(1).max(MAX_MESSAGE_COUNT),
   // Caller-supplied system prompts are accepted but the server prepends its
   // own DEFAULT_SYSTEM either way, so injection via this field is bounded.
   system: z.string().max(MAX_MESSAGE_CONTENT_CHARS).optional(),
+  _meta: promptMetaSchema.optional(),
 });
 
 // Use centralized Groq client from groqService to prevent duplicate initialization
@@ -72,6 +81,8 @@ const recordUsage = async (params: {
   outputTokens: number;
   executionMs: number;
   cachedResult: boolean;
+  promptId?: string;
+  promptVersion?: string;
 }) => {
   const totalTokens = params.inputTokens + params.outputTokens;
   const cost = computeCost(params.inputTokens, params.outputTokens);
@@ -89,6 +100,8 @@ const recordUsage = async (params: {
       executionMs: params.executionMs,
       cost,
       cachedResult: params.cachedResult,
+      promptId: params.promptId ?? null,
+      promptVersion: params.promptVersion ?? null,
     },
   });
 
@@ -144,7 +157,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       }
     } catch { /* db degraded — allow the request through */ }
 
-    const { messages, system } = parsed.data;
+    const { messages, system, _meta: promptMeta } = parsed.data;
     const totalChars = messages.reduce((s, m) => s + m.content.length, 0) + (system?.length ?? 0);
     if (totalChars > MAX_TOTAL_PROMPT_CHARS) {
       reply.code(413).send({ ok: false, error: 'Prompt too large.' });
@@ -190,6 +203,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         outputTokens: 0,
         executionMs: 0,
         cachedResult: true,
+        promptId: promptMeta?.promptId,
+        promptVersion: promptMeta?.promptVersion,
       }).catch((err) => fastify.log.warn({ err }, 'usage logging failed (cache hit)'));
 
       return;
@@ -290,6 +305,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       outputTokens,
       executionMs,
       cachedResult: false,
+      promptId: promptMeta?.promptId,
+      promptVersion: promptMeta?.promptVersion,
     }).catch((err) => fastify.log.warn({ err }, 'usage logging failed'));
     } catch (error) {
       fastify.log.error({ err: error }, 'Unhandled error in /chat handler');

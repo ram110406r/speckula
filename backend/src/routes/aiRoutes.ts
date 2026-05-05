@@ -6,10 +6,19 @@ import { classifyPrismaError } from '../lib/prismaErrors.js';
 
 const MAX_CONTENT_CHARS = 80_000;
 
+// v2.3: optional prompt-registry correlation. Forwarded to PromptLog so
+// behavior shifts can be attributed to a specific prompt version.
+const promptMetaSchema = z.object({
+  promptId: z.string().min(1).max(64).optional(),
+  promptVersion: z.string().min(1).max(32).optional(),
+  promptHash: z.string().min(1).max(32).optional(),
+}).strict();
+
 const generateInsightsSchema = z.object({
   projectId: z.string().min(1).optional(),
   noteId: z.string().min(1),
   content: z.string().min(1).max(MAX_CONTENT_CHARS),
+  _meta: promptMetaSchema.optional(),
 }).strict();
 
 const generatePRDSchema = z.object({
@@ -17,6 +26,7 @@ const generatePRDSchema = z.object({
   title: z.string().min(1).max(200),
   notes: z.string().min(1).max(MAX_CONTENT_CHARS),
   decisions: z.string().max(MAX_CONTENT_CHARS).optional().default(""),
+  _meta: promptMetaSchema.optional(),
 }).strict();
 
 const suggestTasksSchema = z.object({
@@ -105,7 +115,8 @@ export default async function aiRoutes(fastify: FastifyInstance) {
           body.content,
           body.projectId ?? DEFAULT_PROJECT_ID,
           body.noteId,
-          userId
+          userId,
+          body._meta
         );
         reply.code(200).send({ ok: true, data: result });
       } catch (error) {
@@ -127,7 +138,8 @@ export default async function aiRoutes(fastify: FastifyInstance) {
           body.notes,
           body.decisions,
           body.projectId ?? DEFAULT_PROJECT_ID,
-          userId
+          userId,
+          body._meta
         );
         reply.code(201).send({ ok: true, data: result });
       } catch (error) {
@@ -248,4 +260,51 @@ export default async function aiRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  // v2.3 internal prompt-health aggregation. Dev-only — gated by NODE_ENV so
+  // production users can never see another user's prompt usage telemetry.
+  // Returns a per-(promptId, promptVersion) summary over the last 14 days.
+  fastify.get('/internal/prompt-health', async (request, reply) => {
+    if (process.env.NODE_ENV === 'production') {
+      reply.code(404).send({ ok: false, error: 'Not found' });
+      return;
+    }
+    try {
+      const userId = requireUserId(request, reply);
+      if (!userId) return;
+
+      const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const db = groqService.getDb();
+
+      // Aggregate per (promptId, promptVersion). Filter to rows that actually
+      // carry registry metadata so legacy null rows don't dominate the table.
+      const rows = await db.promptLog.groupBy({
+        by: ['promptId', 'promptVersion'],
+        where: {
+          userId,
+          createdAt: { gte: since },
+          NOT: { promptId: null },
+        },
+        _avg: { executionMs: true, inputTokens: true, outputTokens: true, cost: true },
+        _count: { _all: true },
+        _sum: { totalTokens: true, cost: true },
+      });
+
+      const data = rows.map((r) => ({
+        promptId: r.promptId,
+        promptVersion: r.promptVersion,
+        usageCount: r._count._all,
+        avgLatencyMs: Math.round(r._avg.executionMs ?? 0),
+        avgInputTokens: Math.round(r._avg.inputTokens ?? 0),
+        avgOutputTokens: Math.round(r._avg.outputTokens ?? 0),
+        totalTokens: r._sum.totalTokens ?? 0,
+        totalCostUsd: Number((r._sum.cost ?? 0).toFixed(4)),
+      }));
+
+      reply.code(200).send({ ok: true, data: { sinceIso: since.toISOString(), rows: data } });
+    } catch (error) {
+      fastify.log.error(error);
+      replyError(reply, error, 'Failed to aggregate prompt health');
+    }
+  });
 }
