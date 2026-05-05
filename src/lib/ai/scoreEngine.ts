@@ -66,6 +66,14 @@ export interface AccuracyContext {
   // Average calibration error 0–1 across recent decisions.
   // 0 = confidence perfectly tracks accuracy. ≥0.3 → significant penalty.
   calibrationError?: number | null;
+  // v2.6 calibration bias (signed). Computed in db.ts:getUserFeedbackSignals.
+  //   > 0 → user is systematically overconfident → multiply confidence ×0.9
+  //   < 0 → systematically underconfident → multiply ×1.1
+  // Distinct from calibrationError (absolute): bias has direction.
+  calibrationBias?: number | null;
+  // Same signal scoped to one pattern (metric or theme). Lets us downweight
+  // only the categories the user misjudges, not all confidence.
+  similarPatternBias?: number | null;
 }
 
 // Apply past-outcome accuracy to a base confidence (1–10 scale).
@@ -74,6 +82,8 @@ export interface AccuracyContext {
 //   userAccuracy=0.0 → −15% penalty (0.85× factor)
 // v2.2: also penalize when past confidence didn't track actual outcomes
 // (high calibration error → user is overconfident → squeeze further).
+// v2.6: layer a binary calibration-bias correction on top — over/under-
+// confident users get pulled toward reality before the result is clamped.
 export function adjustedConfidence(baseConfidence: number, context: AccuracyContext): number {
   const userT = typeof context.userAccuracy === "number" && Number.isFinite(context.userAccuracy)
     ? context.userAccuracy
@@ -85,14 +95,22 @@ export function adjustedConfidence(baseConfidence: number, context: AccuracyCont
   const userFactor = lerp(0.85, 1.15, userT);
   const patternFactor = lerp(0.8, 1.2, patternT);
 
-  // Calibration: error=0 → factor=1.0 (no penalty); error=1 → factor=0.8.
-  // Linear scale-down keeps the math deterministic and easy to explain.
   const calibT = typeof context.calibrationError === "number" && Number.isFinite(context.calibrationError)
     ? context.calibrationError
     : 0;
   const calibrationFactor = lerp(1.0, 0.8, Math.max(0, Math.min(1, calibT)));
 
-  const adjusted = baseConfidence * userFactor * patternFactor * calibrationFactor;
+  // Bias correction (binary per spec). Pattern bias dominates when present —
+  // it's the more specific signal — otherwise fall back to the global bias.
+  const biasSignal =
+    typeof context.similarPatternBias === "number" && Number.isFinite(context.similarPatternBias)
+      ? context.similarPatternBias
+      : typeof context.calibrationBias === "number" && Number.isFinite(context.calibrationBias)
+      ? context.calibrationBias
+      : 0;
+  const biasFactor = biasSignal > 0 ? 0.9 : biasSignal < 0 ? 1.1 : 1.0;
+
+  const adjusted = baseConfidence * userFactor * patternFactor * calibrationFactor * biasFactor;
   return clampScoreValue(adjusted);
 }
 

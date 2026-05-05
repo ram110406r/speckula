@@ -525,7 +525,34 @@ export interface UserFeedbackSignals {
   patternAccuracies: Record<string, number>;
   // v2.4: same shape, keyed by lowercased strategicTheme.
   themeAccuracies: Record<string, number>;
+  // v2.6 calibration intelligence layer.
+  // calibrationBias is signed: > 0 = overconfident, < 0 = underconfident.
+  // pattern/theme variants narrow that signal so we can downweight only the
+  // categories the user systematically misjudges.
+  calibrationBias: number | null;
+  patternBiases: Record<string, number>;
+  themeBiases: Record<string, number>;
+  calibrationBuckets: CalibrationBucket[];
 }
+
+// v2.6 — predicted-confidence vs realised-accuracy buckets, used for the
+// internal calibration curve and (eventually) for non-binary bias correction.
+export interface CalibrationBucket {
+  range: [number, number]; // [lo, hi) on the 0–1 confidence axis
+  avgConfidence: number;   // 0–1, average normalised confidence in the bucket
+  avgAccuracy: number;     // 0–1, average accuracyNorm in the bucket
+  count: number;
+}
+
+// Five equal-width buckets across [0, 1]. The last bucket is closed on the
+// right so confidence == 1.0 has somewhere to land.
+const CALIBRATION_BUCKET_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0.0, 0.2],
+  [0.2, 0.4],
+  [0.4, 0.6],
+  [0.6, 0.8],
+  [0.8, 1.0],
+];
 
 export const getUserFeedbackSignals = async (userId: string, max = 12): Promise<UserFeedbackSignals> => {
   const empty: UserFeedbackSignals = {
@@ -533,6 +560,10 @@ export const getUserFeedbackSignals = async (userId: string, max = 12): Promise<
     calibrationError: null,
     patternAccuracies: {},
     themeAccuracies: {},
+    calibrationBias: null,
+    patternBiases: {},
+    themeBiases: {},
+    calibrationBuckets: [],
   };
   try {
     const q = query(
@@ -546,26 +577,62 @@ export const getUserFeedbackSignals = async (userId: string, max = 12): Promise<
     const patternBuckets: Record<string, number[]> = {};
     const themeBuckets: Record<string, number[]> = {};
 
+    // v2.6 calibration aggregation.
+    //   biasValues: signed (confidenceNorm − accuracyNorm) for global average
+    //   patternBias / themeBias: same signal, narrowed by metric / theme
+    //   confAccPairs: bucketed for the calibration curve
+    const biasValues: number[] = [];
+    const patternBiasBuckets: Record<string, number[]> = {};
+    const themeBiasBuckets: Record<string, number[]> = {};
+    const bucketTotals = CALIBRATION_BUCKET_RANGES.map(() => ({ confSum: 0, accSum: 0, count: 0 }));
+
     for (const d of snap.docs) {
       const data = d.data() as {
         finalAccuracy?: unknown;
         accuracyNorm?: unknown;
         calibrationError?: unknown;
+        confidence?: unknown;
         metric?: unknown;
         strategyTheme?: unknown;
       };
 
       const accRaw = Number(data.finalAccuracy ?? data.accuracyNorm);
-      if (Number.isFinite(accRaw) && accRaw >= 0 && accRaw <= 1) {
+      const accValid = Number.isFinite(accRaw) && accRaw >= 0 && accRaw <= 1;
+      const m = typeof data.metric === "string" ? data.metric.trim().toLowerCase() : "";
+      const t = typeof data.strategyTheme === "string" ? data.strategyTheme.trim().toLowerCase() : "";
+
+      if (accValid) {
         accuracies.push(accRaw);
-        const m = typeof data.metric === "string" ? data.metric.trim().toLowerCase() : "";
         if (m) (patternBuckets[m] ??= []).push(accRaw);
-        const t = typeof data.strategyTheme === "string" ? data.strategyTheme.trim().toLowerCase() : "";
         if (t) (themeBuckets[t] ??= []).push(accRaw);
       }
 
       const errRaw = Number(data.calibrationError);
       if (Number.isFinite(errRaw) && errRaw >= 0 && errRaw <= 1) errors.push(errRaw);
+
+      // Calibration bias requires both a confidence (1–10) and a valid
+      // accuracyNorm. Normalise confidence to 0–1 before subtracting.
+      const confRaw = Number(data.confidence);
+      if (accValid && Number.isFinite(confRaw)) {
+        const confNorm = Math.max(0, Math.min(1, (confRaw - 1) / 9));
+        const bias = confNorm - accRaw;
+        biasValues.push(bias);
+        if (m) (patternBiasBuckets[m] ??= []).push(bias);
+        if (t) (themeBiasBuckets[t] ??= []).push(bias);
+
+        // Bin the (confidence, accuracy) pair for the curve. Last bucket is
+        // closed on the right so confidence == 1.0 still lands somewhere.
+        for (let i = 0; i < CALIBRATION_BUCKET_RANGES.length; i++) {
+          const [lo, hi] = CALIBRATION_BUCKET_RANGES[i];
+          const isLast = i === CALIBRATION_BUCKET_RANGES.length - 1;
+          if (confNorm >= lo && (confNorm < hi || (isLast && confNorm <= hi))) {
+            bucketTotals[i].confSum += confNorm;
+            bucketTotals[i].accSum += accRaw;
+            bucketTotals[i].count += 1;
+            break;
+          }
+        }
+      }
 
       if (accuracies.length >= max && errors.length >= max) break;
     }
@@ -582,7 +649,35 @@ export const getUserFeedbackSignals = async (userId: string, max = 12): Promise<
       if (vals.length > 0) themeAccuracies[t] = avg(vals);
     }
 
-    return { userAccuracy, calibrationError, patternAccuracies, themeAccuracies };
+    const calibrationBias = biasValues.length > 0 ? avg(biasValues) : null;
+    const patternBiases: Record<string, number> = {};
+    for (const [m, vals] of Object.entries(patternBiasBuckets)) {
+      if (vals.length > 0) patternBiases[m] = avg(vals);
+    }
+    const themeBiases: Record<string, number> = {};
+    for (const [t, vals] of Object.entries(themeBiasBuckets)) {
+      if (vals.length > 0) themeBiases[t] = avg(vals);
+    }
+    const calibrationBuckets: CalibrationBucket[] = CALIBRATION_BUCKET_RANGES.map(([lo, hi], i) => {
+      const t = bucketTotals[i];
+      return {
+        range: [lo, hi],
+        avgConfidence: t.count > 0 ? t.confSum / t.count : 0,
+        avgAccuracy: t.count > 0 ? t.accSum / t.count : 0,
+        count: t.count,
+      };
+    });
+
+    return {
+      userAccuracy,
+      calibrationError,
+      patternAccuracies,
+      themeAccuracies,
+      calibrationBias,
+      patternBiases,
+      themeBiases,
+      calibrationBuckets,
+    };
   } catch (error) {
     logFirestorePermissionHint("getUserFeedbackSignals", error);
     return empty;
