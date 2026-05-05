@@ -3,6 +3,12 @@ import { db } from "../firebase/config";
 import { auth } from "../firebase/config";
 import type { OpportunityScoreState } from "./scoreEvolution";
 import type { OutcomeFeedback } from "./outcomeTypes";
+import {
+  computeAccuracyNorm,
+  computePredictionQuality,
+  computeFinalAccuracy,
+  computeCalibrationError,
+} from "./scoreEngine";
 
 // Adjust confidence on a successful or failed launch. Guards against NaN
 // inputs (e.g. when reading Firestore docs that omit confidence) so the
@@ -43,12 +49,28 @@ export async function persistOutcomeFeedback(
     "decisions", feedback.decisionId,
     "outcomes", outcomeId
   );
+  // v2.2: full feedback signal — accuracyNorm + predictionQuality →
+  // finalAccuracy, plus calibrationError. Persisted both on the outcome doc
+  // (audit trail) and on the decision (denormalized for fast feedback queries).
+  const target = Number(feedback.expected.target_value);
+  const actualValue = Number(feedback.actual.value);
+  const baseline = feedback.expected.baseline ?? null;
+
+  const accuracyNorm = computeAccuracyNorm(target, actualValue);
+  const predictionQuality = computePredictionQuality(target, baseline);
+  const finalAccuracy = computeFinalAccuracy(accuracyNorm, predictionQuality);
+  const calibrationError = computeCalibrationError(updatedScore.confidence, accuracyNorm);
+
   await setDoc(outcomeRef, {
     success: feedback.success,
     expected: feedback.expected,
     actual: feedback.actual,
     confidence: updatedScore.confidence,
     score: updatedScore.score,
+    accuracyNorm,
+    predictionQuality,
+    finalAccuracy,
+    calibrationError,
     createdAt: serverTimestamp(),
   });
 
@@ -58,6 +80,10 @@ export async function persistOutcomeFeedback(
     {
       confidence: updatedScore.confidence,
       score: updatedScore.score,
+      accuracyNorm,
+      predictionQuality,
+      finalAccuracy,
+      calibrationError,
       updatedAt: serverTimestamp(),
     },
     { merge: true }

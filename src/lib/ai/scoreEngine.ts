@@ -46,3 +46,111 @@ export function clampScoreValue(value: number) {
   if (!Number.isFinite(n)) return 1;
   return Math.max(1, Math.min(10, n));
 }
+
+// ── v2.1 Feedback layer (Stage 11) ──────────────────────────────────────────
+// Deterministic confidence adjustment driven by the user's track record. No
+// LLM calls — past actuals vs. expected get distilled into a single 0–1
+// signal in `db.ts:getUserAccuracySignal`, then this function applies it.
+
+function lerp(a: number, b: number, t: number): number {
+  const clamped = Math.max(0, Math.min(1, t));
+  return a + (b - a) * clamped;
+}
+
+export interface AccuracyContext {
+  // Rolling accuracy across the user's recent decisions (0–1).
+  // 0.5 = neutral / no data.
+  userAccuracy?: number | null;
+  // Per-pattern accuracy for the same metric / theme (optional v1.1).
+  similarPatternAccuracy?: number | null;
+  // Average calibration error 0–1 across recent decisions.
+  // 0 = confidence perfectly tracks accuracy. ≥0.3 → significant penalty.
+  calibrationError?: number | null;
+}
+
+// Apply past-outcome accuracy to a base confidence (1–10 scale).
+//   userAccuracy=0.5 → no adjustment (1.0× factor)
+//   userAccuracy=1.0 → +15% boost  (1.15× factor)
+//   userAccuracy=0.0 → −15% penalty (0.85× factor)
+// v2.2: also penalize when past confidence didn't track actual outcomes
+// (high calibration error → user is overconfident → squeeze further).
+export function adjustedConfidence(baseConfidence: number, context: AccuracyContext): number {
+  const userT = typeof context.userAccuracy === "number" && Number.isFinite(context.userAccuracy)
+    ? context.userAccuracy
+    : 0.5;
+  const patternT = typeof context.similarPatternAccuracy === "number" && Number.isFinite(context.similarPatternAccuracy)
+    ? context.similarPatternAccuracy
+    : 0.5;
+
+  const userFactor = lerp(0.85, 1.15, userT);
+  const patternFactor = lerp(0.8, 1.2, patternT);
+
+  // Calibration: error=0 → factor=1.0 (no penalty); error=1 → factor=0.8.
+  // Linear scale-down keeps the math deterministic and easy to explain.
+  const calibT = typeof context.calibrationError === "number" && Number.isFinite(context.calibrationError)
+    ? context.calibrationError
+    : 0;
+  const calibrationFactor = lerp(1.0, 0.8, Math.max(0, Math.min(1, calibT)));
+
+  const adjusted = baseConfidence * userFactor * patternFactor * calibrationFactor;
+  return clampScoreValue(adjusted);
+}
+
+// Compute the 0–1 accuracy signal for a single (target, actual) pair.
+// "higher is better" is the default since most product metrics (DAU, retention,
+// conversion, activation) are upside metrics. Pass higherIsBetter=false for
+// metrics like churn, latency, or error rate.
+export function computeAccuracyNorm(
+  target: number,
+  actual: number,
+  higherIsBetter = true
+): number {
+  if (!Number.isFinite(target) || !Number.isFinite(actual)) return 0.5;
+  const denom = Math.max(1, Math.abs(target));
+  const delta = (actual - target) / denom;
+  const accuracy = higherIsBetter ? 1 + delta : 1 - delta;
+  const clamped = Math.max(0, Math.min(2, accuracy));
+  return clamped / 2;
+}
+
+// v2.2: prediction-quality score. Penalizes low-ambition predictions.
+//   target / baseline:
+//     1.0 → no improvement asked → 1.0 (neutral)
+//     2.0 → asked to double → 2.0 (most ambitious)
+//     0.5 → asked to halve → 0.5 (least ambitious / hedged)
+// Clamped to [0.5, 2.0]. When baseline is missing or zero, defaults to 1.0
+// (we can't measure ambition without a baseline).
+export function computePredictionQuality(target: number, baseline: number | null | undefined): number {
+  if (!Number.isFinite(target)) return 1.0;
+  if (baseline === null || baseline === undefined || !Number.isFinite(baseline) || baseline === 0) {
+    return 1.0;
+  }
+  const ratio = target / baseline;
+  return Math.max(0.5, Math.min(2.0, ratio));
+}
+
+// v2.2: combine raw accuracy with prediction quality so low-ambition wins
+// don't game the feedback loop.
+//   finalAccuracy = clamp(accuracyNorm * predictionQuality, 0, 1)
+// Behaviors (with neutral = 0.5, perfect = 1.0):
+//   accuracyNorm=0.5 (hit target), quality=1.0 (no baseline) → 0.5 (neutral, preserved)
+//   accuracyNorm=0.5 (hit target), quality=2.0 (ambitious 2x bet) → 1.0 (max reward)
+//   accuracyNorm=0.5 (hit target), quality=0.5 (sandbagged) → 0.25 (penalty)
+//   accuracyNorm=1.0 (over-delivered), quality=1.0 → 1.0 (max)
+//   accuracyNorm=0.0 (missed badly), quality=anything → 0.0 (max penalty)
+export function computeFinalAccuracy(accuracyNorm: number, predictionQuality: number): number {
+  if (!Number.isFinite(accuracyNorm) || !Number.isFinite(predictionQuality)) return 0.5;
+  return Math.max(0, Math.min(1, accuracyNorm * predictionQuality));
+}
+
+// v2.2: how well did the user's stated confidence match the actual outcome?
+//   confidence: 1–10  → normalize to 0–1
+//   accuracyNorm: 0–1
+//   calibrationError = |confidenceNorm − accuracyNorm| ∈ [0, 1]
+// 0 = perfectly calibrated. 1 = wildly miscalibrated.
+export function computeCalibrationError(confidence: number, accuracyNorm: number): number {
+  if (!Number.isFinite(confidence) || !Number.isFinite(accuracyNorm)) return 0.5;
+  const confidenceNorm = Math.max(0, Math.min(1, (confidence - 1) / 9));
+  const acc = Math.max(0, Math.min(1, accuracyNorm));
+  return Math.abs(confidenceNorm - acc);
+}
