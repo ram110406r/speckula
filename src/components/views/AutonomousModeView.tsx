@@ -6,6 +6,7 @@ import {
   Target, AlertTriangle, CheckCircle2, Lightbulb, Map,
   Compass, Flame, ShieldAlert, ShieldCheck, ShieldX,
   RotateCcw, FileText, ListTodo, Save, Cpu, HelpCircle,
+  DollarSign, MapPin,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -20,8 +21,9 @@ import type {
   StrategicGuidance,
   RoadmapPhase,
   ClarifyingQuestion,
+  CostCategory,
 } from "@/lib/ai/actions";
-import type { Verdict, VerdictLabel } from "@/lib/ai/verdict";
+import type { Verdict, VerdictLabel, VerdictFactors } from "@/lib/ai/verdict";
 import { saveDecision } from "@/lib/firebase/db";
 import { generatePRDAction, suggestTasksAction, textToTipTap } from "@/lib/ai/actions";
 import { useAppStore } from "@/store/useAppStore";
@@ -35,6 +37,7 @@ type ChatEntryInput =
   | { kind: "thinking"; text: string; state?: AgentState }
   | { kind: "question"; question: ClarifyingQuestion }
   | { kind: "system"; text: string }
+  | { kind: "checkpoint"; text: string }
   | { kind: "error"; text: string };
 
 type ChatEntry = ChatEntryInput & { id: string };
@@ -144,6 +147,9 @@ export function AutonomousModeView() {
         break;
       case "memoryLoaded":
         setPastIdeas(event.pastIdeas);
+        break;
+      case "checkpoint":
+        appendEntry({ kind: "checkpoint", text: event.message });
         break;
       case "error":
         appendEntry({ kind: "error", text: event.message });
@@ -730,6 +736,18 @@ function StreamEntry({ entry }: { entry: ChatEntry }) {
       <div className="flex items-center gap-1.5">
         <CheckCircle2 className="h-2.5 w-2.5 text-success shrink-0" />
         <span className="font-mono text-[10px] text-muted-foreground/55">{entry.text}</span>
+      </div>
+    );
+  }
+  if (entry.kind === "checkpoint") {
+    return (
+      <div className="flex items-center gap-2 py-0.5">
+        <div className="h-px flex-1 bg-border/40" />
+        <div className="flex items-center gap-1 shrink-0">
+          <MapPin className="h-2.5 w-2.5 text-primary/50" />
+          <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/40">{entry.text}</span>
+        </div>
+        <div className="h-px flex-1 bg-border/40" />
       </div>
     );
   }
