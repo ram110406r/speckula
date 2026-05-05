@@ -1,8 +1,8 @@
-// Frontend-orchestrated autonomous-mode agent.
+// Frontend-orchestrated autonomous-mode agent (v2.0).
 //
-// Runs the v1.1 state machine: refines an idea, gathers clarifications,
-// generates + reflects on decisions, validates, lands on a verdict, and
-// stores the run for future memory injection.
+// Runs a 13-step state machine: refines an idea, gathers clarifications,
+// generates candidate directions with cost models, reflects, validates, lands
+// on a multi-factor verdict, and stores the run for future memory injection.
 
 import {
   suggestDirectionAction,
@@ -44,6 +44,7 @@ export type AgentDepth = "quick" | "standard" | "deep";
 export type AgentEvent =
   | { type: "state"; state: AgentState; label: string }
   | { type: "thinking"; message: string }
+  | { type: "checkpoint"; message: string }
   | { type: "question"; question: ClarifyingQuestion }
   | { type: "decisions"; decisions: DecisionSuggestion[] }
   | { type: "strategy"; strategy: StrategicGuidance }
@@ -62,8 +63,6 @@ export interface AgentRunOptions {
   emit: (event: AgentEvent) => void;
   awaitUserResponse: (question: ClarifyingQuestion) => Promise<string>;
   alreadyAsked: string[];
-  // Optional Firebase user id. When present the agent loads recent past runs
-  // and persists this run for future memory. Anonymous runs skip both.
   userId?: string;
 }
 
@@ -72,13 +71,13 @@ const stateLabels: Record<AgentState, string> = {
   understand_idea: "Identifying target users and core problem…",
   check_clarity: "Checking what's missing…",
   awaiting_user: "Needs clarification",
-  generate_decisions: "Generating product decisions and tradeoffs…",
-  reflection: "Re-evaluating approach due to uncertainty…",
-  evaluate_decisions: "Scoring feasibility vs impact…",
-  validation_layer: "Detecting risky assumptions and weak signals…",
-  confidence_gate: "Validating the strongest direction…",
-  strategy_generation: "Defining strategic focus…",
-  roadmap_generation: "Drafting a 3-phase roadmap…",
+  generate_decisions: "Generating 3 candidate directions with cost models…",
+  reflection: "Re-evaluating approach — checking cost assumptions and confidence…",
+  evaluate_decisions: "Scoring impact, effort, confidence, demand, and cost viability…",
+  validation_layer: "Detecting risky assumptions, blockers, and cost overruns…",
+  confidence_gate: "Validating the strongest direction before proceeding…",
+  strategy_generation: "Defining strategic focus and cost constraints…",
+  roadmap_generation: "Drafting a 3-phase roadmap with budget estimates…",
   output: "Done",
   stopped: "Stopped",
   error: "Error",
@@ -110,8 +109,7 @@ export async function runAutonomousAgent({
   const askedQuestions = [...alreadyAsked];
   const maxClarifications = depth === "quick" ? 0 : depth === "standard" ? 1 : 2;
 
-  // Memory retrieval — non-blocking. If Firestore is offline or perms fail
-  // we proceed without past context rather than blocking the whole run.
+  // Memory retrieval — non-blocking. Failure here must not block the run.
   let pastIdeas: string[] = [];
   if (userId) {
     try {
@@ -137,14 +135,14 @@ export async function runAutonomousAgent({
       message: "Reading the raw idea. Pulling out the implied user, the friction, and the metric that would prove it works.",
     });
 
-    // 2. CHECK_CLARITY
+    // 2–3. CHECK_CLARITY + AWAIT_USER (repeated up to maxClarifications times)
     for (let round = 0; round < maxClarifications; round++) {
       enterState("check_clarity");
       const question = await clarifyIdeaAction(context, "", askedQuestions);
       throwIfAborted(signal);
 
       if (!question) {
-        emit({ type: "thinking", message: "No critical gaps. Moving to decisions." });
+        emit({ type: "thinking", message: "No critical gaps. Moving to direction generation." });
         break;
       }
 
@@ -157,35 +155,42 @@ export async function runAutonomousAgent({
       context = `${context}\n\nQ: ${question.question}\nA: ${answer.trim()}`;
     }
 
-    // 3. GENERATE_DECISIONS
+    // 4. GENERATE_DECISIONS (with cost models)
     enterState("generate_decisions");
     emit({
       type: "thinking",
-      message: "Drafting 3 candidate directions, each with assumptions, risks, and a contrarian insight.",
+      message: "Drafting 3 candidate directions — each with assumptions, risks, and a production cost model.",
     });
     let decisions = await suggestDirectionAction("", context, { pastIdeas });
     throwIfAborted(signal);
     emit({ type: "decisions", decisions });
+    emit({ type: "checkpoint", message: `${decisions.length} directions generated` });
 
-    // 4. EVALUATE_DECISIONS
+    // 5. EVALUATE_DECISIONS
     enterState("evaluate_decisions");
     emit({
       type: "thinking",
-      message: `Scored ${decisions.length} candidates on impact, effort, confidence, and demand.`,
+      message: `Scored ${decisions.length} candidates on impact, effort, confidence, demand, and cost viability.`,
     });
 
-    // 5. VALIDATION_LAYER + REFLECTION
+    // 6. VALIDATION_LAYER + REFLECTION
     enterState("validation_layer");
     const totalRisks = decisions.reduce((sum, d) => sum + (d.risks?.length ?? 0), 0);
     emit({
       type: "thinking",
-      message: `Detected ${totalRisks} risk${totalRisks === 1 ? "" : "s"} across the directions. Looking for hidden assumptions.`,
+      message: `Detected ${totalRisks} risk${totalRisks === 1 ? "" : "s"} across directions. Scanning for cost overruns and hidden assumptions.`,
     });
 
     const reflection = reflectionInstructionFor(decisions);
     if (reflection) {
       enterState("reflection");
-      emit({ type: "thinking", message: "Re-evaluating approach due to uncertainty…" });
+      const isCosteRelated = reflection.includes("HIGH-cost");
+      emit({
+        type: "thinking",
+        message: isCosteRelated
+          ? "High-cost direction has multiple risks — re-evaluating whether cost assumptions are realistic…"
+          : "Re-evaluating approach due to uncertainty…",
+      });
       try {
         const refined = await suggestDirectionAction("", context, {
           pastIdeas,
@@ -197,13 +202,12 @@ export async function runAutonomousAgent({
           emit({ type: "decisions", decisions });
         }
       } catch (error) {
-        // Reflection is a quality booster, not a blocker. Carry on with the
-        // first-pass decisions if the second pass fails.
+        // Reflection is a quality booster, not a blocker.
         console.warn("[autonomousAgent] reflection pass failed:", error);
       }
     }
 
-    // Surface assumptions and the top decision regardless of reflection.
+    // Surface assumptions and top decision regardless of reflection outcome.
     const assumptions = collectAssumptions(decisions);
     if (assumptions.length > 0) {
       emit({ type: "assumptions", assumptions });
@@ -212,8 +216,9 @@ export async function runAutonomousAgent({
     if (top) {
       emit({ type: "topDecision", decision: top });
     }
+    emit({ type: "checkpoint", message: "Directions scored and validated" });
 
-    // 6. CONFIDENCE_GATE — deep depth only
+    // 7. CONFIDENCE_GATE — deep mode only
     if (depth === "deep") {
       enterState("confidence_gate");
       const weakHighPri = decisions.find(
@@ -222,7 +227,7 @@ export async function runAutonomousAgent({
       if (weakHighPri) {
         const followUp = await clarifyIdeaAction(
           `${context}\n\nWe're considering: ${weakHighPri.title}. ${weakHighPri.summary ?? weakHighPri.justification}`,
-          "Need to validate the strongest decision before strategy.",
+          "Need to validate the strongest direction before strategy.",
           askedQuestions
         );
         throwIfAborted(signal);
@@ -237,28 +242,30 @@ export async function runAutonomousAgent({
       }
     }
 
-    // 7. STRATEGY_GENERATION
+    // 8. STRATEGY_GENERATION
     enterState("strategy_generation");
-    emit({ type: "thinking", message: "Defining the strategic theme and the gaps that block confidence." });
+    emit({ type: "thinking", message: "Defining the strategic theme, gaps to close, and cost constraints." });
     const strategy = await strategicGuidanceAction(context);
     throwIfAborted(signal);
     emit({ type: "strategy", strategy });
+    emit({ type: "checkpoint", message: "Strategy defined" });
 
-    // 8. ROADMAP_GENERATION
+    // 9. ROADMAP_GENERATION (Standard + Deep only)
     if (depth !== "quick") {
       enterState("roadmap_generation");
-      emit({ type: "thinking", message: "Drafting a 3-phase roadmap. Phase 1 will test the riskiest assumption first." });
+      emit({ type: "thinking", message: "Drafting a 3-phase roadmap with budget estimates and validation gates." });
       const roadmap = await generateRoadmapAction(idea, decisions, strategy.theme);
       throwIfAborted(signal);
       emit({ type: "roadmap", roadmap });
+      emit({ type: "checkpoint", message: "Roadmap drafted" });
     }
 
-    // 9. VERDICT — opinionated landing.
+    // 10. VERDICT — multi-factor composite score
+    emit({ type: "thinking", message: "Computing final verdict using composite score: confidence (40%), cost (30%), demand (20%), strategic fit (10%)." });
     const verdict = computeVerdict(decisions);
     emit({ type: "verdict", verdict });
 
-    // 10. MEMORY WRITE — fire-and-forget. Failure here must not affect the
-    //     user-facing run.
+    // 11. MEMORY WRITE — fire-and-forget. Failure must not affect the user-facing run.
     if (userId) {
       void savePastRun(userId, {
         idea,
@@ -268,7 +275,7 @@ export async function runAutonomousAgent({
       });
     }
 
-    // 11. OUTPUT
+    // 12. OUTPUT
     enterState("output");
     emit({ type: "done" });
   } catch (error) {
