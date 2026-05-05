@@ -24,11 +24,13 @@ The whole loop runs on **Groq Llama-3.3-70B** for sub-second responses, so the f
 
 ### Editor & Workspace
 - **TipTap rich-text editor** with headings, lists, links, and inline formatting
+- **Structured research blocks** — Problem, Context, User Pain, Insights, Assumptions — each with inline AI suggestions
 - **2-second debounced auto-save** to Firestore — no save button
-- **Inline AI suggestions** via the `InlineSuggestion` overlay
+- **Inline AI suggestions** via the `InlineSuggestion` overlay; per-block hints dismiss independently per document
 - **URL import bar** — paste any article URL to extract and load content directly into the editor
+- **File drop import** — drag and drop files (including PDFs) into the editor
 - **Template picker** — start from predefined note templates
-- **Multi-document tree** in the sidebar — create, rename, delete
+- **Multi-document tree** in the sidebar — create, rename, delete, sorted by last updated
 - **Three-column shell** — sidebar nav, editor, AI panel — all collapsible and resizable
 - **Light & dark themes** across every surface (Burnt Orange / Warm Cream in light, Deep Charcoal in dark)
 - **Keyboard shortcuts** for common actions
@@ -41,36 +43,57 @@ The whole loop runs on **Groq Llama-3.3-70B** for sub-second responses, so the f
 |---|---|
 | **Insights** | Extracts structured pain points, behaviors, segments, opportunities from raw text |
 | **Decision** | Suggests what to build next, with priority, justification, and expected impact |
+| **Score Engine** | Calculates 0–100 opportunity score from impact / effort / confidence / demand |
 | **Score Evolution** | Tracks how a decision's confidence shifts over time as new evidence arrives |
-| **Decision Health** | Classifies each decision as Healthy / Risky / Weak based on a multi-factor rubric |
+| **Score History** | Persists a rolling 12-entry score trend per decision |
+| **Score Feedback** | Updates confidence based on post-launch outcome delta |
+| **Decision Health** | Classifies each decision as Healthy / Needs Validation / Risky based on a multi-factor rubric |
+| **Pushback Detection** | Flags overcommitment (high priority + low confidence) with a warning |
 | **PRD Generator** | Produces complete PRDs from notes — problem, solution, metrics, risks, timeline |
 | **Task Generator** | Decomposes a PRD into a prioritized 90-day plan with dependencies |
+| **Priority Engine** | Intelligently re-orders tasks by effort, impact, and dependency graph |
 | **Verdict Engine** | Computes PROCEED / VALIDATE_FIRST / DO_NOT_BUILD based on confidence gates |
 | **Case Brief** | AI-generated opportunity statement, context, recommendation, and success metrics for any decision |
-| **Learning** | Compares expected vs. actual outcomes and feeds the delta back into future scoring |
-| **Comparison** | Diffs expected vs. actual outcome records and surfaces a delta report |
+| **Learning Engine** | Generates post-launch insight explaining why a decision succeeded or failed |
+| **Comparison Engine** | Diffs expected vs. actual outcome records and surfaces a deviation report |
 
 ### Autonomous Agent
 - **Frontend-orchestrated multi-step reasoning agent** that runs an idea through the full product loop
-- Three depth levels: **Quick** (fast, no clarifications) | **Standard** (balanced, 1 clarification) | **Deep** (thorough, 2 clarifications + confidence gate)
-- State machine: Understanding → Gathering signals → Building argument → Generating verdict
-- **Past-run memory** — stores recent run ideas and verdicts in Firestore; primes the next session with prior exploration context
-- Outputs: clarifying questions, decision suggestions, strategic guidance, roadmap phases, and a final PROCEED / VALIDATE_FIRST / DO_NOT_BUILD verdict
+- **13-state machine:** `understand_idea` → `check_clarity` → `awaiting_user` → `generate_decisions` → `reflection` → `evaluate_decisions` → `validation_layer` → `confidence_gate` → `strategy_generation` → `roadmap_generation` → `output` → `stopped` / `error`
+- Three depth levels: **Quick** (no clarifications, skips roadmap) | **Standard** (1 clarification, full output) | **Deep** (2 clarifications + confidence gate on high-risk decisions)
+- **Reflection loop** — if uncertainty is detected mid-run, re-evaluates decisions before proceeding
+- **Past-run memory** — stores recent run ideas and verdicts in Firestore; primes the next session to avoid repeating weak framings
+- Outputs: clarifying questions, 3 candidate decisions, strategic guidance, 3-phase roadmap, and a final PROCEED / VALIDATE_FIRST / DO_NOT_BUILD verdict
+- **Real-time event stream** — thinking, questions, decisions, strategy, roadmap, and verdict appear as they happen
+- **Stop / Reset** — abort mid-run at any point or reset for a fresh analysis
+- Post-run actions: save top decision, convert to Spec (PRD), create Tasks from roadmap
 
 ### AI Copilot Panel
 - **Streaming chat** that reads the active document; 30-second timeout via `AbortController`
 - **One-click shortcuts** — Generate PRD, Extract Insights, Suggest Tasks
 - **Proactive signals** — surfaces repeated keywords, weak assumptions, and opportunity cues as you type
+- Client-side 429 circuit-breaker (15 calls/day via localStorage)
+
+### Decisions
+- Filterable by: All, Strong (score ≥ 70), Risky (45–70), Recent
+- Grouped by health status: Healthy / Needs Validation / Risky
+- Each decision shows: score (0–100), impact / effort / confidence / demand breakdown, priority badge, strategic theme, key insights, risks, tradeoffs
+- **Case brief dialog** — AI-generated opportunity statement, context, reasoning, scoring, and build / delay / validate recommendation
+- **Score history graph** — rolling 12-entry trend chart
+- **Expected vs. actual outcome** — record pre-launch target metric and post-launch result; triggers learning insight
+- **Manual decision form** — create decisions with title, priority, justification, user story, tradeoffs, scores
+- Actions: generate PRD, save, publish as public case, delete
 
 ### Export
 - **PRDs** — export to Markdown or Word (.docx)
-- **Signals/Insights** — export to Markdown or .docx
+- **Signals / Insights** — export to Markdown or .docx
 - **Tasks** — export to CSV
 
 ### Slack Integration
 - **OAuth flow** — connect a Slack workspace; tokens stored encrypted (AES-256-GCM) in Firestore backend collections
-- **Channel browser** — list and select channels for import
-- **Message import** — pull channel history into the research loop as raw input
+- **Channel browser** — list and select accessible channels for import
+- **Message backfill** — pull channel history into the research loop as raw input
+- **Analyze channel** — extract insights from imported Slack messages
 - **Slack API proxied through Next.js** — backend never needs a public-facing domain for Slack API calls
 - **SlackView** — dedicated UI with connection status, workspace switcher, import progress
 
@@ -78,7 +101,7 @@ The whole loop runs on **Groq Llama-3.3-70B** for sub-second responses, so the f
 - **Cases** — every published decision becomes a permanent record at `/c/{caseId}` with reasoning trace, scores, and post-launch outcome
 - **Profiles** — `/u/{userId}` shows a user's published cases and rolling score average
 - **Recruiter view** — specialized read-only layout for public profiles
-- **Workspaces** — invite team members, manage shared decision knowledge base
+- **Workspaces** — invite team members by email, manage roles (owner / editor / viewer), shared decision knowledge base
 - **Publish validation** — `publishCase` requires an expected outcome (metric + target + timeframe) before going public, so every case can be graded later
 
 ### Auth & Persistence
@@ -102,7 +125,7 @@ The whole loop runs on **Groq Llama-3.3-70B** for sub-second responses, so the f
 | `/u/[userId]` | Public user profile |
 | `/api/chat` | Next.js proxy — streaming Groq chat to backend |
 | `/api/ai/[...path]` | Next.js proxy — all AI endpoints to backend (auth-required) |
-| `/api/import/[...path]` | Next.js proxy — URL/file/Slack import to backend (auth-required) |
+| `/api/import/[...path]` | Next.js proxy — URL / file / Slack import to backend (auth-required) |
 | `/api/slack/[...path]` | Next.js proxy — Slack OAuth and messaging (backend needs no public domain) |
 
 ### Workspace Views
@@ -112,13 +135,13 @@ The sidebar organizes features into five sections:
 | Section | View | Purpose |
 |---|---|---|
 | **Agent** | Autonomous Mode | Multi-step AI reasoning agent — idea → verdict, with past-run memory |
-| **Evidence** | Editor | Rich-text research notes, auto-saved, URL import, templates |
-| **Evidence** | Signals | Extracted insights, filterable by category |
-| **Argument** | Decisions | Scored product decisions with health evaluation, case briefs, score history |
-| **Verdict** | Spec (PRDs) | AI-generated product requirements documents |
-| **Verdict** | Tasks | Kanban execution plan with dependency tracking |
+| **Evidence** | Editor | Rich-text research notes, structured blocks, auto-saved, URL import, templates |
+| **Evidence** | Signals | Extracted insights, filterable by category (pain point / opportunity / segment / pattern) |
+| **Argument** | Decisions | Scored product decisions with health evaluation, case briefs, score history, outcome loop |
+| **Verdict** | Spec (PRDs) | AI-generated product requirements documents, export to Markdown / .docx |
+| **Verdict** | Tasks | Kanban execution plan with drag-drop, dependency tracking, intelligent prioritization, CSV export |
 | **Publish** | Platform / Cases | Team workspaces, public case portfolio |
-| **Publish** | Slack | Connect workspace, import channel history |
+| **Publish** | Slack | Connect workspace, import channel history, analyze messages |
 
 ---
 
@@ -127,7 +150,7 @@ The sidebar organizes features into five sections:
 ### Frontend
 - **Next.js 16** (App Router) · **React 19** · **TypeScript** (strict mode)
 - **TipTap 3** headless editor framework with ProseMirror
-- **Zustand 5** state with localStorage persistence (`useAppStore`, `useActivityStore`, `useToastStore`)
+- **Zustand 5** state with localStorage persistence (`useAppStore`, `useActivityStore`, `useToastStore`, `useExportDialogStore`)
 - **Tailwind CSS 4** + shadcn/ui components + Base UI
 - **Firebase Web SDK 12** — Auth + Firestore
 - **react-resizable-panels** — three-column resizable layout
@@ -192,13 +215,13 @@ Cost reference: `llama-3.3-70b` at $0.59/M input tokens, $0.79/M output tokens. 
 | Collection | Contents |
 |---|---|
 | `users/{uid}` | User profile |
-| `users/{uid}/documents/{docId}` | Research notes (TipTap JSON, lastInsightExtractionHash) |
-| `users/{uid}/insights/{id}` | Extracted signals (category, sourceDocId) |
-| `users/{uid}/decisions/{id}` | Scored decisions (impact/effort/confidence scores, tradeoffs, risks, strategicTheme) |
+| `users/{uid}/documents/{docId}` | Research notes (TipTap JSON, `lastInsightExtractionHash`) |
+| `users/{uid}/insights/{id}` | Extracted signals (category, `sourceDocId`) |
+| `users/{uid}/decisions/{id}` | Scored decisions (impact/effort/confidence/demand, tradeoffs, risks, `strategicTheme`) |
 | `users/{uid}/decisions/{id}/outcomes/{id}` | Expected vs. actual outcome records |
-| `users/{uid}/prds/{id}` | Generated specs (markdown content, status, sourceDocId) |
-| `users/{uid}/tasks/{id}` | Kanban tasks (priority, milestone, effort, dependsOn, dueDate) |
-| `users/{uid}/pastRuns/{id}` | Autonomous mode memory (idea, topDecisions, verdict) |
+| `users/{uid}/prds/{id}` | Generated specs (markdown content, status, `sourceDocId`) |
+| `users/{uid}/tasks/{id}` | Kanban tasks (priority, milestone, effort, `dependsOn`, `dueDate`) |
+| `users/{uid}/pastRuns/{id}` | Autonomous mode memory (idea, `topDecisions`, verdict) |
 | `users/{uid}/scoreHistory/{id}` | Score progression tracking over time |
 
 **Public data** (world-readable when visibility permits):
@@ -239,7 +262,7 @@ Speckula/
 │   │   │                       # DecisionCardV2, FocusPanel, CaseBriefDialog,
 │   │   │                       # DecisionHeaderCard
 │   │   ├── outcome/            # OutcomeCard, LearningInsight, ScoreAdjustment
-│   │   ├── platform/           # CaseViewer, PublicProfilePage, WorkspaceDashboard,
+│   │   ├── platform/           # PublicCasePage, PublicProfilePage, WorkspaceDashboard,
 │   │   │                       # RecruiterView
 │   │   ├── signals/            # NodeCard and signal visualization
 │   │   ├── views/              # AutonomousModeView, InsightsView, DecisionView,
@@ -254,9 +277,10 @@ Speckula/
 │   │   │                       # aiFilter, progressTracker, caseBuilder (24 files)
 │   │   ├── firebase/           # AuthProvider, config, db (Firestore repository)
 │   │   ├── platform/           # caseBuilder, publishCase
-│   │   └── export/             # Markdown/DOCX/CSV export utilities
-│   ├── store/                  # useAppStore, useActivityStore, useToastStore
-│   └── hooks/
+│   │   └── export/             # Markdown / DOCX / CSV export utilities
+│   ├── store/                  # useAppStore, useActivityStore, useToastStore,
+│   │                           # useExportDialogStore
+│   └── hooks/                  # useKeyboardShortcuts, useFileDropImport, use-mobile
 ├── backend/
 │   ├── src/
 │   │   ├── routes/             # aiRoutes, chatRoutes, importRoutes,
@@ -287,19 +311,25 @@ Speckula/
 
 **Additions (April–May 2026):**
 - Score history tracking and outcome feedback loop (expected vs. actual → learning insight)
-- Decision Health system (Healthy / Risky / Weak classification)
+- Decision Health system (Healthy / Needs Validation / Risky classification) with overcommitment / pushback detection
 - Case Brief AI generation (opportunity statement, context, recommendation, metrics)
 - Autonomous Mode past-run memory (Firestore-persisted, primes next session)
-- Task dependency declarations with reasoning
-- Export: PRDs to DOCX, insights to DOCX, tasks to CSV
+- Reflection loop and confidence gate in the Autonomous Agent
+- Task dependency declarations with reasoning and intelligent prioritization engine
+- Kanban drag-drop, task categories (backend / frontend / design / QA / integration / devops)
+- Export: PRDs to .docx, insights to .docx, tasks to CSV
 - Toast notification system and activity bell with history
 - Keyboard shortcuts
+- File drop import (including PDF extraction via `pdf-parse`)
+- Structured research blocks in the editor (Problem, Context, User Pain, Insights, Assumptions)
+- Per-document dismissed-hint tracking for inline AI suggestions
 - Slack API proxied through Next.js so backend needs no public domain
 - Firebase private key base64 support (`FIREBASE_PRIVATE_KEY_B64`) for Docker environments
 - Local PostgreSQL container via Docker Compose (removed Neon cloud dependency)
 - Retention sweeper for PromptLog and DecisionReasoning (60-day TTL, runs every 6 hours)
 - URL import bar and template picker in the editor
 - Recruiter view for public profiles
+- Client-side 429 circuit-breaker on AI Copilot (15 calls/day via localStorage)
 
 **Known gaps before production launch:**
 - No CI/CD pipeline or staging environment
@@ -308,6 +338,7 @@ Speckula/
 - Auth is Google-only — no email/password fallback
 - Frontend test coverage ~10% of custom components; decision sub-components untested
 - Comments UI on public cases is scaffolded but lacks backend handlers
+- `WorkspaceDashboard` component is a skeleton — workspace collaboration UI is partial
 
 ---
 

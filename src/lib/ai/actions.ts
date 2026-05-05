@@ -57,6 +57,9 @@ export interface DecisionSuggestion {
   // gate on it (reflection loop, verdict). Optional for backward-compat with
   // decisions persisted before this field existed.
   confidence?: number;
+  // v2.0: demand signal and production cost model for multi-factor verdict.
+  demand?: number;
+  costModel?: CostModel;
 }
 
 export interface StrategicGuidance {
@@ -64,6 +67,28 @@ export interface StrategicGuidance {
   rationale: string;
   gaps: string[];
   recommendation: string;
+  // v2.0: cost guard rails surfaced by the strategy step.
+  costConstraints?: string[];
+}
+
+// ── v2.0 Cost Analysis types ──────────────────────────────────────────────────
+
+export type CostCategory = "LOW" | "MEDIUM" | "HIGH";
+
+export interface CostBreakdown {
+  infrastructure: number; // USD/mo
+  llm_api: number;        // USD/mo
+  ops_labor: number;      // USD/mo
+  third_party?: number;   // USD/mo (optional)
+}
+
+export interface CostModel {
+  category: CostCategory;           // LOW <$500, MEDIUM $500–$2k, HIGH >$2k
+  estimatedMonthly: number;         // USD baseline at small scale
+  breakdown: CostBreakdown;
+  scalingTrajectory: string;        // 1-sentence cost growth description
+  costDrivers: string[];            // top cost factors
+  riskFactors: string[];            // cost estimate uncertainties
 }
 
 export interface OpportunityScoreBreakdown {
@@ -762,8 +787,10 @@ export const strategicGuidanceAction = async (docContent: unknown): Promise<Stra
   "theme": "One sentence strategic focus (e.g., 'Prioritize retention before expansion')",
   "rationale": "Why this is the right focus (1-2 sentences)",
   "gaps": ["Critical missing piece 1", "Critical missing piece 2"],
-  "recommendation": "Top strategic priority (1 sentence)"
-}`;
+  "recommendation": "Top strategic priority (1 sentence)",
+  "costConstraints": ["Phase 1 assumes <$X/mo infrastructure", "LLM spend capped at $Y/user/month"]
+}
+costConstraints: 1-3 short budget guard rails that matter for this strategy. Omit if cost is not a meaningful constraint.`;
 
   const result = await callAI(prompt, context);
   try {
@@ -772,7 +799,12 @@ export const strategicGuidanceAction = async (docContent: unknown): Promise<Stra
       theme: guidance.theme || "No clear theme identified",
       rationale: guidance.rationale || "Analyze your current priorities",
       gaps: Array.isArray(guidance.gaps) ? guidance.gaps.slice(0, 3) : [],
-      recommendation: guidance.recommendation || "Document your product vision"
+      recommendation: guidance.recommendation || "Document your product vision",
+      costConstraints: Array.isArray(guidance.costConstraints)
+        ? (guidance.costConstraints as unknown[])
+            .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+            .slice(0, 3)
+        : undefined,
     };
   } catch (e) {
     console.error("[strategicGuidanceAction] Failed to parse guidance JSON:", e);
@@ -833,7 +865,18 @@ For each decision, return a JSON object with EXACTLY these keys:
 - impact: integer 1-10 (10 = moves a core metric materially)
 - effort: integer 1-10 (10 = months of work)
 - confidence: integer 1-10 (10 = validated by multiple users + data; 1 = pure hunch)
+- demand: integer 1-10 (10 = top requested feature, strong market signal; 1 = no evidence of user interest)
 - priority: "high" | "medium" | "low"
+- costModel: {
+    "category": "LOW" | "MEDIUM" | "HIGH",
+    "estimatedMonthly": number (USD baseline at small scale — 1-10 users or ~1k daily requests),
+    "breakdown": { "infrastructure": number, "llm_api": number, "ops_labor": number },
+    "scalingTrajectory": "1 sentence: how does cost grow from 100 to 10k users?",
+    "costDrivers": ["top cost factor 1", "top cost factor 2"],
+    "riskFactors": ["cost uncertainty 1"]
+  }
+  Cost categories: LOW = <$500/mo baseline, MEDIUM = $500–$2k/mo, HIGH = >$2k/mo.
+  costModel must reflect THIS direction's specific technical approach — not a generic estimate.
 
 Hard rules:
 - Be specific. "Improve user experience" is not an insight or a recommendation.
@@ -856,6 +899,44 @@ Return ONLY a JSON array of 3 objects. No prose, no markdown fences.`;
 };
 
 const PRIORITY_VALUES = ["high", "medium", "low"] as const;
+const COST_CATEGORIES: CostCategory[] = ["LOW", "MEDIUM", "HIGH"];
+
+function normalizeCostModel(raw: unknown): CostModel | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const item = raw as Record<string, unknown>;
+
+  const category = typeof item.category === "string" && (COST_CATEGORIES as string[]).includes(item.category)
+    ? (item.category as CostCategory)
+    : undefined;
+  if (!category) return undefined;
+
+  const estimatedMonthly = typeof item.estimatedMonthly === "number" ? item.estimatedMonthly : 0;
+
+  const rawBreakdown = (typeof item.breakdown === "object" && item.breakdown !== null
+    ? item.breakdown
+    : {}) as Record<string, unknown>;
+  const breakdown: CostBreakdown = {
+    infrastructure: typeof rawBreakdown.infrastructure === "number" ? rawBreakdown.infrastructure : 0,
+    llm_api: typeof rawBreakdown.llm_api === "number" ? rawBreakdown.llm_api : 0,
+    ops_labor: typeof rawBreakdown.ops_labor === "number" ? rawBreakdown.ops_labor : 0,
+    third_party: typeof rawBreakdown.third_party === "number" ? rawBreakdown.third_party : undefined,
+  };
+
+  const strArr = (key: string): string[] => {
+    const v = item[key];
+    if (!Array.isArray(v)) return [];
+    return v.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim());
+  };
+
+  return {
+    category,
+    estimatedMonthly,
+    breakdown,
+    scalingTrajectory: typeof item.scalingTrajectory === "string" ? item.scalingTrajectory : "",
+    costDrivers: strArr("costDrivers"),
+    riskFactors: strArr("riskFactors"),
+  };
+}
 
 function normalizeDecisionSuggestion(raw: unknown): DecisionSuggestion {
   const item = (raw ?? {}) as Record<string, unknown>;
@@ -888,6 +969,10 @@ function normalizeDecisionSuggestion(raw: unknown): DecisionSuggestion {
   const confidenceParsed = typeof confidenceRaw === "number" ? confidenceRaw : Number(confidenceRaw);
   const confidence = Number.isFinite(confidenceParsed) ? clampScoreValue(confidenceParsed) : undefined;
 
+  const demandRaw = item.demand;
+  const demandParsed = typeof demandRaw === "number" ? demandRaw : Number(demandRaw);
+  const demand = Number.isFinite(demandParsed) ? clampScoreValue(demandParsed) : undefined;
+
   return {
     title: str("title", "Untitled decision"),
     justification: str("justification") || str("summary"),
@@ -902,6 +987,8 @@ function normalizeDecisionSuggestion(raw: unknown): DecisionSuggestion {
     risks: arr("risks").length > 0 ? arr("risks") : undefined,
     assumptions: arr("assumptions").length > 0 ? arr("assumptions") : undefined,
     confidence,
+    demand,
+    costModel: normalizeCostModel(item.costModel),
   };
 }
 
@@ -969,6 +1056,12 @@ export interface RoadmapPhase {
   name: string;
   goal: string;
   deliverables: string[];
+  // v2.0: cost and timeline metadata
+  durationWeeks?: number;
+  costCategory?: CostCategory;
+  budgetMin?: number;
+  budgetMax?: number;
+  validationGates?: string[];
 }
 
 export const generateRoadmapAction = async (
@@ -993,14 +1086,19 @@ ${decisionsList}
 Return a 3-phase roadmap as a JSON array. Each phase moves the product from idea to validated ship.
 
 Each phase has:
-- name: short label (e.g. "Validate", "Build MVP", "Measure & iterate")
-- goal: ONE sentence stating the outcome of the phase. What is true at the end that wasn't true at the start?
-- deliverables: array of 2-4 specific, concrete deliverables. Not "research users" — "10 user interviews with [specific segment] focused on [specific question]"
+- name: short label (e.g. "Validate", "Build MVP", "Scale")
+- goal: ONE sentence stating the outcome of the phase
+- deliverables: array of 2-4 specific, concrete deliverables (not "research users" — "10 user interviews with [segment] on [question]")
+- duration_weeks: integer 2-6 (realistic estimate)
+- cost_category: "LOW" | "MEDIUM" | "HIGH" (LOW <$500/mo, MEDIUM $500–$2k, HIGH >$2k)
+- budget_min: number (USD minimum spend for this phase)
+- budget_max: number (USD maximum spend for this phase)
+- validation_gates: array of 1-2 conditions that must be true before proceeding to the next phase
 
 Hard rules:
-- Be specific. Avoid filler like "iterate based on feedback" — that is not a deliverable.
-- Phase 1 should always test the riskiest assumption from the decisions above, not build features.
-- Total scope across all 3 phases ≤ 12 weeks of work.
+- Phase 1 must always test the riskiest assumption — not build features.
+- Deliverables must be specific and measurable.
+- Total scope across all 3 phases ≤ 12 weeks.
 
 Return ONLY a JSON array of 3 phase objects. No prose, no markdown fences.`;
 
@@ -1020,7 +1118,22 @@ Return ONLY a JSON array of 3 phase objects. No prose, no markdown fences.`;
               .slice(0, 6)
           : [];
         if (!name || !goal) return null;
-        return { name, goal, deliverables };
+
+        const durationWeeks = typeof item.duration_weeks === "number" ? item.duration_weeks : undefined;
+        const costCatRaw = item.cost_category;
+        const costCategory = typeof costCatRaw === "string" && (COST_CATEGORIES as string[]).includes(costCatRaw)
+          ? (costCatRaw as CostCategory)
+          : undefined;
+        const budgetMin = typeof item.budget_min === "number" ? item.budget_min : undefined;
+        const budgetMax = typeof item.budget_max === "number" ? item.budget_max : undefined;
+        const validationGates = Array.isArray(item.validation_gates)
+          ? item.validation_gates
+              .filter((g): g is string => typeof g === "string" && g.trim().length > 0)
+              .map((g) => g.trim())
+              .slice(0, 3)
+          : undefined;
+
+        return { name, goal, deliverables, durationWeeks, costCategory, budgetMin, budgetMax, validationGates };
       })
       .filter((p): p is RoadmapPhase => p !== null);
   } catch (e) {
