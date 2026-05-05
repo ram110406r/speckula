@@ -233,7 +233,7 @@ export function AutonomousModeView() {
       case "confidenceExplanation":
         setConfidenceExplanation(event.items);
         break;
-      case "modeAutoSwitched":
+      case "modeAutoSwitched": {
         // Reflect the auto-switch in the toggle so the visible state matches
         // what the agent is now running. Refresh the meta so the cooldown
         // timer is accurate for any subsequent run in this session.
@@ -241,8 +241,21 @@ export function AutonomousModeView() {
         if (user?.uid) {
           void getDecisionModeMeta(user.uid).then((meta) => setModeMeta(meta));
         }
-        appendEntry({ kind: "system", text: `Auto mode switched to ${event.to}` });
+        // v3.0: explainable announcement. e.g.
+        //   "Switched to Aggressive due to higher hit rate (+6%)"
+        const reasonLabels: Record<string, string> = {
+          accuracy: "higher accuracy",
+          hit_rate: "higher hit rate",
+          calibration: "better calibration",
+        };
+        const toLabel = event.to.charAt(0).toUpperCase() + event.to.slice(1);
+        const text =
+          event.reason && typeof event.deltaPct === "number"
+            ? `Switched to ${toLabel} due to ${reasonLabels[event.reason] ?? event.reason} (+${event.deltaPct}%)`
+            : `Auto mode switched to ${toLabel}`;
+        appendEntry({ kind: "system", text });
         break;
+      }
       case "checkpoint":
         appendEntry({ kind: "checkpoint", text: event.message });
         break;
@@ -292,6 +305,11 @@ export function AutonomousModeView() {
         strictness,
         autoMode,
         lastSwitchAtMs: modeMeta?.lastSwitchAt?.toDate?.()?.getTime?.() ?? null,
+        freezeUntilMs: modeMeta?.freezeUntil?.toDate?.()?.getTime?.() ?? null,
+        switchHistoryMs:
+          (modeMeta?.switchHistory ?? [])
+            .map((t) => t?.toDate?.()?.getTime?.() ?? null)
+            .filter((n): n is number => typeof n === "number"),
         awaitUserResponse: (question) =>
           new Promise<string>((resolve, reject) => {
             answerResolverRef.current = resolve;

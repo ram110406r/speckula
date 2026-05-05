@@ -12,6 +12,7 @@ import {
   addDoc,
   limit as firestoreLimit,
   onSnapshot,
+  Timestamp as FsTimestamp,
   type Timestamp,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -726,6 +727,9 @@ export interface PromptOutcomeMetricsRow {
   shortTermAccuracy: number | null;
   longTermAccuracy: number | null;
   driftDetected: boolean;
+  // v3.0 anomaly. Same direction as drift but at a much higher magnitude
+  // (10%) — an alert-worthy sudden drop, not a trend.
+  anomaly: boolean;
 }
 
 // v2.5: per-decision sample used by the rolling-window rollback algorithm.
@@ -918,13 +922,16 @@ export const getPromptOutcomeMetrics = async (
       samplesByPromptId[pid].sort((a, b) => b.recordedAt - a.recordedAt);
     }
 
+    const ANOMALY_THRESHOLD = 0.10;
     const rows: PromptOutcomeMetricsRow[] = Array.from(buckets.values()).map((b) => {
       const shortTermAccuracy = b.shortAccCount > 0 ? b.shortAccSum / b.shortAccCount : null;
       const longTermAccuracy = b.longAccCount > 0 ? b.longAccSum / b.longAccCount : null;
-      const driftDetected =
-        shortTermAccuracy !== null &&
-        longTermAccuracy !== null &&
-        shortTermAccuracy < longTermAccuracy - DRIFT_THRESHOLD;
+      const dropFromLong =
+        shortTermAccuracy !== null && longTermAccuracy !== null
+          ? longTermAccuracy - shortTermAccuracy
+          : null;
+      const driftDetected = dropFromLong !== null && dropFromLong > DRIFT_THRESHOLD;
+      const anomaly = dropFromLong !== null && dropFromLong > ANOMALY_THRESHOLD;
       return {
         promptId: b.promptId,
         promptVersion: b.promptVersion,
@@ -938,6 +945,7 @@ export const getPromptOutcomeMetrics = async (
         shortTermAccuracy,
         longTermAccuracy,
         driftDetected,
+        anomaly,
       };
     });
 
@@ -1025,11 +1033,27 @@ export const setDecisionMode = async (userId: string, mode: DecisionMode): Promi
 // Persisted at users/{uid}/settings/decisionModeMeta to keep separate from
 // the user-controlled `decisionMode` doc so writes from auto-mode logic
 // don't clobber the user's manual selection.
+//
+// v3.0 explainability + safety:
+//   previousMode/previousScore/delta/reason — captured each time the agent
+//     auto-switches so the UI can answer "why did this change?"
+//   freezeUntil/switchHistory — guard against thrashing: if more than two
+//     switches happen in 14 days, the agent freezes the mode until freezeUntil.
+export type SwitchReason = "accuracy" | "hit_rate" | "calibration";
+
 export interface DecisionModeMeta {
   recommendedMode: DecisionMode;
   score: number;
   evaluatedAt: Timestamp | null;
   lastSwitchAt: Timestamp | null;
+  // v3.0 explainability — populated only when a switch fires.
+  previousMode?: DecisionMode | null;
+  previousScore?: number | null;
+  delta?: number | null;
+  reason?: SwitchReason | null;
+  // v3.0 safety guards.
+  freezeUntil?: Timestamp | null;
+  switchHistory?: Timestamp[];
 }
 
 export const getDecisionModeMeta = async (userId: string): Promise<DecisionModeMeta | null> => {
@@ -1055,7 +1079,21 @@ export const getDecisionModeMeta = async (userId: string): Promise<DecisionModeM
 
 export const setDecisionModeMeta = async (
   userId: string,
-  meta: { recommendedMode: DecisionMode; score: number; markSwitched?: boolean }
+  meta: {
+    recommendedMode: DecisionMode;
+    score: number;
+    // When true, also writes lastSwitchAt and appends to switchHistory.
+    markSwitched?: boolean;
+    // v3.0 explainability — supply when markSwitched is true.
+    previousMode?: DecisionMode | null;
+    previousScore?: number | null;
+    delta?: number | null;
+    reason?: SwitchReason | null;
+    // v3.0 safety. Caller is responsible for computing freezeUntil and the
+    // updated switchHistory; persisting both is fire-and-forget.
+    freezeUntil?: Date | null;
+    switchHistoryDates?: Date[] | null;
+  }
 ): Promise<void> => {
   try {
     const payload: Record<string, unknown> = {
@@ -1065,6 +1103,16 @@ export const setDecisionModeMeta = async (
     };
     if (meta.markSwitched) {
       payload.lastSwitchAt = serverTimestamp();
+      if (meta.previousMode !== undefined) payload.previousMode = meta.previousMode;
+      if (meta.previousScore !== undefined) payload.previousScore = meta.previousScore;
+      if (meta.delta !== undefined) payload.delta = meta.delta;
+      if (meta.reason !== undefined) payload.reason = meta.reason;
+    }
+    if (meta.freezeUntil !== undefined) {
+      payload.freezeUntil = meta.freezeUntil ? FsTimestamp.fromDate(meta.freezeUntil) : null;
+    }
+    if (meta.switchHistoryDates !== undefined && meta.switchHistoryDates !== null) {
+      payload.switchHistory = meta.switchHistoryDates.map((d) => FsTimestamp.fromDate(d));
     }
     await setDoc(userSettingRef(userId, "decisionModeMeta"), payload, { merge: true });
   } catch (error) {
@@ -1113,6 +1161,58 @@ export function recommendDecisionMode(modeBreakdown: ModeBreakdownRow[]): ModeRe
     return { recommendedMode: "balanced", score: 0, qualified: false, scoresPerMode };
   }
   return { recommendedMode: bestMode, score: bestScore, qualified: true, scoresPerMode };
+}
+
+// v3.0 — explainability. Given current and recommended mode rows from
+// modeBreakdown, return the dominant factor that drove the score delta plus
+// the raw percentage-point improvement on that factor. Weights mirror the
+// score formula in recommendDecisionMode (0.6/0.3/0.1).
+//
+// Returns null when neither mode has data or the recommendation has no
+// positive driver (in which case the agent shouldn't be switching anyway).
+export function computeSwitchReason(
+  currentMode: DecisionMode,
+  recommendedMode: DecisionMode,
+  modeBreakdown: ModeBreakdownRow[]
+): { reason: SwitchReason; deltaPct: number } | null {
+  const cur = modeBreakdown.find((m) => m.mode === currentMode);
+  const rec = modeBreakdown.find((m) => m.mode === recommendedMode);
+  if (!cur || !rec) return null;
+
+  const accDelta = (rec.avgAccuracyNorm ?? 0) - (cur.avgAccuracyNorm ?? 0);
+  const hitDelta = (rec.hitRate ?? 0) - (cur.hitRate ?? 0);
+  // Lower calibrationError = better, so flip the sign for "improvement".
+  const calibImprovement = (cur.avgCalibrationError ?? 0) - (rec.avgCalibrationError ?? 0);
+
+  const candidates: Array<{ reason: SwitchReason; weighted: number; rawDelta: number }> = [
+    { reason: "accuracy", weighted: 0.6 * accDelta, rawDelta: accDelta },
+    { reason: "hit_rate", weighted: 0.3 * hitDelta, rawDelta: hitDelta },
+    { reason: "calibration", weighted: 0.1 * calibImprovement, rawDelta: calibImprovement },
+  ];
+  candidates.sort((a, b) => b.weighted - a.weighted);
+
+  const top = candidates[0];
+  if (top.weighted <= 0) return null;
+  return { reason: top.reason, deltaPct: Math.round(top.rawDelta * 100) };
+}
+
+// v3.0 — switch-frequency safety guard. Returns true when the agent is
+// currently in a freeze window OR the user has switched ≥ MAX_SWITCHES_IN_WINDOW
+// times in the last MAX_SWITCHES_WINDOW_DAYS. The caller should treat both
+// states as "do not switch" and refresh freezeUntil if the second condition
+// just kicked in.
+export const MAX_SWITCHES_IN_WINDOW = 2;
+export const MAX_SWITCHES_WINDOW_DAYS = 14;
+export const FREEZE_DURATION_DAYS = 14;
+
+export function isSwitchFrozen(freezeUntil: Date | null): boolean {
+  if (!freezeUntil) return false;
+  return freezeUntil.getTime() > Date.now();
+}
+
+export function countRecentSwitches(history: Date[]): number {
+  const cutoff = Date.now() - MAX_SWITCHES_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  return history.filter((d) => d.getTime() >= cutoff).length;
 }
 
 // v2.8 — hysteresis guard. Returns true only when:

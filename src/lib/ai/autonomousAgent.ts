@@ -45,6 +45,13 @@ import {
   setDecisionModeMeta,
   recommendDecisionMode,
   shouldSwitchMode,
+  computeSwitchReason,
+  isSwitchFrozen,
+  countRecentSwitches,
+  MAX_SWITCHES_IN_WINDOW,
+  MAX_SWITCHES_WINDOW_DAYS,
+  FREEZE_DURATION_DAYS,
+  type SwitchReason,
 } from "../firebase/db";
 
 export type AgentState =
@@ -87,7 +94,7 @@ export type AgentEvent =
   | { type: "expectedOutcome"; outcome: PredictedOutcome; promptRef?: PromptRef }
   | { type: "feedbackApplied"; userAccuracy: number }
   | { type: "confidenceExplanation"; items: ConfidenceExplanationItem[] }
-  | { type: "modeAutoSwitched"; from: PredictionStrictness; to: PredictionStrictness; score: number; previousScore: number | null }
+  | { type: "modeAutoSwitched"; from: PredictionStrictness; to: PredictionStrictness; score: number; previousScore: number | null; reason: SwitchReason | null; deltaPct: number | null }
   | { type: "error"; message: string }
   | { type: "done" };
 
@@ -108,6 +115,12 @@ export interface AgentRunOptions {
   // mount via getDecisionModeMeta() and passes it through so the agent
   // doesn't add a per-run Firestore read.
   lastSwitchAtMs?: number | null;
+  // v3.0 safety: epoch-ms freeze deadline (the agent skips switching while
+  // Date.now() < freezeUntil) and the recent switch history used to detect
+  // the "more than two switches in 14 days" condition. Both come from the
+  // same getDecisionModeMeta() read on mount.
+  freezeUntilMs?: number | null;
+  switchHistoryMs?: number[];
 }
 
 const stateLabels: Record<AgentState, string> = {
@@ -135,6 +148,14 @@ function throwIfAborted(signal: AbortSignal) {
     throw err;
   }
 }
+
+// Friendly labels for the three switch-reason kinds (v3.0). Used in stream
+// messages and the modeAutoSwitched event.
+const REASON_LABEL: Record<SwitchReason, string> = {
+  accuracy: "higher accuracy",
+  hit_rate: "higher hit rate",
+  calibration: "better calibration",
+};
 
 // v2.7 — deterministic post-prediction math. Conservative mode pulls targets
 // down and pushes confidence up; aggressive does the opposite. Balanced is a
@@ -235,6 +256,8 @@ export async function runAutonomousAgent({
   strictness = "balanced",
   autoMode = false,
   lastSwitchAtMs = null,
+  freezeUntilMs = null,
+  switchHistoryMs = [],
 }: AgentRunOptions): Promise<void> {
   const enterState = (state: AgentState) => {
     throwIfAborted(signal);
@@ -315,39 +338,94 @@ export async function runAutonomousAgent({
         });
       }
 
-      // v2.8: auto-mode resolution. Recommend the best-performing mode from
-      // modeBreakdown, gate by hysteresis, and override the user's selected
-      // strictness when warranted. Pure deterministic compute — no LLM —
-      // and no extra Firestore read because the view already provided
-      // lastSwitchAtMs.
+      // v2.8 + v3.0: auto-mode resolution with safety guards.
+      //   1. Compute recommendation from modeBreakdown (deterministic).
+      //   2. Apply hysteresis (≥0.03 score gap, ≥7d cooldown).
+      //   3. Apply v3.0 safety: respect freezeUntil; if too many recent
+      //      switches, freeze instead of switching.
+      //   4. On switch, compute reason + delta for explainability.
+      // No extra Firestore reads — freezeUntil and switchHistory ride along
+      // with the lastSwitchAt that the view loaded on mount.
       if (autoMode) {
         const recommendation = recommendDecisionMode(outcomeMetrics.modeBreakdown);
         const lastSwitchDate = lastSwitchAtMs ? new Date(lastSwitchAtMs) : null;
-        const switchOk = shouldSwitchMode(strictness, recommendation, lastSwitchDate);
+        const freezeUntilDate = freezeUntilMs ? new Date(freezeUntilMs) : null;
+        const switchHistory = (switchHistoryMs ?? []).map((ms) => new Date(ms));
 
-        // Always update the recommendation snapshot. Only mark a switch when
-        // hysteresis passed — that's what advances the cooldown timer.
+        const hysteresisOk = shouldSwitchMode(strictness, recommendation, lastSwitchDate);
+        const frozen = isSwitchFrozen(freezeUntilDate);
+        const recentSwitchCount = countRecentSwitches(switchHistory);
+        // Counting THIS upcoming switch — if past+current would exceed the
+        // limit, we freeze instead of letting it through.
+        const wouldExceedLimit = hysteresisOk && (recentSwitchCount + 1) > MAX_SWITCHES_IN_WINDOW;
+
+        const switchOk = hysteresisOk && !frozen && !wouldExceedLimit;
+
+        // Compute reason ahead of the switch so we can both log it and
+        // persist it on the meta doc.
+        const reasonInfo = switchOk
+          ? computeSwitchReason(strictness, recommendation.recommendedMode, outcomeMetrics.modeBreakdown)
+          : null;
+        const previousScoreForRecord = recommendation.scoresPerMode[strictness] ?? null;
+        const compositeDelta = previousScoreForRecord !== null
+          ? recommendation.score - previousScoreForRecord
+          : null;
+
+        // If the rate-limit was the blocker, set a freeze window and emit a
+        // stream message so the user knows the system is intentionally
+        // sitting still rather than ignoring data.
+        let nextFreezeUntil: Date | null = freezeUntilDate ?? null;
+        if (wouldExceedLimit && !frozen) {
+          nextFreezeUntil = new Date(Date.now() + FREEZE_DURATION_DAYS * 24 * 60 * 60 * 1000);
+          emit({
+            type: "thinking",
+            message: `Mode frozen: ${recentSwitchCount} switches in the last ${MAX_SWITCHES_WINDOW_DAYS} days. Holding ${strictness} for ~${FREEZE_DURATION_DAYS}d to avoid thrash.`,
+          });
+        } else if (frozen) {
+          emit({
+            type: "thinking",
+            message: `Auto-mode frozen until ${freezeUntilDate?.toLocaleDateString?.() ?? "next window"} — keeping ${strictness}.`,
+          });
+        }
+
+        // History maintenance: append the new switch timestamp and keep at
+        // most a small ring buffer so the doc stays small.
+        const updatedHistoryDates = switchOk
+          ? [...switchHistory, new Date()].slice(-10)
+          : switchHistory;
+
+        // Persist meta. Three cases share the same write:
+        //   - successful switch (markSwitched=true, reason populated)
+        //   - frozen / rate-limited (markSwitched=false, but freezeUntil updated)
+        //   - no-op evaluation (markSwitched=false, refresh score snapshot only)
         void setDecisionModeMeta(userId, {
           recommendedMode: recommendation.recommendedMode,
           score: recommendation.score,
           markSwitched: switchOk,
+          previousMode: switchOk ? strictness : null,
+          previousScore: switchOk ? previousScoreForRecord : null,
+          delta: switchOk ? compositeDelta : null,
+          reason: reasonInfo?.reason ?? null,
+          freezeUntil: nextFreezeUntil,
+          switchHistoryDates: switchOk ? updatedHistoryDates : null,
         });
 
         if (switchOk) {
-          const previousScore = recommendation.scoresPerMode[strictness] ?? null;
           emit({
             type: "modeAutoSwitched",
             from: strictness,
             to: recommendation.recommendedMode,
             score: recommendation.score,
-            previousScore,
+            previousScore: previousScoreForRecord,
+            reason: reasonInfo?.reason ?? null,
+            deltaPct: reasonInfo?.deltaPct ?? null,
           });
-          const deltaPct = previousScore !== null
-            ? ((recommendation.score - previousScore) * 100).toFixed(1)
-            : "—";
+          const reasonText = reasonInfo
+            ? `${REASON_LABEL[reasonInfo.reason]} +${reasonInfo.deltaPct}%`
+            : `composite +${compositeDelta !== null ? (compositeDelta * 100).toFixed(1) : "—"}%`;
           emit({
             type: "thinking",
-            message: `Auto mode: ${strictness} → ${recommendation.recommendedMode} (composite +${deltaPct}% over current).`,
+            message: `Auto mode: ${strictness} → ${recommendation.recommendedMode} (${reasonText}).`,
           });
           strictness = recommendation.recommendedMode;
         }
