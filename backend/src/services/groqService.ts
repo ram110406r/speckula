@@ -134,6 +134,9 @@ interface CallGroqOpts {
   jsonMode?: boolean;
   maxTokens?: number;
   temperature?: number;
+  // v2.3: forwarded from frontend `_meta` so PromptLog rows can be aggregated
+  // by prompt registry id + version (cost-by-prompt, version A/B compare).
+  promptMeta?: { promptId?: string; promptVersion?: string };
 }
 
 export const groqService = {
@@ -169,6 +172,8 @@ export const groqService = {
           executionMs: 0,
           cost: 0,
           cachedResult: true,
+          promptId: opts.promptMeta?.promptId ?? null,
+          promptVersion: opts.promptMeta?.promptVersion ?? null,
         },
       }).catch((error: unknown) => warnDbDegraded("promptLog.create (hit)", error));
 
@@ -231,6 +236,8 @@ export const groqService = {
         executionMs,
         cost,
         cachedResult: false,
+        promptId: opts.promptMeta?.promptId ?? null,
+        promptVersion: opts.promptMeta?.promptVersion ?? null,
       },
     }).catch((error: unknown) => warnDbDegraded("promptLog.create", error));
 
@@ -273,7 +280,8 @@ export const groqService = {
     noteContent: string,
     projectId: string,
     noteId: string,
-    userId: string
+    userId: string,
+    promptMeta?: { promptId?: string; promptVersion?: string }
   ) {
     const prompt = `You are a sharp product analyst. Your job is to surface non-obvious insights from raw research notes — things the PM might have missed, patterns across multiple data points, and contradictions worth interrogating.
 
@@ -297,7 +305,7 @@ Return ONLY a JSON object with shape {"insights": [...]} containing exactly 4 it
   }
 ]}`;
 
-    const result = await this.callGroq(prompt, { model: "reasoning", jsonMode: true, maxTokens: 2000 }, userId, projectId);
+    const result = await this.callGroq(prompt, { model: "reasoning", jsonMode: true, maxTokens: 2000, promptMeta }, userId, projectId);
     // Tolerate either {insights: [...]} or a bare array.
     const parsed = parseJsonTolerant<unknown>(result.content);
     const insights = Array.isArray(parsed)
@@ -344,7 +352,8 @@ Return ONLY a JSON object with shape {"insights": [...]} containing exactly 4 it
     projectNotes: string,
     decisions: string,
     projectId: string,
-    userId: string
+    userId: string,
+    promptMeta?: { promptId?: string; promptVersion?: string }
   ) {
     const prompt = `You are a staff PM writing a PRD that will go directly to engineering. This document must be specific enough that a developer could start building from it without asking clarifying questions.
 
@@ -381,7 +390,7 @@ At least 2 explicit exclusions with reasoning. What obvious solutions did we dec
 
 Return only the markdown.`;
 
-    const result = await this.callGroq(prompt, { model: "reasoning", maxTokens: 4000 }, userId, projectId);
+    const result = await this.callGroq(prompt, { model: "reasoning", maxTokens: 4000, promptMeta }, userId, projectId);
 
     await db.aIPRD.create({
       data: {

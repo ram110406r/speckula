@@ -6,7 +6,8 @@ import {
   Target, AlertTriangle, CheckCircle2, Lightbulb, Map,
   Compass, Flame, ShieldAlert, ShieldCheck, ShieldX,
   RotateCcw, FileText, ListTodo, Save, Cpu, HelpCircle,
-  DollarSign, MapPin,
+  DollarSign, MapPin, Gauge, TrendingUp, TrendingDown, Activity,
+  Shield, Crosshair, Rocket, Info,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -15,6 +16,7 @@ import {
   type AgentEvent,
   type AgentDepth,
   type AgentState,
+  type ConfidenceExplanationItem,
 } from "@/lib/ai/autonomousAgent";
 import type {
   DecisionSuggestion,
@@ -22,6 +24,8 @@ import type {
   RoadmapPhase,
   ClarifyingQuestion,
   CostCategory,
+  PredictedOutcome,
+  PredictionStrictness,
 } from "@/lib/ai/actions";
 import type { Verdict, VerdictLabel, VerdictFactors } from "@/lib/ai/verdict";
 import { saveDecision } from "@/lib/firebase/db";
@@ -57,8 +61,8 @@ const depthOptions: ReadonlyArray<{
 const STEPPER_STEPS: { label: string; sublabel: string; states: AgentState[] }[] = [
   { label: "Understanding",      sublabel: "Idea & problem space",     states: ["understand_idea", "check_clarity", "awaiting_user"] },
   { label: "Gathering signals",  sublabel: "Decisions & tradeoffs",    states: ["generate_decisions", "reflection"] },
-  { label: "Building argument",  sublabel: "Scoring & strategy",       states: ["evaluate_decisions", "validation_layer", "confidence_gate", "strategy_generation"] },
-  { label: "Generating verdict", sublabel: "Roadmap & final output",   states: ["roadmap_generation", "output"] },
+  { label: "Building argument",  sublabel: "Scoring & validation",     states: ["evaluate_decisions", "validation_layer", "predict_outcome", "confidence_gate"] },
+  { label: "Generating verdict", sublabel: "Strategy, roadmap, ship",  states: ["strategy_generation", "roadmap_generation", "output"] },
 ];
 
 let entryCounter = 0;
@@ -87,6 +91,10 @@ export function AutonomousModeView() {
   const [topDecision, setTopDecision] = React.useState<DecisionSuggestion | null>(null);
   const [assumptions, setAssumptions] = React.useState<string[]>([]);
   const [verdict, setVerdict] = React.useState<Verdict | null>(null);
+  const [predictedOutcome, setPredictedOutcome] = React.useState<PredictedOutcome | null>(null);
+  const [userAccuracy, setUserAccuracy] = React.useState<number | null>(null);
+  const [confidenceExplanation, setConfidenceExplanation] = React.useState<ConfidenceExplanationItem[]>([]);
+  const [strictness, setStrictness] = React.useState<PredictionStrictness>("balanced");
   const [pastIdeas, setPastIdeas] = React.useState<string[]>([]);
   const [pendingQuestion, setPendingQuestion] = React.useState<ClarifyingQuestion | null>(null);
   const [answerText, setAnswerText] = React.useState("");
@@ -148,6 +156,19 @@ export function AutonomousModeView() {
       case "memoryLoaded":
         setPastIdeas(event.pastIdeas);
         break;
+      case "expectedOutcome":
+        setPredictedOutcome(event.outcome);
+        appendEntry({
+          kind: "system",
+          text: `Predicted: ${event.outcome.metric} → ${event.outcome.target}${event.outcome.unit ?? ""} in ${event.outcome.timeframeDays}d (${Math.round(event.outcome.confidence * 100)}% conf.)`,
+        });
+        break;
+      case "feedbackApplied":
+        setUserAccuracy(event.userAccuracy);
+        break;
+      case "confidenceExplanation":
+        setConfidenceExplanation(event.items);
+        break;
       case "checkpoint":
         appendEntry({ kind: "checkpoint", text: event.message });
         break;
@@ -172,6 +193,9 @@ export function AutonomousModeView() {
     setTopDecision(null);
     setAssumptions([]);
     setVerdict(null);
+    setPredictedOutcome(null);
+    setUserAccuracy(null);
+    setConfidenceExplanation([]);
     setPastIdeas([]);
     setPendingQuestion(null);
     setAnswerText("");
@@ -190,6 +214,7 @@ export function AutonomousModeView() {
         emit: handleAgentEvent,
         alreadyAsked: [],
         userId: user?.uid,
+        strictness,
         awaitUserResponse: (question) =>
           new Promise<string>((resolve, reject) => {
             answerResolverRef.current = resolve;
@@ -202,7 +227,7 @@ export function AutonomousModeView() {
       answerResolverRef.current = null;
       answerRejecterRef.current = null;
     }
-  }, [idea, depth, isRunning, appendEntry, handleAgentEvent, user?.uid]);
+  }, [idea, depth, isRunning, appendEntry, handleAgentEvent, user?.uid, strictness]);
 
   const stop = React.useCallback(() => {
     abortRef.current?.abort();
@@ -235,6 +260,9 @@ export function AutonomousModeView() {
     setTopDecision(null);
     setAssumptions([]);
     setVerdict(null);
+    setPredictedOutcome(null);
+    setUserAccuracy(null);
+    setConfidenceExplanation([]);
     setPastIdeas([]);
     setPendingQuestion(null);
     setAnswerText("");
@@ -245,6 +273,19 @@ export function AutonomousModeView() {
     if (!user || !topDecision || isSaving) return;
     setIsSaving(true);
     try {
+      // v2.2: persist the predicted outcome and a normalized metric tag so
+      // the next run's pattern-accuracy lookup can find this decision once
+      // its actual outcome is recorded.
+      const expectedOutcomePayload = predictedOutcome
+        ? {
+            metric: predictedOutcome.metric,
+            target_value: predictedOutcome.target,
+            baseline: predictedOutcome.baseline,
+            unit: predictedOutcome.unit,
+            timeframe: `${predictedOutcome.timeframeDays} days`,
+          }
+        : undefined;
+
       await saveDecision(user.uid, {
         title: topDecision.title,
         justification: topDecision.justification,
@@ -260,6 +301,8 @@ export function AutonomousModeView() {
         confidence: topDecision.confidence,
         strategyTheme: strategy?.theme ?? null,
         sourceDocId: currentDocId ?? undefined,
+        expectedOutcome: expectedOutcomePayload,
+        metric: predictedOutcome?.metric.trim().toLowerCase(),
       });
       toast.success("Decision saved", topDecision.title);
       activity.success("Decision saved from Autonomous Mode");
@@ -268,7 +311,7 @@ export function AutonomousModeView() {
     } finally {
       setIsSaving(false);
     }
-  }, [user, topDecision, strategy, isSaving, currentDocId]);
+  }, [user, topDecision, strategy, predictedOutcome, isSaving, currentDocId]);
 
   const handleConvertToSpec = React.useCallback(async () => {
     if (!user || !topDecision || isConvertingToSpec) return;
@@ -343,7 +386,7 @@ export function AutonomousModeView() {
   }, [user, topDecision, strategy, roadmap, decisions, isCreatingTasks, currentDocId, setActiveView]);
 
   const activeStep = getActiveStep(agentState);
-  const hasOutput = decisions.length > 0 || !!strategy || roadmap.length > 0 || !!verdict;
+  const hasOutput = decisions.length > 0 || !!strategy || roadmap.length > 0 || !!verdict || !!predictedOutcome;
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -457,6 +500,14 @@ export function AutonomousModeView() {
               </div>
             </div>
 
+            {/* Prediction strictness */}
+            <div className="space-y-1.5">
+              <label className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">
+                Prediction strictness
+              </label>
+              <StrictnessSelector value={strictness} onChange={setStrictness} disabled={isRunning} />
+            </div>
+
             {/* Analyze button */}
             <button
               onClick={start}
@@ -484,6 +535,20 @@ export function AutonomousModeView() {
               <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[10px] text-muted-foreground/60">
                 <span className="text-foreground/50 font-medium">Memory:</span>{" "}
                 primed with {pastIdeas.length} past run{pastIdeas.length === 1 ? "" : "s"}
+              </div>
+            )}
+
+            {/* Feedback hint */}
+            {userAccuracy !== null && (
+              <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[10px] text-muted-foreground/60 flex items-center gap-1.5">
+                {userAccuracy >= 0.5
+                  ? <TrendingUp className="h-3 w-3 text-success/70" />
+                  : <TrendingDown className="h-3 w-3 text-warning/70" />}
+                <span>
+                  <span className="text-foreground/50 font-medium">Track record:</span>{" "}
+                  {Math.round(userAccuracy * 100)}% accuracy — confidence{" "}
+                  {userAccuracy >= 0.5 ? "boosted" : "penalized"} by ~{Math.round(Math.abs(userAccuracy - 0.5) * 30)}%
+                </span>
               </div>
             )}
           </div>
@@ -580,6 +645,8 @@ export function AutonomousModeView() {
                 topDecision={topDecision}
                 assumptions={assumptions}
                 verdict={verdict}
+                predictedOutcome={predictedOutcome}
+                confidenceExplanation={confidenceExplanation}
                 isRunning={isRunning}
                 depth={depth}
               />
@@ -795,11 +862,13 @@ interface OutputPanelProps {
   topDecision: DecisionSuggestion | null;
   assumptions: string[];
   verdict: Verdict | null;
+  predictedOutcome: PredictedOutcome | null;
+  confidenceExplanation: ConfidenceExplanationItem[];
   isRunning: boolean;
   depth: AgentDepth;
 }
 
-function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, verdict, isRunning, depth }: OutputPanelProps) {
+function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, verdict, predictedOutcome, confidenceExplanation, isRunning, depth }: OutputPanelProps) {
   return (
     <div className="p-6 space-y-5 max-w-2xl">
 
@@ -823,8 +892,16 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         </div>
       )}
 
+      {/* Confidence explanation (Stage 11 → UI) */}
+      {confidenceExplanation.length > 0 && (
+        <ConfidenceExplanationPills items={confidenceExplanation} />
+      )}
+
       {/* Final verdict */}
       {verdict && <VerdictBlock verdict={verdict} />}
+
+      {/* Expected outcome (Stage 5) */}
+      {predictedOutcome && <ExpectedOutcomeBlock outcome={predictedOutcome} />}
 
       {/* Evidence block */}
       {decisions.length > 0 && (
@@ -1004,6 +1081,78 @@ function OutputBlock({ label, icon: Icon, children }: { label: string; icon: Rea
   );
 }
 
+const STRICTNESS_OPTIONS: ReadonlyArray<{
+  id: PredictionStrictness;
+  label: string;
+  hint: string;
+  icon: React.ElementType;
+}> = [
+  { id: "conservative", label: "Conservative", hint: "Lower targets, higher confidence", icon: Shield },
+  { id: "balanced",     label: "Balanced",     hint: "Honest uncertainty (default)",   icon: Crosshair },
+  { id: "aggressive",   label: "Aggressive",   hint: "Stretch targets, lower confidence", icon: Rocket },
+];
+
+function StrictnessSelector({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: PredictionStrictness;
+  onChange: (v: PredictionStrictness) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1 bg-background">
+      {STRICTNESS_OPTIONS.map((opt) => {
+        const Icon = opt.icon;
+        const active = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => !disabled && onChange(opt.id)}
+            disabled={disabled}
+            title={opt.hint}
+            className={`flex flex-col items-center gap-0.5 py-1.5 rounded-md transition-all ${
+              active ? "bg-primary/10 text-primary" : "text-muted-foreground/60 hover:text-foreground"
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            <Icon className="h-3 w-3" />
+            <span className="font-mono text-[9px] font-medium">{opt.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ConfidenceExplanationPills({ items }: { items: ConfidenceExplanationItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 space-y-1.5">
+      <div className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/60">
+        <Info className="h-2.5 w-2.5" />
+        Confidence adjusted by
+      </div>
+      <ul className="space-y-1">
+        {items.map((item, i) => {
+          const positive = item.delta > 0;
+          const sign = positive ? "+" : "";
+          const cls = positive ? "text-success" : "text-destructive";
+          return (
+            <li key={i} className="flex items-center justify-between gap-2 text-[10px]">
+              <span className="text-foreground/75 leading-snug">{item.label}</span>
+              <span className={`font-mono tabular-nums font-medium ${cls}`}>
+                {sign}{item.delta}%
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function CostBadge({ category }: { category: CostCategory }) {
   const cls =
     category === "LOW"
@@ -1080,6 +1229,49 @@ function DecisionCard({ decision }: { decision: DecisionSuggestion }) {
         </div>
       )}
     </article>
+  );
+}
+
+// ── ExpectedOutcomeBlock ──────────────────────────────────────────────────────
+
+function ExpectedOutcomeBlock({ outcome }: { outcome: PredictedOutcome }) {
+  const confidencePct = Math.round(outcome.confidence * 100);
+  const confidenceCls =
+    outcome.confidence >= 0.7
+      ? "text-success border-success/30 bg-success/10"
+      : outcome.confidence >= 0.5
+      ? "text-warning border-warning/30 bg-warning/10"
+      : "text-destructive border-destructive/30 bg-destructive/10";
+
+  const unit = outcome.unit ?? "";
+  const baselineDisplay = outcome.baseline === null ? "?" : `${outcome.baseline}${unit}`;
+  const targetDisplay = `${outcome.target}${unit}`;
+
+  return (
+    <section className="rounded-xl border border-primary/30 bg-primary/[0.04] p-4">
+      <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <Gauge className="h-3.5 w-3.5 text-primary" />
+          <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-primary font-medium">Expected outcome</span>
+        </div>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] font-medium ${confidenceCls}`}>
+          <Activity className="h-2.5 w-2.5" />
+          {confidencePct}% confidence
+        </span>
+      </div>
+      <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+        <h4 className="text-[14px] font-semibold text-foreground leading-tight">{outcome.metric}</h4>
+      </div>
+      <div className="flex items-center gap-2 mb-2 font-mono text-[12px] tabular-nums">
+        <span className="text-muted-foreground">{baselineDisplay}</span>
+        <span className="text-muted-foreground/40">→</span>
+        <span className="text-foreground font-semibold">{targetDisplay}</span>
+        <span className="text-muted-foreground/50 text-[11px] ml-1">in {outcome.timeframeDays} days</span>
+      </div>
+      {outcome.rationale && (
+        <p className="text-[11px] text-muted-foreground/80 leading-relaxed">{outcome.rationale}</p>
+      )}
+    </section>
   );
 }
 
