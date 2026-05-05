@@ -1,4 +1,9 @@
 import { callAI } from "./learningEngineSupport";
+import {
+  renderPrompt,
+  validateLearningInsightText,
+  withRetryOnParseFail,
+} from "./promptLibrary";
 import type { ActualOutcome, ExpectedOutcome } from "./outcomeTypes";
 
 interface LearningInsightInput {
@@ -12,25 +17,23 @@ interface LearningInsightInput {
   contextNarrative?: string;
   expected: ExpectedOutcome;
   actual: ActualOutcome;
+  userId?: string;
 }
 
 export async function generateLearningInsight(input: LearningInsightInput): Promise<string> {
-  const { decisionLabel, contextNarrative, expected, actual } = input;
-  const prompt = `
-You are a senior product manager analyzing a launched decision against its expected outcome.
-
-Decision: ${decisionLabel}
-
-Expected ${expected.metric}${expected.unit ? ` (${expected.unit})` : ""}: ${expected.target_value} (${expected.timeframe})
-Actual ${actual.metric}${actual.unit ? ` (${actual.unit})` : ""}: ${actual.value} (observed ${actual.observedAt})
-
-Analyze:
-* Why did this succeed or fail relative to the target?
-* What assumption was wrong?
-* What should be done next?
-
-Return concise insights.
-`;
-
-  return callAI(prompt, contextNarrative ?? "");
+  const { decisionLabel, contextNarrative, expected, actual, userId } = input;
+  const { prompt, promptId, version, hash } = renderPrompt(
+    "learning_insight",
+    { decisionLabel, expected, actual },
+    { userId: userId ?? null }
+  );
+  return withRetryOnParseFail(async () => {
+    const text = await callAI(prompt, contextNarrative ?? "", {
+      promptId,
+      promptVersion: version,
+      promptHash: hash,
+    });
+    validateLearningInsightText(text);
+    return text;
+  });
 }

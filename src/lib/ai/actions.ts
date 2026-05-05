@@ -17,6 +17,24 @@ import { updateConfidenceScore, persistOutcomeFeedback } from "./scoreFeedback";
 import { generateLearningInsight } from "./learningEngine";
 import type { OutcomeFeedback } from "./outcomeTypes";
 import type { OpportunityScoreState } from "./scoreEvolution";
+import {
+  renderPrompt,
+  PM_VOICE_PROMPT as PM_VOICE_PROMPT_REGISTRY,
+  withRetryOnParseFail,
+  validateDecisionSuggestions,
+  validatePredictedOutcome,
+  validateTaskList,
+  validateLearningInsightText,
+} from "./promptLibrary";
+import type {
+  PredictionStrictness as PredictionStrictnessType,
+  PromptMeta,
+} from "./promptLibrary";
+
+// Re-export persona + strictness from the registry so existing import paths
+// (`@/lib/ai/actions`) keep resolving with no behavior change.
+export const PM_VOICE_PROMPT = PM_VOICE_PROMPT_REGISTRY;
+export type PredictionStrictness = PredictionStrictnessType;
 
 export interface ProactiveInsight {
   title: string;
@@ -171,7 +189,7 @@ async function getAuthToken(forceRefresh = false) {
   return currentUser.getIdToken(forceRefresh);
 }
 
-async function callAI(prompt: string, context: string, externalSignal?: AbortSignal) {
+async function callAI(prompt: string, context: string, externalSignal?: AbortSignal, meta?: PromptMeta) {
   const maxAttempts = 2;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -203,7 +221,10 @@ async function callAI(prompt: string, context: string, externalSignal?: AbortSig
               role: "user",
               content: `Product Notes:\n${context}\n\nTask: ${prompt}`
             }
-          ]
+          ],
+          // Optional registry metadata. Backend logs it next to PromptLog.
+          // Safe to drop if the route is older — it ignores unknown fields.
+          ...(meta ? { _meta: meta } : {}),
         }),
         signal: controller.signal,
       });
@@ -257,7 +278,7 @@ interface BackendEnvelope<T> {
  * Handles auth header, 30s timeout, 401 retry-with-refresh, and unwraps the { ok, data } envelope.
  * Pass an externalSignal to propagate cancellation (e.g. doc-switch aborts).
  */
-async function callBackendRoute<T>(path: string, body: unknown, externalSignal?: AbortSignal): Promise<T> {
+async function callBackendRoute<T>(path: string, body: unknown, externalSignal?: AbortSignal, meta?: PromptMeta): Promise<T> {
   const maxAttempts = 2;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const token = await getAuthToken(attempt > 0);
@@ -271,13 +292,19 @@ async function callBackendRoute<T>(path: string, body: unknown, externalSignal?:
     }
 
     try {
+      // Splice _meta into the request body so the backend's PromptLog can
+      // record promptId + version. Routes that don't expect it ignore unknown
+      // fields, so this is safe to add unconditionally.
+      const requestBody = meta && body && typeof body === "object"
+        ? { ...(body as Record<string, unknown>), _meta: meta }
+        : body;
       const response = await fetch(`/api/ai/${path}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
 
@@ -689,9 +716,14 @@ export const extractInsightsAction = async (userId: string, docContent: unknown,
   const context = tipTapToText(docContent);
   if (!context.trim()) return [];
 
+  // Backend-resident prompt — registry holds metadata only. We forward the
+  // promptId + pinned version so PromptLog can correlate behavior.
+  const { version: insightVersion, hash: insightHash } = renderPrompt("insight_extractor", { content: context }, { userId });
   const data = await callBackendRoute<{ insights: NormalizedInsight[]; tokensUsed: number }>(
     "insights/generate",
-    { content: context, noteId: sourceDocId ?? "default" }
+    { content: context, noteId: sourceDocId ?? "default" },
+    undefined,
+    { promptId: "insight_extractor", promptVersion: insightVersion, promptHash: insightHash }
   );
 
   const insights = (data.insights ?? [])
@@ -714,9 +746,16 @@ export const generatePRDAction = async (userId: string, docContent: unknown, tit
     throw new Error("Cannot generate a PRD from empty notes.");
   }
 
+  const { version: prdVersion, hash: prdHash } = renderPrompt(
+    "prd_generator",
+    { title, notes, decisions: "" },
+    { userId }
+  );
   const data = await callBackendRoute<{ content: string; tokensUsed: number }>(
     "prd/generate",
-    { title, notes, decisions: "" }
+    { title, notes, decisions: "" },
+    undefined,
+    { promptId: "prd_generator", promptVersion: prdVersion, promptHash: prdHash }
   );
 
   await savePRD(userId, {
@@ -812,17 +851,8 @@ costConstraints: 1-3 short budget guard rails that matter for this strategy. Omi
   }
 };
 
-// Voice layer (v1.1): the persona prefix applied to every prompt that produces
-// user-facing PM judgment. Centralized so changing the tone is one edit.
-export const PM_VOICE_PROMPT = `You are a senior product manager with strong opinions and a low tolerance for fluff.
-
-Voice rules:
-- Be concise and direct. Short sentences.
-- Challenge weak ideas — say "this is thin" when it is.
-- Prioritize clarity over politeness.
-- Always guide toward action.
-- Never write generic statements like "improve user experience" or "engage users better."
-- If you would feel embarrassed defending a sentence in a product review, do not write it.`;
+// PM_VOICE_PROMPT now lives in the prompt registry (src/lib/ai/promptLibrary).
+// It is re-exported at the top of this file for back-compat.
 
 export interface SuggestDirectionOptions {
   // Optional refinement instruction injected after the base prompt. Used by
@@ -839,63 +869,19 @@ export const suggestDirectionAction = async (
 ): Promise<DecisionSuggestion[]> => {
   const context = tipTapToText(docContent);
 
-  const memoryBlock = options.pastIdeas && options.pastIdeas.length > 0
-    ? `\n\nThe user has explored these ideas recently. Avoid repeating the same weak framings — push for sharper angles:\n${options.pastIdeas.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}`
-    : "";
+  const { prompt, promptId, version, hash } = renderPrompt(
+    "suggest_direction",
+    { pastIdeas: options.pastIdeas, refinement: options.refinement },
+    { userId: userId || null }
+  );
+  const meta: PromptMeta = { promptId, promptVersion: version, promptHash: hash };
 
-  const refinementBlock = options.refinement
-    ? `\n\nReflection note — your previous attempt was weak. ${options.refinement} Be sharper this time.`
-    : "";
-
-  const prompt = `${PM_VOICE_PROMPT}
-
-Based on these product notes, propose 3 distinct decisions the team could make next.
-
-For each decision, return a JSON object with EXACTLY these keys:
-- title: one-line decision title (max 80 chars, no trailing period)
-- summary: 1-2 sentences. What the decision is, in plain language.
-- justification: short paragraph (max 4 sentences). Why this is worth doing, grounded in the notes.
-- userStory: "As a [specific user], I want to [action], so that [outcome]."
-- tradeoffs: short paragraph naming the real cost or constraint.
-- why: array of 3 short bullets — the strongest reasons to pick this. Each bullet < 100 chars.
-- risks: array of 2 short bullets — the most likely failure modes. Each bullet < 100 chars.
-- assumptions: array of 2-3 short bullets — the hidden assumptions this decision depends on. Each must be falsifiable. (e.g. "Users will pay $5/mo for this", not "users will love it")
-- keyInsight: ONE contrarian or non-obvious insight that a typical PM would miss. Specific, not generic.
-- recommendation: ONE sentence prescribing the next concrete action. Starts with a verb.
-- impact: integer 1-10 (10 = moves a core metric materially)
-- effort: integer 1-10 (10 = months of work)
-- confidence: integer 1-10 (10 = validated by multiple users + data; 1 = pure hunch)
-- demand: integer 1-10 (10 = top requested feature, strong market signal; 1 = no evidence of user interest)
-- priority: "high" | "medium" | "low"
-- costModel: {
-    "category": "LOW" | "MEDIUM" | "HIGH",
-    "estimatedMonthly": number (USD baseline at small scale — 1-10 users or ~1k daily requests),
-    "breakdown": { "infrastructure": number, "llm_api": number, "ops_labor": number },
-    "scalingTrajectory": "1 sentence: how does cost grow from 100 to 10k users?",
-    "costDrivers": ["top cost factor 1", "top cost factor 2"],
-    "riskFactors": ["cost uncertainty 1"]
-  }
-  Cost categories: LOW = <$500/mo baseline, MEDIUM = $500–$2k/mo, HIGH = >$2k/mo.
-  costModel must reflect THIS direction's specific technical approach — not a generic estimate.
-
-Hard rules:
-- Be specific. "Improve user experience" is not an insight or a recommendation.
-- Risks and assumptions must be falsifiable, not generic.
-- If the notes are too thin to support a claim, lower confidence and priority — do not invent evidence.${memoryBlock}${refinementBlock}
-
-Return ONLY a JSON array of 3 objects. No prose, no markdown fences.`;
-
-  const result = await callAI(prompt, context);
-  try {
+  return withRetryOnParseFail(async () => {
+    const result = await callAI(prompt, context, undefined, meta);
     const suggestions = parseJsonPayload(result);
-    if (!Array.isArray(suggestions)) {
-      throw new Error("Direction response was not an array.");
-    }
-    return suggestions.map(normalizeDecisionSuggestion);
-  } catch (e) {
-    console.error("[suggestDirectionAction] Failed to parse decision JSON:", e);
-    throw e;
-  }
+    validateDecisionSuggestions(suggestions);
+    return (suggestions as unknown[]).map(normalizeDecisionSuggestion);
+  });
 };
 
 const PRIORITY_VALUES = ["high", "medium", "low"] as const;
@@ -1063,6 +1049,94 @@ export interface RoadmapPhase {
   budgetMax?: number;
   validationGates?: string[];
 }
+
+// ── v2.1 Expected Outcome (Stage 5) ─────────────────────────────────────────
+// Structured prediction emitted DURING the autonomous run. Enables the feedback
+// loop (Stage 11) by giving every decision a measurable target the team can
+// later compare against the actual outcome.
+
+export interface PredictedOutcome {
+  metric: string;
+  baseline: number | null;     // current value; null if truly unknown
+  target: number;              // realistic value to hit
+  timeframeDays: number;       // 7–90, integer
+  confidence: number;          // 0–1, model's confidence in this prediction
+  unit?: string;               // e.g. "%", "DAU", "$"
+  rationale?: string;
+}
+
+// PredictionStrictness + STRICTNESS_INSTRUCTIONS now live in the prompt
+// registry. PredictionStrictness is re-exported at the top of this file for
+// back-compat.
+
+export const predictOutcomeAction = async (
+  idea: string,
+  decision: DecisionSuggestion,
+  insights?: string[],
+  strictness: PredictionStrictness = "balanced",
+  userId?: string
+): Promise<PredictedOutcome | null> => {
+  const { prompt, promptId, version, hash } = renderPrompt(
+    "expected_outcome",
+    {
+      idea,
+      decision: {
+        title: decision.title,
+        summary: decision.summary,
+        justification: decision.justification,
+        userStory: decision.userStory,
+      },
+      insights,
+      strictness,
+    },
+    { userId: userId ?? null }
+  );
+  const meta: PromptMeta = { promptId, promptVersion: version, promptHash: hash };
+
+  // Strict parse + validate, retry once on structural failure. Network /
+  // 429 / abort errors fall through unchanged so we don't burn quota.
+  try {
+    return await withRetryOnParseFail(async () => {
+      const result = await callAI(prompt, "", undefined, meta);
+      const parsed = parseJsonPayload(result) as Record<string, unknown>;
+
+      // Tolerate either `timeframe_days` (LLM-native) or `timeframeDays`
+      // (already-coerced) before validation.
+      validatePredictedOutcome({
+        ...parsed,
+        timeframeDays: parsed.timeframeDays ?? parsed.timeframe_days,
+      });
+
+      const metric = String(parsed.metric).trim();
+      const target = Number(parsed.target);
+      const timeframeDays = Number(parsed.timeframe_days ?? parsed.timeframeDays);
+      const confidenceRaw = Number(parsed.confidence);
+
+      const baselineRaw = parsed.baseline;
+      const baseline =
+        baselineRaw === null || baselineRaw === undefined
+          ? null
+          : Number.isFinite(Number(baselineRaw))
+          ? Number(baselineRaw)
+          : null;
+
+      return {
+        metric,
+        baseline,
+        target,
+        timeframeDays: Math.max(7, Math.min(90, Math.round(timeframeDays))),
+        confidence: Math.max(0, Math.min(1, confidenceRaw)),
+        unit: typeof parsed.unit === "string" && parsed.unit.trim().length > 0 ? parsed.unit.trim() : undefined,
+        rationale: typeof parsed.rationale === "string" && parsed.rationale.trim().length > 0 ? parsed.rationale.trim() : undefined,
+      };
+    });
+  } catch (e) {
+    // Failure-after-retry → null preserves the legacy contract that the
+    // agent's calling code already handles ("Could not generate a prediction").
+    console.error("[predictOutcomeAction] Failed after retry:", e);
+    return null;
+  }
+};
 
 export const generateRoadmapAction = async (
   idea: string,
@@ -1245,58 +1319,37 @@ interface TaskPriorityPayload {
   reasoning?: unknown;
 }
 
-export const generateTasksFromPRDAction = async (prdContent: string, prdTitle?: string): Promise<TaskWithMetadata[]> => {
-  const prompt = `Convert this PRD into 5-7 concrete, actionable implementation tasks.
+export const generateTasksFromPRDAction = async (prdContent: string, prdTitle?: string, userId?: string): Promise<TaskWithMetadata[]> => {
+  const { prompt, promptId, version, hash } = renderPrompt(
+    "task_generator",
+    { prdTitle },
+    { userId: userId ?? null }
+  );
+  const meta: PromptMeta = { promptId, promptVersion: version, promptHash: hash };
 
-PRD Title:
-${prdTitle ?? "Untitled PRD"}
+  const tasks = await withRetryOnParseFail(async () => {
+    const result = await callAI(prompt, prdContent, undefined, meta);
+    const parsed = parseJsonPayload(result);
+    validateTaskList(parsed);
+    return parsed as Array<{ title?: string; description?: string; priority?: string; effort?: unknown; category?: string; prdSection?: string; milestone?: string }>;
+  });
 
-Instructions:
-- Each task must be specific and measurable
-- Include details about implementation approach
-- Assign a category: backend, frontend, design, qa, integration, or devops
-- For each task, identify which PRD section it relates to
-- Estimate effort on 1-10 scale
+  const normalized = tasks.map(t => {
+    const rawEffort = Number(t.effort);
+    const effort = Number.isFinite(rawEffort) ? Math.min(10, Math.max(1, Math.round(rawEffort))) : 5;
+    return {
+      title: t.title || "Untitled Task",
+      description: t.description || t.title || "",
+      priority: (["high", "medium", "low"].includes(t.priority ?? "") ? t.priority : "medium") as "high" | "medium" | "low",
+      effort,
+      category: t.category || "general",
+      prdSection: t.prdSection || "General",
+      milestone: t.milestone,
+    };
+  }) as TaskWithMetadata[];
 
-Output ONLY a JSON array with this structure:
-[
-  {
-    "title": "Task name",
-    "description": "Detailed what to do and how",
-    "priority": "high|medium|low",
-    "effort": 1-10,
-    "category": "backend|frontend|design|qa|integration|devops",
-    "prdSection": "Which PRD section this implements",
-    "milestone": "Optional milestone name"
-  }
-]`;
-
-  const result = await callAI(prompt, prdContent);
-  try {
-    const tasks = parseJsonPayload(result);
-    if (!Array.isArray(tasks)) {
-      throw new Error("Tasks response was not an array.");
-    }
-    
-    const result2 = tasks.map(t => {
-      const rawEffort = Number(t.effort);
-      const effort = Number.isFinite(rawEffort) ? Math.min(10, Math.max(1, Math.round(rawEffort))) : 5;
-      return {
-        title: t.title || "Untitled Task",
-        description: t.description || t.title || "",
-        priority: (["high", "medium", "low"].includes(t.priority) ? t.priority : "medium") as "high" | "medium" | "low",
-        effort,
-        category: t.category || "general",
-        prdSection: t.prdSection || "General",
-        milestone: t.milestone,
-      };
-    }) as TaskWithMetadata[];
-    activity.ai("Tasks generated", `${result2.length} tasks from ${prdTitle ?? "PRD"}`);
-    return result2;
-  } catch (e) {
-    console.error("[generateTasksFromPRDAction] Failed to parse tasks JSON:", e);
-    throw e;
-  }
+  activity.ai("Tasks generated", `${normalized.length} tasks from ${prdTitle ?? "PRD"}`);
+  return normalized;
 };
 
 export const analyzeDependenciesAction = async (tasks: TaskWithMetadata[], docContext: unknown): Promise<TaskDependency[]> => {
