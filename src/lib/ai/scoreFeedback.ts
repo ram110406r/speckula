@@ -1,4 +1,4 @@
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, type Timestamp } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { auth } from "../firebase/config";
 import type { OpportunityScoreState } from "./scoreEvolution";
@@ -8,6 +8,7 @@ import {
   computePredictionQuality,
   computeFinalAccuracy,
   computeCalibrationError,
+  computeOutcomeValidity,
 } from "./scoreEngine";
 
 // Adjust confidence on a successful or failed launch. Guards against NaN
@@ -67,6 +68,32 @@ export async function persistOutcomeFeedback(
   const success =
     Number.isFinite(target) && Number.isFinite(actualValue) ? actualValue >= target : feedback.success;
 
+  // v2.9 stability guard: read the decision once so we can verify the actual
+  // wasn't recorded before the timeframe elapsed. Decisions saved before
+  // outcomeRecordedAt existed still carry createdAt, so this works for
+  // historical data too. Read failure → skip the too-early check (degrade
+  // gracefully rather than refuse to record the outcome).
+  const decisionRef = doc(db, "users", uid, "decisions", feedback.decisionId);
+  let decisionStartMs: number | null = null;
+  try {
+    const decisionSnap = await getDoc(decisionRef);
+    if (decisionSnap.exists()) {
+      const data = decisionSnap.data() as { createdAt?: Timestamp };
+      decisionStartMs = data.createdAt?.toMillis?.() ?? null;
+    }
+  } catch {
+    /* permission / network — skip the elapsed check */
+  }
+  const observedAtParsed = Date.parse(feedback.actual.observedAt);
+  const observedAtMs = Number.isFinite(observedAtParsed) ? observedAtParsed : null;
+  const isValid = computeOutcomeValidity({
+    timeframe: feedback.expected.timeframe,
+    baseline,
+    target,
+    decisionStartMs,
+    observedAtMs,
+  });
+
   await setDoc(outcomeRef, {
     success,
     expected: feedback.expected,
@@ -77,10 +104,10 @@ export async function persistOutcomeFeedback(
     predictionQuality,
     finalAccuracy,
     calibrationError,
+    isValid,
     createdAt: serverTimestamp(),
   });
 
-  const decisionRef = doc(db, "users", uid, "decisions", feedback.decisionId);
   await setDoc(
     decisionRef,
     {
@@ -91,6 +118,7 @@ export async function persistOutcomeFeedback(
       finalAccuracy,
       calibrationError,
       success,
+      isValid,
       outcomeRecordedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },

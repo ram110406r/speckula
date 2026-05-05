@@ -1237,7 +1237,7 @@ export const processEditorAction = async (userId: string, selectedText: string, 
 };
 
 export const analyzeThinkingSignalsAction = async (contextText: string, signal?: AbortSignal): Promise<ProactiveThinkingSignals> => {
-  const boundedContext = contextText.length > 6000 ? contextText.slice(-6000) : contextText;
+  const boundedContext = contextText.length > 4000 ? contextText.slice(-4000) : contextText;
   const data = await callBackendRoute<ProactiveThinkingSignals>(
     "signals/analyze",
     { content: boundedContext },

@@ -82,6 +82,15 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         allow write: if false;
       }
+
+      // Per-user settings (decisionMode, decisionModeMeta, etc.) and
+      // prompt-version overrides — both written from the client.
+      match /settings/{settingId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /promptOverrides/{promptId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // ── Public Profiles ────────────────────────────────────

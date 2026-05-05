@@ -172,3 +172,63 @@ export function computeCalibrationError(confidence: number, accuracyNorm: number
   const acc = Math.max(0, Math.min(1, accuracyNorm));
   return Math.abs(confidenceNorm - acc);
 }
+
+// ── v2.9 stability guards ──────────────────────────────────────────────────
+// Outcome validity filter — returns false for data points the optimization
+// layer should exclude from aggregations:
+//   - timeframe shorter than the minimum (defaults to 7 days)
+//   - baseline missing AND target too small to measure reliably
+//   - actual recorded before the timeframe elapsed
+// Legacy records without an explicit isValid field default to `true` at the
+// aggregation layer, so adding this guard never invalidates existing data.
+
+const MIN_TIMEFRAME_DAYS = 7;
+const MIN_TARGET_WHEN_NO_BASELINE = 5;
+
+export function parseTimeframeDays(s: string | null | undefined): number | null {
+  if (!s || typeof s !== "string") return null;
+  const match = s.match(/(\d+(?:\.\d+)?)\s*days?/i);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+export interface OutcomeValidityInput {
+  timeframe?: string | null;
+  baseline?: number | null;
+  target?: number;
+  // Optional anchors for the "observed-too-early" check. Both must be present
+  // (and finite) for the check to fire.
+  decisionStartMs?: number | null;
+  observedAtMs?: number | null;
+}
+
+export function computeOutcomeValidity(input: OutcomeValidityInput): boolean {
+  const days = parseTimeframeDays(input.timeframe ?? null);
+
+  if (days !== null && days < MIN_TIMEFRAME_DAYS) return false;
+
+  const baselineMissing =
+    input.baseline === null || input.baseline === undefined || !Number.isFinite(input.baseline as number);
+  if (
+    baselineMissing &&
+    typeof input.target === "number" &&
+    Number.isFinite(input.target) &&
+    input.target < MIN_TARGET_WHEN_NO_BASELINE
+  ) {
+    return false;
+  }
+
+  if (
+    days !== null &&
+    typeof input.decisionStartMs === "number" &&
+    Number.isFinite(input.decisionStartMs) &&
+    typeof input.observedAtMs === "number" &&
+    Number.isFinite(input.observedAtMs)
+  ) {
+    const elapsedDays = (input.observedAtMs - input.decisionStartMs) / (1000 * 60 * 60 * 24);
+    if (elapsedDays < days) return false;
+  }
+
+  return true;
+}

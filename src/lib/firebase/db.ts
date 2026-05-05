@@ -141,6 +141,12 @@ export interface DecisionRecord {
   // moment outcomes were recorded, not when the decision was first saved.
   success?: boolean;
   outcomeRecordedAt?: Timestamp | null;
+  // v2.9 stability guard. False = the outcome was recorded against an
+  // unreliable setup (timeframe too short, missing baseline + tiny target,
+  // or observation logged before the timeframe elapsed). Aggregations skip
+  // these rows. Legacy records without the field default to "include" so
+  // historical data still contributes.
+  isValid?: boolean;
   userId: string;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -714,6 +720,12 @@ export interface PromptOutcomeMetricsRow {
   // didn't record a success boolean.
   hitRate: number | null;
   outcomesRecorded: number;
+  // v2.9 drift detection. shortTerm = last 14 days, longTerm = last 60 days.
+  // driftDetected = true when shortTerm < longTerm − 0.05 — early warning
+  // that a prompt's quality is degrading even before rollback thresholds fire.
+  shortTermAccuracy: number | null;
+  longTermAccuracy: number | null;
+  driftDetected: boolean;
 }
 
 // v2.5: per-decision sample used by the rolling-window rollback algorithm.
@@ -750,7 +762,16 @@ export const getPromptOutcomeMetrics = async (
   windowDays = 30
 ): Promise<PromptOutcomeMetricsResult> => {
   try {
-    const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+    // v2.9: pull at least 60 days of data so drift detection (14d vs 60d)
+    // always has the long-window context, even when the caller asked for a
+    // shorter primary window.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const DRIFT_LONG_DAYS = 60;
+    const DRIFT_SHORT_DAYS = 14;
+    const DRIFT_THRESHOLD = 0.05;
+    const now = Date.now();
+    const queryWindowDays = Math.max(windowDays, DRIFT_LONG_DAYS);
+    const since = new Date(now - queryWindowDays * DAY_MS);
     // Pull recent decisions; we filter by predictionPromptRef.id presence
     // client-side because composite-field filters on nested fields require
     // a Firestore index we don't want to demand.
@@ -764,6 +785,9 @@ export const getPromptOutcomeMetrics = async (
       calibSum: number; calibCount: number;
       confSum: number; confCount: number;
       hits: number; outcomes: number;
+      // v2.9 drift accumulators (always run independent of windowDays).
+      shortAccSum: number; shortAccCount: number;
+      longAccSum: number;  longAccCount: number;
     }
     const buckets = new Map<string, Bucket & { promptId: string; promptVersion: string }>();
     const samplesByPromptId: Record<string, OutcomeSample[]> = {};
@@ -772,16 +796,27 @@ export const getPromptOutcomeMetrics = async (
     // v2.7 mode buckets — same shape as a per-version bucket but keyed by the
     // saved DecisionRecord.decisionMode. Only seeded for the three known
     // modes; legacy decisions without the field are excluded.
+    const emptyBucket = (): Bucket => ({
+      runs: 0, accSum: 0, accCount: 0, finalSum: 0, finalCount: 0,
+      calibSum: 0, calibCount: 0, confSum: 0, confCount: 0,
+      hits: 0, outcomes: 0,
+      shortAccSum: 0, shortAccCount: 0, longAccSum: 0, longAccCount: 0,
+    });
     const modeBuckets: Record<DecisionMode, Bucket> = {
-      conservative: { runs: 0, accSum: 0, accCount: 0, finalSum: 0, finalCount: 0, calibSum: 0, calibCount: 0, confSum: 0, confCount: 0, hits: 0, outcomes: 0 },
-      balanced:     { runs: 0, accSum: 0, accCount: 0, finalSum: 0, finalCount: 0, calibSum: 0, calibCount: 0, confSum: 0, confCount: 0, hits: 0, outcomes: 0 },
-      aggressive:   { runs: 0, accSum: 0, accCount: 0, finalSum: 0, finalCount: 0, calibSum: 0, calibCount: 0, confSum: 0, confCount: 0, hits: 0, outcomes: 0 },
+      conservative: emptyBucket(),
+      balanced:     emptyBucket(),
+      aggressive:   emptyBucket(),
     };
 
     for (const d of snap.docs) {
       const data = d.data() as DecisionRecord;
       const ref = data.predictionPromptRef;
       if (!ref?.id || !ref.version) continue;
+
+      // v2.9 stability guard: skip explicitly-invalid outcomes so degraded
+      // data points don't pollute averages. Legacy records without the flag
+      // (undefined) keep contributing — backward compatibility.
+      if (data.isValid === false) continue;
 
       // updatedAt is the agent-bumped timestamp; outcomeRecordedAt is the
       // explicit feedback time. Prefer the latter when present so the
@@ -792,53 +827,74 @@ export const getPromptOutcomeMetrics = async (
         null;
       if (ts && ts < since) continue;
 
+      // Window membership: drift accumulators always run within 60d. Primary
+      // metrics gate on the caller-supplied windowDays.
+      const ageMs = ts ? now - ts.getTime() : Infinity;
+      const inLongWindow = ageMs <= DRIFT_LONG_DAYS * DAY_MS;
+      const inShortWindow = ageMs <= DRIFT_SHORT_DAYS * DAY_MS;
+      const inPrimary = ageMs <= windowDays * DAY_MS;
+      // Skip if outside both — nothing to record.
+      if (!inLongWindow && !inPrimary) continue;
+
       const key = bucketKey(ref.id, ref.version);
       const b = buckets.get(key) ?? {
         promptId: ref.id, promptVersion: ref.version,
-        runs: 0,
-        accSum: 0, accCount: 0,
-        finalSum: 0, finalCount: 0,
-        calibSum: 0, calibCount: 0,
-        confSum: 0, confCount: 0,
-        hits: 0, outcomes: 0,
+        ...emptyBucket(),
       };
-      b.runs += 1;
+      if (inPrimary) b.runs += 1;
 
       const acc = Number(data.accuracyNorm);
       const accValid = Number.isFinite(acc);
-      if (accValid) { b.accSum += acc; b.accCount += 1; }
-      const fin = Number(data.finalAccuracy);
-      if (Number.isFinite(fin)) { b.finalSum += fin; b.finalCount += 1; }
-      const cal = Number(data.calibrationError);
-      if (Number.isFinite(cal)) { b.calibSum += cal; b.calibCount += 1; }
-      const conf = Number(data.confidence);
-      if (Number.isFinite(conf)) { b.confSum += conf / 10; b.confCount += 1; }
 
+      // v2.9 drift accumulators run regardless of windowDays so the 14d/60d
+      // comparison stays absolute even when the caller asks for a smaller
+      // primary window.
+      if (accValid && inLongWindow) {
+        b.longAccSum += acc; b.longAccCount += 1;
+      }
+      if (accValid && inShortWindow) {
+        b.shortAccSum += acc; b.shortAccCount += 1;
+      }
+
+      const fin = Number(data.finalAccuracy);
+      const cal = Number(data.calibrationError);
+      const conf = Number(data.confidence);
+      const explicitSuccess = typeof data.success === "boolean" ? data.success : null;
       // v2.5: prefer the explicit `success` boolean. Legacy records without
       // it fall back to the accuracyNorm >= 0.5 proxy so historical data
       // still contributes a hit-rate signal.
-      const explicitSuccess = typeof data.success === "boolean" ? data.success : null;
       const success = explicitSuccess ?? (accValid ? acc >= 0.5 : null);
-      if (success !== null) {
-        b.outcomes += 1;
-        if (success) b.hits += 1;
+
+      if (inPrimary) {
+        if (accValid) { b.accSum += acc; b.accCount += 1; }
+        if (Number.isFinite(fin)) { b.finalSum += fin; b.finalCount += 1; }
+        if (Number.isFinite(cal)) { b.calibSum += cal; b.calibCount += 1; }
+        if (Number.isFinite(conf)) { b.confSum += conf / 10; b.confCount += 1; }
+        if (success !== null) {
+          b.outcomes += 1;
+          if (success) b.hits += 1;
+        }
       }
 
       buckets.set(key, b);
 
       // v2.7: also fan out into the per-mode rollup. Using the same Bucket
       // shape lets us reuse the averaging code below without copy-pasting.
-      const mode = data.decisionMode;
-      if (mode && (DECISION_MODE_VALUES as readonly string[]).includes(mode)) {
-        const mb = modeBuckets[mode as DecisionMode];
-        mb.runs += 1;
-        if (accValid) { mb.accSum += acc; mb.accCount += 1; }
-        if (Number.isFinite(fin)) { mb.finalSum += fin; mb.finalCount += 1; }
-        if (Number.isFinite(cal)) { mb.calibSum += cal; mb.calibCount += 1; }
-        if (Number.isFinite(conf)) { mb.confSum += conf / 10; mb.confCount += 1; }
-        if (success !== null) {
-          mb.outcomes += 1;
-          if (success) mb.hits += 1;
+      // Mode buckets only count primary-window decisions to match the user-
+      // facing semantics of windowDays.
+      if (inPrimary) {
+        const mode = data.decisionMode;
+        if (mode && (DECISION_MODE_VALUES as readonly string[]).includes(mode)) {
+          const mb = modeBuckets[mode as DecisionMode];
+          mb.runs += 1;
+          if (accValid) { mb.accSum += acc; mb.accCount += 1; }
+          if (Number.isFinite(fin)) { mb.finalSum += fin; mb.finalCount += 1; }
+          if (Number.isFinite(cal)) { mb.calibSum += cal; mb.calibCount += 1; }
+          if (Number.isFinite(conf)) { mb.confSum += conf / 10; mb.confCount += 1; }
+          if (success !== null) {
+            mb.outcomes += 1;
+            if (success) mb.hits += 1;
+          }
         }
       }
 
@@ -862,17 +918,28 @@ export const getPromptOutcomeMetrics = async (
       samplesByPromptId[pid].sort((a, b) => b.recordedAt - a.recordedAt);
     }
 
-    const rows: PromptOutcomeMetricsRow[] = Array.from(buckets.values()).map((b) => ({
-      promptId: b.promptId,
-      promptVersion: b.promptVersion,
-      runs: b.runs,
-      avgAccuracyNorm: b.accCount > 0 ? b.accSum / b.accCount : null,
-      avgFinalAccuracy: b.finalCount > 0 ? b.finalSum / b.finalCount : null,
-      avgCalibrationError: b.calibCount > 0 ? b.calibSum / b.calibCount : null,
-      avgPredictionConfidence: b.confCount > 0 ? b.confSum / b.confCount : null,
-      hitRate: b.outcomes > 0 ? b.hits / b.outcomes : null,
-      outcomesRecorded: b.outcomes,
-    }));
+    const rows: PromptOutcomeMetricsRow[] = Array.from(buckets.values()).map((b) => {
+      const shortTermAccuracy = b.shortAccCount > 0 ? b.shortAccSum / b.shortAccCount : null;
+      const longTermAccuracy = b.longAccCount > 0 ? b.longAccSum / b.longAccCount : null;
+      const driftDetected =
+        shortTermAccuracy !== null &&
+        longTermAccuracy !== null &&
+        shortTermAccuracy < longTermAccuracy - DRIFT_THRESHOLD;
+      return {
+        promptId: b.promptId,
+        promptVersion: b.promptVersion,
+        runs: b.runs,
+        avgAccuracyNorm: b.accCount > 0 ? b.accSum / b.accCount : null,
+        avgFinalAccuracy: b.finalCount > 0 ? b.finalSum / b.finalCount : null,
+        avgCalibrationError: b.calibCount > 0 ? b.calibSum / b.calibCount : null,
+        avgPredictionConfidence: b.confCount > 0 ? b.confSum / b.confCount : null,
+        hitRate: b.outcomes > 0 ? b.hits / b.outcomes : null,
+        outcomesRecorded: b.outcomes,
+        shortTermAccuracy,
+        longTermAccuracy,
+        driftDetected,
+      };
+    });
 
     const modeBreakdown: ModeBreakdownRow[] = (DECISION_MODE_VALUES as ReadonlyArray<DecisionMode>).map((m) => {
       const mb = modeBuckets[m];

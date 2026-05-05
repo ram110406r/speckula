@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm run *)",
       "Bash(echo \"EXIT=$?\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npx --yes firebase-tools deploy --only firestore:rules --project buildcase-f103a)"
     ]
   }
 }
