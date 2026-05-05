@@ -837,6 +837,36 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         </OutputBlock>
       )}
 
+      {/* Cost analysis */}
+      {decisions.some((d) => d.costModel) && (
+        <OutputBlock label="Cost Analysis" icon={DollarSign}>
+          <div className="space-y-2">
+            {decisions.filter((d) => d.costModel).map((d, i) => (
+              <div key={i} className="rounded-lg border border-border/60 bg-card p-3">
+                <div className="flex items-center justify-between mb-1.5 gap-2">
+                  <span className="text-[11px] font-medium text-foreground leading-snug truncate">{d.title}</span>
+                  {d.costModel && <CostBadge category={d.costModel.category} />}
+                </div>
+                {d.costModel && (
+                  <>
+                    <div className="flex flex-wrap gap-2 font-mono text-[10px] text-muted-foreground/70 mb-1">
+                      <span>~${d.costModel.estimatedMonthly}/mo baseline</span>
+                      <span className="text-muted-foreground/30">·</span>
+                      <span>Infra ${d.costModel.breakdown.infrastructure}</span>
+                      <span>LLM ${d.costModel.breakdown.llm_api}</span>
+                      <span>Ops ${d.costModel.breakdown.ops_labor}</span>
+                    </div>
+                    {d.costModel.scalingTrajectory && (
+                      <p className="text-[10px] text-muted-foreground/55 leading-relaxed">{d.costModel.scalingTrajectory}</p>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </OutputBlock>
+      )}
+
       {/* Key insights */}
       {decisions.some((d) => d.keyInsight) && (
         <OutputBlock label="Insights" icon={Lightbulb}>
@@ -885,6 +915,19 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
                   </ul>
                 </div>
               )}
+              {strategy.costConstraints && strategy.costConstraints.length > 0 && (
+                <div className="mt-2.5">
+                  <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/60 mb-1.5">Cost guard rails</div>
+                  <ul className="space-y-1">
+                    {strategy.costConstraints.map((c, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-[10px] text-foreground/65">
+                        <DollarSign className="h-2.5 w-2.5 text-muted-foreground/50 mt-0.5 shrink-0" />
+                        <span className="leading-relaxed">{c}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </OutputBlock>
@@ -896,10 +939,19 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
           <div className="space-y-2.5">
             {roadmap.map((phase, i) => (
               <div key={i} className="rounded-lg border border-border/60 bg-card p-3.5">
-                <div className="flex items-center gap-2 mb-1.5">
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-primary font-medium">Phase {i + 1}</span>
                   <h4 className="text-[12px] font-semibold text-foreground">{phase.name}</h4>
+                  {phase.costCategory && <CostBadge category={phase.costCategory} />}
+                  {phase.durationWeeks !== undefined && (
+                    <span className="font-mono text-[9px] text-muted-foreground/50">{phase.durationWeeks}w</span>
+                  )}
                 </div>
+                {(phase.budgetMin !== undefined && phase.budgetMax !== undefined) && (
+                  <div className="font-mono text-[10px] text-muted-foreground/60 mb-1.5">
+                    ${phase.budgetMin.toLocaleString()}–${phase.budgetMax.toLocaleString()} budget
+                  </div>
+                )}
                 <p className="text-[11px] text-muted-foreground leading-relaxed">{phase.goal}</p>
                 {phase.deliverables.length > 0 && (
                   <ul className="mt-2 space-y-1">
@@ -910,6 +962,19 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
                       </li>
                     ))}
                   </ul>
+                )}
+                {phase.validationGates && phase.validationGates.length > 0 && (
+                  <div className="mt-2.5 pt-2 border-t border-border/30">
+                    <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted-foreground/50 mb-1">Gates to proceed</div>
+                    <ul className="space-y-0.5">
+                      {phase.validationGates.map((gate, j) => (
+                        <li key={j} className="flex items-start gap-1.5 text-[10px] text-foreground/65">
+                          <CheckCircle2 className="h-2.5 w-2.5 text-success/60 mt-0.5 shrink-0" />
+                          <span>{gate}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
             ))}
@@ -939,6 +1004,39 @@ function OutputBlock({ label, icon: Icon, children }: { label: string; icon: Rea
   );
 }
 
+function CostBadge({ category }: { category: CostCategory }) {
+  const cls =
+    category === "LOW"
+      ? "border-success/30 bg-success/10 text-success"
+      : category === "MEDIUM"
+      ? "border-warning/30 bg-warning/10 text-warning"
+      : "border-destructive/30 bg-destructive/10 text-destructive";
+  return (
+    <span className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] font-medium ${cls}`}>
+      {category}
+    </span>
+  );
+}
+
+function FactorBar({ label, value, weight }: { label: string; value: number; weight: string }) {
+  const pct = Math.round((value / 10) * 100);
+  const barCls = value >= 7 ? "bg-success/60" : value >= 4 ? "bg-warning/60" : "bg-destructive/60";
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[9px] text-muted-foreground/60 leading-none">{label}</span>
+        <span className="font-mono text-[9px] text-muted-foreground/35">{weight}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="flex-1 h-1.5 bg-muted/40 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${barCls}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="font-mono text-[10px] tabular-nums text-foreground/70 w-5 text-right">{value.toFixed(1)}</span>
+      </div>
+    </div>
+  );
+}
+
 function DecisionCard({ decision }: { decision: DecisionSuggestion }) {
   const priorityCls =
     decision.priority === "high"   ? "border-primary/30 bg-primary/10 text-primary" :
@@ -949,18 +1047,32 @@ function DecisionCard({ decision }: { decision: DecisionSuggestion }) {
     <article className="rounded-lg border border-border/60 bg-card p-3.5 space-y-1.5 hover:border-border transition-colors">
       <header className="flex items-start justify-between gap-2">
         <h4 className="text-[12px] font-semibold text-foreground leading-snug">{decision.title}</h4>
-        <span className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] font-medium ${priorityCls}`}>
-          {decision.priority}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+          {decision.costModel && <CostBadge category={decision.costModel.category} />}
+          <span className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] font-medium ${priorityCls}`}>
+            {decision.priority}
+          </span>
+        </div>
       </header>
       <p className="text-[11px] text-muted-foreground leading-relaxed">{decision.summary || decision.justification}</p>
-      <div className="flex gap-3 font-mono text-[10px] text-muted-foreground pt-0.5">
+      <div className="flex gap-3 font-mono text-[10px] text-muted-foreground pt-0.5 flex-wrap">
         <span><span className="text-foreground font-medium tabular-nums">{decision.impact}</span> impact</span>
         <span><span className="text-foreground font-medium tabular-nums">{decision.effort}</span> effort</span>
         {typeof decision.confidence === "number" && (
           <span><span className="text-foreground font-medium tabular-nums">{decision.confidence}</span> conf.</span>
         )}
+        {typeof decision.demand === "number" && (
+          <span><span className="text-foreground font-medium tabular-nums">{decision.demand}</span> demand</span>
+        )}
+        {decision.costModel && (
+          <span className="text-muted-foreground/50">~${decision.costModel.estimatedMonthly}/mo</span>
+        )}
       </div>
+      {decision.costModel?.scalingTrajectory && (
+        <p className="text-[10px] text-muted-foreground/55 leading-relaxed italic">
+          {decision.costModel.scalingTrajectory}
+        </p>
+      )}
       {decision.recommendation && (
         <div className="flex items-start gap-1.5 pt-1.5 border-t border-border/40">
           <Target className="h-2.5 w-2.5 mt-0.5 text-primary shrink-0" />
@@ -1003,18 +1115,34 @@ const verdictStyles: Record<VerdictLabel, {
 function VerdictBlock({ verdict }: { verdict: Verdict }) {
   const style = verdictStyles[verdict.label];
   const Icon = style.icon;
+  const factors = verdict.factors as VerdictFactors | undefined;
   return (
     <section className={`rounded-xl border-2 p-4 ${style.cardCls}`}>
       <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-foreground/40 mb-2.5">Final verdict</div>
-      <div className="flex items-center gap-3 mb-2.5">
+      <div className="flex items-center gap-3 mb-2.5 flex-wrap">
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold ${style.pillCls}`}>
           <Icon className={`h-3.5 w-3.5 ${style.iconCls}`} />
           {style.label}
         </span>
-        <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
-          {verdict.averageConfidence.toFixed(1)}/10 confidence
-        </span>
+        <div className="font-mono text-[10px] text-muted-foreground tabular-nums flex items-center gap-1.5">
+          {verdict.compositeScore !== undefined ? (
+            <>
+              <span className="font-semibold text-foreground">{verdict.compositeScore.toFixed(1)}</span>
+              <span>/10 composite</span>
+            </>
+          ) : (
+            <span>{verdict.averageConfidence.toFixed(1)}/10 confidence</span>
+          )}
+        </div>
       </div>
+      {factors && (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-3 p-3 rounded-lg bg-background/50 border border-border/30">
+          <FactorBar label="Confidence" value={factors.confidence} weight="40%" />
+          <FactorBar label="Cost Viability" value={factors.costViability} weight="30%" />
+          <FactorBar label="Demand Signal" value={factors.demandSignal} weight="20%" />
+          <FactorBar label="Strategic Fit" value={factors.strategicFit} weight="10%" />
+        </div>
+      )}
       <p className="text-[11px] leading-relaxed text-foreground/80">
         <span className="font-semibold">Reason: </span>{verdict.reason}
       </p>
