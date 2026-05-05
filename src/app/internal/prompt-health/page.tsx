@@ -1,7 +1,9 @@
 "use client";
 
 // Dev-only prompt health dashboard. Aggregates the last 14 days of PromptLog
-// rows by (promptId, promptVersion) and renders a simple read-only table.
+// rows by (promptId, promptVersion) — cost / latency / tokens — and merges
+// with Firestore outcome metrics — accuracy / hit rate / calibration —
+// computed locally from the user's saved decisions.
 //
 // Gated three ways:
 //   1. process.env.NODE_ENV check at module load time — production builds
@@ -13,8 +15,10 @@
 
 import React from "react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
+import { getPromptOutcomeMetrics, type PromptOutcomeMetricsRow } from "@/lib/firebase/db";
+import { getRollbackDecisions, type RollbackDecision } from "@/lib/ai/promptLibrary";
 
-interface HealthRow {
+interface BackendRow {
   promptId: string | null;
   promptVersion: string | null;
   usageCount: number;
@@ -25,16 +29,74 @@ interface HealthRow {
   totalCostUsd: number;
 }
 
-interface HealthData {
+interface BackendData {
   sinceIso: string;
-  rows: HealthRow[];
+  rows: BackendRow[];
+}
+
+interface MergedRow extends BackendRow {
+  outcomeRuns: number;
+  avgAccuracyNorm: number | null;
+  hitRate: number | null;
+  avgCalibrationError: number | null;
 }
 
 const IS_DEV = process.env.NODE_ENV !== "production";
 
+function mergeRows(backend: BackendRow[], outcomes: PromptOutcomeMetricsRow[]): MergedRow[] {
+  const outcomeIndex = new Map<string, PromptOutcomeMetricsRow>();
+  for (const o of outcomes) outcomeIndex.set(`${o.promptId}::${o.promptVersion}`, o);
+
+  const merged: MergedRow[] = backend.map((b) => {
+    const o = b.promptId && b.promptVersion ? outcomeIndex.get(`${b.promptId}::${b.promptVersion}`) : undefined;
+    return {
+      ...b,
+      outcomeRuns: o?.runs ?? 0,
+      avgAccuracyNorm: o?.avgAccuracyNorm ?? null,
+      hitRate: o?.hitRate ?? null,
+      avgCalibrationError: o?.avgCalibrationError ?? null,
+    };
+  });
+
+  // Surface outcome-only rows (decisions whose calls happened before the
+  // backend log started recording the new fields).
+  const seen = new Set(backend.map((b) => `${b.promptId}::${b.promptVersion}`));
+  for (const o of outcomes) {
+    const key = `${o.promptId}::${o.promptVersion}`;
+    if (seen.has(key)) continue;
+    merged.push({
+      promptId: o.promptId,
+      promptVersion: o.promptVersion,
+      usageCount: 0,
+      avgLatencyMs: 0,
+      avgInputTokens: 0,
+      avgOutputTokens: 0,
+      totalTokens: 0,
+      totalCostUsd: 0,
+      outcomeRuns: o.runs,
+      avgAccuracyNorm: o.avgAccuracyNorm,
+      hitRate: o.hitRate,
+      avgCalibrationError: o.avgCalibrationError,
+    });
+  }
+
+  return merged.sort((a, b) => {
+    const idCmp = (a.promptId ?? "").localeCompare(b.promptId ?? "");
+    if (idCmp !== 0) return idCmp;
+    return (a.promptVersion ?? "").localeCompare(b.promptVersion ?? "");
+  });
+}
+
+function fmtPercent(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "—";
+  return `${(n * 100).toFixed(0)}%`;
+}
+
 export default function PromptHealthPage() {
   const { user } = useAuth();
-  const [data, setData] = React.useState<HealthData | null>(null);
+  const [rows, setRows] = React.useState<MergedRow[]>([]);
+  const [sinceIso, setSinceIso] = React.useState<string | null>(null);
+  const [rollbacks, setRollbacks] = React.useState<RollbackDecision[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -44,14 +106,19 @@ export default function PromptHealthPage() {
     setError(null);
     try {
       const token = await user.getIdToken();
-      const res = await fetch("/api/ai/internal/prompt-health", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const envelope = (await res.json().catch(() => null)) as { ok?: boolean; data?: HealthData; error?: string } | null;
-      if (!res.ok || !envelope?.ok || !envelope.data) {
-        throw new Error(envelope?.error || `Request failed (${res.status})`);
+      const [backendRes, outcomeRows] = await Promise.all([
+        fetch("/api/ai/internal/prompt-health", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        getPromptOutcomeMetrics(user.uid, 30),
+      ]);
+      const envelope = (await backendRes.json().catch(() => null)) as { ok?: boolean; data?: BackendData; error?: string } | null;
+      if (!backendRes.ok || !envelope?.ok || !envelope.data) {
+        throw new Error(envelope?.error || `Request failed (${backendRes.status})`);
       }
-      setData(envelope.data);
+      setRows(mergeRows(envelope.data.rows, outcomeRows));
+      setSinceIso(envelope.data.sinceIso);
+      setRollbacks(getRollbackDecisions());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load prompt health");
     } finally {
@@ -84,12 +151,13 @@ export default function PromptHealthPage() {
   }
 
   return (
-    <main className="p-8 max-w-5xl mx-auto">
+    <main className="p-8 max-w-7xl mx-auto">
       <header className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-lg font-semibold">Prompt Health</h1>
           <p className="text-xs text-muted-foreground">
-            Per-prompt usage from the last 14 days · {data?.sinceIso ? new Date(data.sinceIso).toLocaleDateString() : "—"} → today
+            Cost / latency from PromptLog · accuracy from saved decisions ·{" "}
+            {sinceIso ? new Date(sinceIso).toLocaleDateString() : "—"} → today
           </p>
         </div>
         <button
@@ -107,29 +175,48 @@ export default function PromptHealthPage() {
         </div>
       )}
 
-      {data && data.rows.length === 0 && !loading && (
+      {rollbacks.length > 0 && (
+        <div className="rounded border border-warning/30 bg-warning/5 p-3 mb-4 text-xs">
+          <div className="font-mono uppercase tracking-wide text-warning mb-1">Active rollbacks</div>
+          <ul className="space-y-1">
+            {rollbacks.map((r) => (
+              <li key={r.promptId} className="text-foreground/80">
+                <span className="font-mono">{r.promptId}</span>: rolled back from{" "}
+                <span className="font-mono">v{r.fromVersion}</span> (acc {fmtPercent(r.pinnedAccuracy)}, {r.pinnedRuns} runs) →{" "}
+                <span className="font-mono">v{r.toVersion}</span> (acc {fmtPercent(r.rollbackAccuracy)}, {r.rollbackRuns} runs)
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {rows.length === 0 && !loading && (
         <p className="text-sm text-muted-foreground">
           No prompts logged with registry metadata yet. Run the autonomous agent to populate.
         </p>
       )}
 
-      {data && data.rows.length > 0 && (
+      {rows.length > 0 && (
         <div className="overflow-x-auto rounded border border-border">
           <table className="w-full text-xs">
             <thead className="bg-muted/40 text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2 font-medium">Prompt ID</th>
                 <th className="text-left px-3 py-2 font-medium">Version</th>
-                <th className="text-right px-3 py-2 font-medium">Usage</th>
+                <th className="text-right px-3 py-2 font-medium">Calls</th>
                 <th className="text-right px-3 py-2 font-medium">Avg latency</th>
-                <th className="text-right px-3 py-2 font-medium">Avg in tokens</th>
-                <th className="text-right px-3 py-2 font-medium">Avg out tokens</th>
-                <th className="text-right px-3 py-2 font-medium">Total tokens</th>
-                <th className="text-right px-3 py-2 font-medium">Total cost</th>
+                <th className="text-right px-3 py-2 font-medium">Avg in tok</th>
+                <th className="text-right px-3 py-2 font-medium">Avg out tok</th>
+                <th className="text-right px-3 py-2 font-medium">Total tok</th>
+                <th className="text-right px-3 py-2 font-medium">Cost</th>
+                <th className="text-right px-3 py-2 font-medium">Outcomes</th>
+                <th className="text-right px-3 py-2 font-medium">Avg accuracy</th>
+                <th className="text-right px-3 py-2 font-medium">Hit rate</th>
+                <th className="text-right px-3 py-2 font-medium">Avg calib. err</th>
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((row, i) => (
+              {rows.map((row, i) => (
                 <tr key={i} className="border-t border-border">
                   <td className="px-3 py-2 font-mono">{row.promptId ?? "—"}</td>
                   <td className="px-3 py-2 font-mono text-muted-foreground">{row.promptVersion ?? "—"}</td>
@@ -139,6 +226,10 @@ export default function PromptHealthPage() {
                   <td className="px-3 py-2 text-right tabular-nums">{row.avgOutputTokens}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{row.totalTokens.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right tabular-nums">${row.totalCostUsd.toFixed(4)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.outcomeRuns}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtPercent(row.avgAccuracyNorm)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtPercent(row.hitRate)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtPercent(row.avgCalibrationError)}</td>
                 </tr>
               ))}
             </tbody>

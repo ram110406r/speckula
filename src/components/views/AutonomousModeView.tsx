@@ -18,6 +18,7 @@ import {
   type AgentState,
   type ConfidenceExplanationItem,
 } from "@/lib/ai/autonomousAgent";
+import { getRollbackDecisions, type RollbackDecision } from "@/lib/ai/promptLibrary";
 import type {
   DecisionSuggestion,
   StrategicGuidance,
@@ -92,9 +93,11 @@ export function AutonomousModeView() {
   const [assumptions, setAssumptions] = React.useState<string[]>([]);
   const [verdict, setVerdict] = React.useState<Verdict | null>(null);
   const [predictedOutcome, setPredictedOutcome] = React.useState<PredictedOutcome | null>(null);
+  const [predictionPromptRef, setPredictionPromptRef] = React.useState<{ id: string; version: string; hash: string } | null>(null);
   const [userAccuracy, setUserAccuracy] = React.useState<number | null>(null);
   const [confidenceExplanation, setConfidenceExplanation] = React.useState<ConfidenceExplanationItem[]>([]);
   const [strictness, setStrictness] = React.useState<PredictionStrictness>("balanced");
+  const [rollbacks, setRollbacks] = React.useState<RollbackDecision[]>([]);
   const [pastIdeas, setPastIdeas] = React.useState<string[]>([]);
   const [pendingQuestion, setPendingQuestion] = React.useState<ClarifyingQuestion | null>(null);
   const [answerText, setAnswerText] = React.useState("");
@@ -114,6 +117,12 @@ export function AutonomousModeView() {
   React.useEffect(() => {
     chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
   }, [chat]);
+
+  React.useEffect(() => {
+    // Pick up any rollback decisions persisted from prior runs (localStorage)
+    // so the UI hint is accurate before the user kicks off a new analysis.
+    setRollbacks(getRollbackDecisions());
+  }, []);
 
   const appendEntry = React.useCallback((entry: ChatEntryInput) => {
     setChat((prev) => [...prev, { ...entry, id: nextEntryId() }]);
@@ -158,6 +167,13 @@ export function AutonomousModeView() {
         break;
       case "expectedOutcome":
         setPredictedOutcome(event.outcome);
+        if (event.promptRef) {
+          setPredictionPromptRef({
+            id: event.promptRef.id,
+            version: event.promptRef.version,
+            hash: event.promptRef.hash,
+          });
+        }
         appendEntry({
           kind: "system",
           text: `Predicted: ${event.outcome.metric} → ${event.outcome.target}${event.outcome.unit ?? ""} in ${event.outcome.timeframeDays}d (${Math.round(event.outcome.confidence * 100)}% conf.)`,
@@ -165,6 +181,9 @@ export function AutonomousModeView() {
         break;
       case "feedbackApplied":
         setUserAccuracy(event.userAccuracy);
+        // The agent recomputes rollbacks during its feedback-load step.
+        // Reading them here picks up any new rollback decisions for display.
+        setRollbacks(getRollbackDecisions());
         break;
       case "confidenceExplanation":
         setConfidenceExplanation(event.items);
@@ -194,6 +213,7 @@ export function AutonomousModeView() {
     setAssumptions([]);
     setVerdict(null);
     setPredictedOutcome(null);
+    setPredictionPromptRef(null);
     setUserAccuracy(null);
     setConfidenceExplanation([]);
     setPastIdeas([]);
@@ -261,6 +281,7 @@ export function AutonomousModeView() {
     setAssumptions([]);
     setVerdict(null);
     setPredictedOutcome(null);
+    setPredictionPromptRef(null);
     setUserAccuracy(null);
     setConfidenceExplanation([]);
     setPastIdeas([]);
@@ -303,6 +324,7 @@ export function AutonomousModeView() {
         sourceDocId: currentDocId ?? undefined,
         expectedOutcome: expectedOutcomePayload,
         metric: predictedOutcome?.metric.trim().toLowerCase(),
+        predictionPromptRef: predictionPromptRef ?? undefined,
       });
       toast.success("Decision saved", topDecision.title);
       activity.success("Decision saved from Autonomous Mode");
@@ -311,7 +333,7 @@ export function AutonomousModeView() {
     } finally {
       setIsSaving(false);
     }
-  }, [user, topDecision, strategy, predictedOutcome, isSaving, currentDocId]);
+  }, [user, topDecision, strategy, predictedOutcome, predictionPromptRef, isSaving, currentDocId]);
 
   const handleConvertToSpec = React.useCallback(async () => {
     if (!user || !topDecision || isConvertingToSpec) return;
@@ -549,6 +571,24 @@ export function AutonomousModeView() {
                   {Math.round(userAccuracy * 100)}% accuracy — confidence{" "}
                   {userAccuracy >= 0.5 ? "boosted" : "penalized"} by ~{Math.round(Math.abs(userAccuracy - 0.5) * 30)}%
                 </span>
+              </div>
+            )}
+
+            {/* Prompt improvement signal — surfaces when the agent has rolled
+                back to a previously-better-performing prompt version. */}
+            {rollbacks.length > 0 && (
+              <div className="rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-[10px] text-foreground/70">
+                {rollbacks.slice(0, 2).map((r) => {
+                  const improvementPct = Math.round((r.rollbackAccuracy - r.pinnedAccuracy) * 100);
+                  return (
+                    <div key={r.promptId} className="flex items-start gap-1.5">
+                      <TrendingUp className="h-3 w-3 text-success/80 shrink-0 mt-0.5" />
+                      <span>
+                        Prompt <span className="font-mono text-foreground/85">v{r.toVersion}</span> improving outcomes (+{improvementPct}% vs <span className="font-mono">v{r.fromVersion}</span>)
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
