@@ -28,10 +28,13 @@ const validateFirebaseConfig = () => {
   
   const missing = requiredVars.filter(v => !process.env[v] || process.env[v]?.trim() === '');
   if (missing.length > 0 && process.env.NODE_ENV !== 'test') {
-    console.warn(
+    const msg =
       `[env] Missing Firebase configuration: ${missing.join(', ')}\n` +
-        `  Copy .env.local.example to .env.local and fill in your values from Firebase Console.`
-    );
+      `  Copy .env.local.example to .env.local and fill in your values from Firebase Console.`;
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(msg);
+    }
+    console.warn(msg);
   }
 };
 
@@ -61,7 +64,13 @@ export const firebaseConfig = {
 // may import this.
 export const backendUrl = (() => {
   if (typeof window !== 'undefined') return ''; // client bundle — never reached
-  const url = process.env.BACKEND_URL ?? 'http://localhost:3001';
+  const url = process.env.BACKEND_URL;
+  if (!url) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[env] BACKEND_URL is required in production. Add it to your deployment platform secrets.');
+    }
+    return 'http://localhost:3001';
+  }
   if (url.endsWith('/')) {
     throw new Error('[env] BACKEND_URL must not have a trailing slash');
   }

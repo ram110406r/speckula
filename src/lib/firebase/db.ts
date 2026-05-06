@@ -306,20 +306,20 @@ const insightFingerprint = (i: Pick<Insight, "title" | "description" | "category
 };
 
 export const saveInsight = async (userId: string, data: Omit<Insight, "userId" | "createdAt">) => {
+  return saveInsightsBatch(userId, [data]);
+};
+
+export const saveInsightsBatch = async (userId: string, items: Omit<Insight, "userId" | "createdAt">[]) => {
+  if (!items.length) return;
   try {
-    // Cheap dedup: pull the latest 50 and compare fingerprints. We don't
-    // need a perfect dedup — just to stop the most common case of the
-    // same auto-extraction running twice.
     const recent = await getDocs(query(userInsightsCollection(userId), orderBy("createdAt", "desc"), firestoreLimit(50)));
-    const fp = insightFingerprint(data);
-    const seen = recent.docs.some((d) => {
-      const r = d.data() as Insight;
-      return insightFingerprint(r) === fp;
-    });
-    if (seen) return;
-    await addDoc(userInsightsCollection(userId), { ...data, userId, createdAt: serverTimestamp() });
+    const existingFps = new Set(recent.docs.map((d) => insightFingerprint(d.data() as Insight)));
+    const newItems = items.filter((item) => !existingFps.has(insightFingerprint(item)));
+    for (const item of newItems) {
+      await addDoc(userInsightsCollection(userId), { ...item, userId, createdAt: serverTimestamp() });
+    }
   } catch (error) {
-    logFirestorePermissionHint("saveInsight", error);
+    logFirestorePermissionHint("saveInsightsBatch", error);
     throw error;
   }
 };
@@ -1383,23 +1383,25 @@ export const getTaskById = async (userId: string, taskId: string): Promise<Execu
 
 export const getTasksByPRD = async (userId: string, prdId: string): Promise<ExecutionTask[]> => {
   try {
-    const tasks = await getTasks(userId);
+    const q = query(
+      userTasksCollection(userId),
+      where("prdId", "==", prdId),
+      orderBy("updatedAt", "desc")
+    );
+    const snap = await getDocs(q);
+    const tasks = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as ExecutionTask[];
     const priorityRank: Record<NonNullable<ExecutionTask["priority"]>, number> = {
       high: 0,
       medium: 1,
       low: 2,
     };
-
-    return tasks
-      .filter((task) => task.prdId === prdId)
-      .sort((left, right) => {
-        const priorityDelta = priorityRank[left.priority] - priorityRank[right.priority];
-        if (priorityDelta !== 0) return priorityDelta;
-
-        const leftUpdated = left.updatedAt?.toMillis?.() ?? 0;
-        const rightUpdated = right.updatedAt?.toMillis?.() ?? 0;
-        return rightUpdated - leftUpdated;
-      });
+    return tasks.sort((left, right) => {
+      const priorityDelta = priorityRank[left.priority] - priorityRank[right.priority];
+      if (priorityDelta !== 0) return priorityDelta;
+      const leftUpdated = left.updatedAt?.toMillis?.() ?? 0;
+      const rightUpdated = right.updatedAt?.toMillis?.() ?? 0;
+      return rightUpdated - leftUpdated;
+    });
   } catch (error) {
     logFirestorePermissionHint("getTasksByPRD", error);
     throw error;

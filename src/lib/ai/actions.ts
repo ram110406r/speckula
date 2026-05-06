@@ -4,7 +4,7 @@ import {
   createDocument,
   getUserDocuments,
   saveDocument,
-  saveInsight,
+  saveInsightsBatch,
   savePRD,
   saveTask,
 } from "../firebase/db";
@@ -730,9 +730,7 @@ export const extractInsightsAction = async (userId: string, docContent: unknown,
     .map(normalizeInsight)
     .filter((entry): entry is NormalizedInsight => entry !== null);
 
-  for (const insight of insights) {
-    await saveInsight(userId, { ...insight, sourceDocId });
-  }
+  await saveInsightsBatch(userId, insights.map((insight) => ({ ...insight, sourceDocId })));
 
   if (insights.length > 0) {
     activity.ai("Signals extracted", `${insights.length} new signal${insights.length > 1 ? "s" : ""} added`);
