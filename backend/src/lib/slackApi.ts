@@ -63,9 +63,12 @@ export interface SlackChannel {
   num_members?: number;
 }
 
+const MAX_CHANNEL_PAGES = 10; // cap at 2,000 channels (10 pages × 200)
+
 export const listChannels = async (token: string): Promise<SlackChannel[]> => {
   const all: SlackChannel[] = [];
   let cursor: string | undefined;
+  let pages = 0;
   do {
     const result = await slackGet<{ channels: SlackChannel[]; response_metadata?: { next_cursor?: string } }>(
       'conversations.list',
@@ -79,7 +82,8 @@ export const listChannels = async (token: string): Promise<SlackChannel[]> => {
     );
     all.push(...result.channels);
     cursor = result.response_metadata?.next_cursor || undefined;
-  } while (cursor);
+    pages += 1;
+  } while (cursor && pages < MAX_CHANNEL_PAGES);
   return all;
 };
 
