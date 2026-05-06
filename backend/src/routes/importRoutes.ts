@@ -374,7 +374,31 @@ export default async function importRoutes(fastify: FastifyInstance) {
         messages = await fetchChannelHistory(token, body.channelId, { limit });
       } catch (err) {
         fastify.log.error({ err }, 'slack history fetch failed');
-        return replyError(reply, 502, 'Could not fetch Slack channel history.');
+        // slackApi throws `slack <path> failed: <slack_error>` — pull the trailing
+        // code out so we can map known Slack errors to actionable HTTP statuses
+        // instead of a blanket 502 that hides whether the user needs to invite
+        // the bot, reconnect, or grant a scope.
+        const raw = err instanceof Error ? err.message : '';
+        const code = raw.match(/failed:\s*(\S+)/)?.[1] ?? '';
+        switch (code) {
+          case 'not_in_channel':
+          case 'channel_not_found':
+            return replyError(reply, 403, 'The Slack bot is not in this channel. Invite @Speckula to the channel and try again.');
+          case 'is_archived':
+            return replyError(reply, 410, 'This Slack channel is archived.');
+          case 'invalid_auth':
+          case 'token_revoked':
+          case 'token_expired':
+          case 'account_inactive':
+            return replyError(reply, 401, 'Slack workspace authorization is no longer valid. Reconnect Slack and try again.');
+          case 'missing_scope':
+          case 'not_allowed_token_type':
+            return replyError(reply, 403, 'The Slack app is missing required permissions. Reconnect Slack to grant updated scopes.');
+          case 'ratelimited':
+            return replyError(reply, 429, 'Slack rate limit reached. Try again in a minute.');
+          default:
+            return replyError(reply, 502, code ? `Slack API error: ${code}` : 'Could not fetch Slack channel history.');
+        }
       }
 
       // Slack returns newest-first; reverse to chronological so the LLM reads

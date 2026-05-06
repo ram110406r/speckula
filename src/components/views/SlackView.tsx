@@ -448,7 +448,8 @@ export function SlackView() {
                             size="sm"
                             variant="ghost"
                             className="h-7 px-2 text-xs"
-                            disabled={otherAnalyzing}
+                            disabled={otherAnalyzing || !ch.is_member}
+                            title={!ch.is_member ? "Invite @Speckula to this channel in Slack first" : undefined}
                             onClick={() => handleAnalyzeChannel(ch)}
                           >
                             {isAnalyzing ? (
