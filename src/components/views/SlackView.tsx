@@ -216,9 +216,21 @@ export function SlackView() {
       };
       if (!json.ok) throw new Error(json.error || "Backfill failed");
       const errCount = json.errors?.length ?? 0;
-      setStatusMessage(
-        `Backfilled ${json.ingested ?? 0} messages${errCount ? ` (${errCount} channel error${errCount === 1 ? "" : "s"})` : ""}.`
-      );
+      const ingested = json.ingested ?? 0;
+      if (ingested === 0 && errCount > 0) {
+        const notInChannel = json.errors?.some((e) =>
+          /not_in_channel|channel_not_found/i.test(e.error)
+        );
+        setStatusMessage(
+          notInChannel
+            ? `No messages fetched — the Speckula bot isn't in the selected channel${errCount === 1 ? "" : "s"}. Invite it in Slack with /invite @Speckula, then try again.`
+            : `No messages fetched (${errCount} channel error${errCount === 1 ? "" : "s"}): ${json.errors?.map((e) => e.error).join("; ")}`
+        );
+      } else {
+        setStatusMessage(
+          `Fetched ${ingested} message${ingested === 1 ? "" : "s"}${errCount ? ` (${errCount} channel error${errCount === 1 ? "" : "s"})` : ""}.`
+        );
+      }
     } catch (err) {
       setStatusMessage(`Backfill failed: ${(err as Error).message}`);
     } finally {
@@ -411,7 +423,7 @@ export function SlackView() {
                 </div>
               ) : channels.length === 0 ? (
                 <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  No channels found. Make sure the bot has been invited to channels.
+                  No channels found. In Slack, type <code className="rounded bg-muted px-1">/invite @Speckula</code> in a channel, then reopen this picker.
                 </p>
               ) : (
                 <ul>
@@ -428,8 +440,10 @@ export function SlackView() {
                         >
                           <button
                             type="button"
-                            onClick={() => togglePick(ch.id)}
-                            className="flex flex-1 items-center gap-2 text-left hover:opacity-80"
+                            onClick={() => ch.is_member && togglePick(ch.id)}
+                            disabled={!ch.is_member}
+                            title={!ch.is_member ? "Invite @Speckula to this channel in Slack first" : undefined}
+                            className={`flex flex-1 items-center gap-2 text-left ${ch.is_member ? "hover:opacity-80" : "cursor-not-allowed opacity-50"}`}
                           >
                             <span
                               className={`flex h-4 w-4 items-center justify-center rounded border ${
@@ -441,7 +455,7 @@ export function SlackView() {
                             {ch.is_private ? <Lock className="h-3 w-3" /> : <Hash className="h-3 w-3" />}
                             <span className="flex-1 truncate">{ch.name}</span>
                             {!ch.is_member && (
-                              <span className="text-[10px] text-muted-foreground">not joined</span>
+                              <span className="text-[10px] text-amber-500">invite bot first</span>
                             )}
                           </button>
                           <Button
@@ -466,6 +480,13 @@ export function SlackView() {
                 </ul>
               )}
             </div>
+
+            {channels.some((c) => !c.is_member) && (
+              <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+                Grayed-out channels need the bot: type{" "}
+                <code className="rounded bg-muted px-1">/invite @Speckula</code> in Slack, then reopen this picker.
+              </p>
+            )}
 
             <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
               <span className="mr-auto text-xs text-muted-foreground">

@@ -290,7 +290,10 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
             }
             await batch.commit();
           } catch (err) {
-            errors.push({ channel: channelId, error: (err as Error).message });
+            const raw = err instanceof Error ? err.message : String(err);
+            // Extract the Slack error code so the frontend can surface it clearly
+            const slackCode = raw.match(/failed:\s*(\S+)/)?.[1];
+            errors.push({ channel: channelId, error: slackCode ?? raw });
           }
         }
 
