@@ -18,6 +18,14 @@
         { "fieldPath": "teamId", "order": "ASCENDING" },
         { "fieldPath": "slackTs", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "slackMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerUserId", "order": "ASCENDING" },
+        { "fieldPath": "slackTs", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

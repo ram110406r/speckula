@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { getFirebaseFirestore } from '../lib/firebaseAdmin.js';
 import { verifyFirebaseAuth } from '../lib/firebaseAuth.js';
+import { validateEnv } from '../lib/env.js';
 import { encryptToken, decryptToken } from '../lib/tokenCrypto.js';
 import {
   exchangeOAuthCode,
@@ -12,7 +13,16 @@ import {
 } from '../lib/slackApi.js';
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 min
-const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3000';
+// Prefer FRONTEND_URLS (multi-origin) first origin, then FRONTEND_URL,
+// then fall back to localhost — matches the same priority used in app.ts CORS.
+const getFrontendUrl = (): string => {
+  const env = validateEnv();
+  if (env.FRONTEND_URLS) {
+    const first = env.FRONTEND_URLS.split(',')[0].trim();
+    if (first) return first;
+  }
+  return env.FRONTEND_URL ?? 'http://localhost:3000';
+};
 
 // ─── State signing (so we know which Speckula user is installing) ─────────
 const stateSecret = (): string => {
@@ -124,7 +134,7 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
     ) => {
       const { code, state, error } = request.query;
       if (error) {
-        return reply.redirect(`${FRONTEND_URL()}/?slack=denied`);
+        return reply.redirect(`${getFrontendUrl()}/?slack=denied`);
       }
       if (!code || !state) {
         return reply.code(400).send({ ok: false, error: 'missing code or state' });
@@ -171,11 +181,11 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
         });
 
         return reply.redirect(
-          `${FRONTEND_URL()}/?slack=connected&teamId=${encodeURIComponent(teamId)}`
+          `${getFrontendUrl()}/?slack=connected&teamId=${encodeURIComponent(teamId)}`
         );
       } catch (err) {
         request.log.error({ err }, 'slack oauth callback failed');
-        return reply.redirect(`${FRONTEND_URL()}/?slack=error`);
+        return reply.redirect(`${getFrontendUrl()}/?slack=error`);
       }
     }
   );
