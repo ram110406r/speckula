@@ -405,6 +405,39 @@ export default async function importRoutes(fastify: FastifyInstance) {
       // the conversation forwards.
       const ordered = [...messages].reverse();
 
+      // System subtypes that add no conversational value.
+      const SKIP_SUBTYPES = new Set([
+        'channel_join', 'channel_leave', 'channel_purpose', 'channel_topic',
+        'channel_name', 'channel_archive', 'channel_unarchive',
+        'pinned_item', 'unpinned_item', 'bot_message',
+      ]);
+
+      // Decode Slack mrkdwn into plain readable text for the LLM.
+      const decodeSlackMarkup = (raw: string): string =>
+        raw
+          .replace(/<@[A-Z0-9]+\|([^>]+)>/g, '@$1')           // <@UID|name> -> @name
+          .replace(/<@([A-Z0-9]+)>/g, (_, id: string) => `@user_${id.slice(-4)}`) // <@UID> -> @user_XXXX
+          .replace(/<#[A-Z0-9]+\|([^>]+)>/g, '#$1')           // <#CID|name> -> #name
+          .replace(/<!here>/g, '@here')
+          .replace(/<!channel>/g, '@channel')
+          .replace(/<!everyone>/g, '@everyone')
+          .replace(/<https?:[^|>]+\|([^>]+)>/g, '$1')          // <URL|label> -> label
+          .replace(/<(https?:[^>]+)>/g, '$1')                  // <URL> -> URL
+          .replace(/\*([^*\n]+)\*/g, '$1')                   // *bold* -> bold
+          .replace(/_([^_\n]+)_/g, '$1');                    // _italic_ -> italic
+
+      // Format Slack ts (epoch seconds string) as "MMM D, HH:MM UTC".
+      const formatTs = (ts: string): string => {
+        const secs = Number.parseFloat(ts);
+        if (!Number.isFinite(secs)) return ts;
+        const d = new Date(secs * 1000);
+        const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+        const day = d.getUTCDate();
+        const hh = String(d.getUTCHours()).padStart(2, '0');
+        const mm = String(d.getUTCMinutes()).padStart(2, '0');
+        return `${month} ${day}, ${hh}:${mm} UTC`;
+      };
+
       const lines: string[] = [];
       let bytes = 0;
       let included = 0;
@@ -412,18 +445,16 @@ export default async function importRoutes(fastify: FastifyInstance) {
 
       for (const msg of ordered) {
         if (msg.bot_id) continue;
-        const text = (msg.text ?? '').trim();
-        if (!text) continue;
+        if (msg.subtype && SKIP_SUBTYPES.has(msg.subtype)) continue;
+        const rawText = (msg.text ?? '').trim();
+        if (!rawText) continue;
 
-        const tsSeconds = Number.parseFloat(msg.ts);
-        const iso = Number.isFinite(tsSeconds)
-          ? new Date(tsSeconds * 1000).toISOString()
-          : msg.ts;
-        const sender = msg.user ?? 'unknown';
-        // Strip control chars except \n (\x0A) so multi-line messages stay legible.
+        const timestamp = formatTs(msg.ts);
+        const sender = msg.user ? `@user_${msg.user.slice(-4)}` : 'unknown';
+        const decoded = decodeSlackMarkup(rawText);
         // eslint-disable-next-line no-control-regex
-        const sanitized = text.replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, '');
-        const line = `[${iso}] @${sender}: ${sanitized}`;
+        const sanitized = decoded.replace(/[ -	-]/g, '');
+        const line = `[${timestamp}] ${sender}: ${sanitized}`;
         const lineBytes = Buffer.byteLength(line, 'utf-8') + 1;
 
         if (bytes + lineBytes > MAX_FILE_BYTES) {

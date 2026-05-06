@@ -85,6 +85,7 @@ export const listChannels = async (token: string): Promise<SlackChannel[]> => {
 
 export interface SlackMessage {
   type: string;
+  subtype?: string;
   user?: string;
   text?: string;
   ts: string;
