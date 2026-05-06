@@ -307,8 +307,9 @@ export default async function slackOAuthRoutes(fastify: FastifyInstance) {
           }
         }
 
+        const allFailed = errors.length === ws.selectedChannels.length;
         await firestore.doc(`users/${userId}/slackWorkspaces/${teamId}`).set(
-          { backfillCompleted: true, lastBackfillAt: FieldValue.serverTimestamp() },
+          { backfillCompleted: !allFailed, lastBackfillAt: FieldValue.serverTimestamp() },
           { merge: true }
         );
 

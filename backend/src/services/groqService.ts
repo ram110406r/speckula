@@ -27,12 +27,14 @@ const groq = new Proxy({} as Groq, {
   },
 });
 
-let dbWarningLogged = false;
+let dbWarnLastAt = 0;
+const DB_WARN_INTERVAL_MS = 60 * 60 * 1000; // re-log at most once per hour
 const warnDbDegraded = (op: string, error: unknown) => {
-  if (!dbWarningLogged) {
-    dbWarningLogged = true;
+  const now = Date.now();
+  if (now - dbWarnLastAt >= DB_WARN_INTERVAL_MS) {
+    dbWarnLastAt = now;
     console.warn(
-      `[groqService] Postgres unavailable — AI calls will run without caching/telemetry. First failure on ${op}:`,
+      `[groqService] Postgres unavailable — AI calls will run without caching/telemetry. Failure on ${op}:`,
       error instanceof Error ? error.message : error
     );
   }
