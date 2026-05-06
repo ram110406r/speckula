@@ -1492,6 +1492,7 @@ export const saveWorkspace = async (userId: string, name: string) => {
   try {
     const ref = await addDoc(workspacesCollection(), {
       name,
+      ownerId: userId,
       members: [{ userId, role: "owner" as const }],
       memberIds: [userId],
       createdAt: serverTimestamp(),

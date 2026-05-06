@@ -1689,10 +1689,7 @@ export const analyzeResearchAction = async (
 
   if (!parts) return { summary: "", risks: [], opportunities: [], missingInfo: [] };
 
-  const prompt = `You are a product strategy analyst. Analyze this product research and return ONLY valid JSON.
-
-Research:
-${parts}
+  const prompt = `You are a product strategy analyst. Analyze the product research in the Product Notes and return ONLY valid JSON.
 
 Return exactly this JSON (no markdown, no explanation):
 {
@@ -1704,18 +1701,14 @@ Return exactly this JSON (no markdown, no explanation):
 
 Each item max 18 words. 2-4 items per array.`;
 
-  try {
-    const result = await callAI(prompt, userId);
-    const parsed = parseJsonPayload(result) as ResearchAnalysis;
-    return {
-      summary: typeof parsed.summary === "string" ? parsed.summary : "",
-      risks: Array.isArray(parsed.risks) ? (parsed.risks as string[]) : [],
-      opportunities: Array.isArray(parsed.opportunities) ? (parsed.opportunities as string[]) : [],
-      missingInfo: Array.isArray(parsed.missingInfo) ? (parsed.missingInfo as string[]) : [],
-    };
-  } catch {
-    return { summary: "", risks: [], opportunities: [], missingInfo: [] };
-  }
+  const result = await callAI(prompt, parts);
+  const parsed = parseJsonPayload(result) as ResearchAnalysis;
+  return {
+    summary: typeof parsed.summary === "string" ? parsed.summary : "",
+    risks: Array.isArray(parsed.risks) ? (parsed.risks as string[]) : [],
+    opportunities: Array.isArray(parsed.opportunities) ? (parsed.opportunities as string[]) : [],
+    missingInfo: Array.isArray(parsed.missingInfo) ? (parsed.missingInfo as string[]) : [],
+  };
 };
 
 export const getBlockSuggestion = async (
@@ -1728,16 +1721,11 @@ export const getBlockSuggestion = async (
 
   const prompt = `You are a product thinking coach reviewing a "${blockLabel}" section. Give ONE specific, actionable suggestion to strengthen it. Max 2 sentences. Be direct and concrete.
 
-Content: ${blockContent.slice(0, 600)}
-${otherContext ? `\nOther context: ${otherContext.slice(0, 300)}` : ""}
-
 Respond with ONLY the suggestion text. No labels, no bullet points.`;
 
-  try {
-    const result = await callAI(prompt, userId);
-    return result?.trim() || null;
-  } catch {
-    return null;
-  }
+  const context = `${blockLabel} content:\n${blockContent.slice(0, 600)}${otherContext ? `\n\nOther context:\n${otherContext.slice(0, 300)}` : ""}`;
+
+  const result = await callAI(prompt, context);
+  return result?.trim() || null;
 };
 
