@@ -79,7 +79,7 @@ export function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
 
           <div className="flex items-center gap-2.5">
-            <Image src="/logo.png" alt="Speckula Logo" width={28} height={28} className="object-contain" />
+            <Image src="/logo.svg" alt="Speckula Logo" width={28} height={28} className="object-contain" />
             <span className="font-semibold text-lg tracking-tight text-slate-900 dark:text-white">Speckula</span>
           </div>
 
@@ -156,7 +156,7 @@ export function LandingPage() {
             <div
               className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-xs font-medium uppercase tracking-widest animate-fade-in"
             >
-              <Image src="/logo.png" alt="" width={14} height={14} className="h-3.5 w-3.5 object-contain brightness-0 invert" />
+              <Image src="/logo.svg" alt="" width={14} height={14} className="h-3.5 w-3.5 object-contain brightness-0 invert" />
               The Decision Engine for Product Teams
             </div>
 
@@ -446,7 +446,7 @@ export function LandingPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
               <div className="col-span-2 md:col-span-1 space-y-3">
                 <div className="flex items-center gap-2">
-                  <Image src="/logo.png" alt="Speckula" width={22} height={22} className="object-contain brightness-0 invert opacity-80" />
+                  <Image src="/logo.svg" alt="Speckula" width={22} height={22} className="object-contain brightness-0 invert opacity-80" />
                   <span className="font-semibold text-slate-100">Speckula</span>
                 </div>
                 <p className="text-sm leading-relaxed">The decision engine for product teams.</p>

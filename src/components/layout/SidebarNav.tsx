@@ -193,7 +193,7 @@ export function SidebarNav() {
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 flex items-center justify-center">
             <Image
-              src="/logo.png"
+              src="/logo.svg"
               alt="Speckula Logo"
               width={36}
               height={36}
