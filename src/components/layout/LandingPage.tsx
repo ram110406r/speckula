@@ -79,7 +79,7 @@ export function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
 
           <div className="flex items-center gap-2.5">
-            <Image src="/logo.png" alt="Speckula Logo" width={28} height={28} className="object-contain" />
+            <Image src="/logo.png" alt="Speckula Logo" width={48} height={48} className="object-contain scale-[1.7]" />
             <span className="font-semibold text-lg tracking-tight text-slate-900 dark:text-white">Speckula</span>
           </div>
 

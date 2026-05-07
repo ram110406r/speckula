@@ -191,13 +191,13 @@ export function SidebarNav() {
       {/* Logo */}
       <div className="px-6 py-4 border-b border-sidebar-border/80">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 flex items-center justify-center">
+          <div className="w-10 h-10 flex items-center justify-center shrink-0">
             <Image
               src="/logo.png"
               alt="Speckula Logo"
-              width={36}
-              height={36}
-              className="object-contain"
+              width={64}
+              height={64}
+              className="object-contain scale-[1.7]"
             />
           </div>
           <span className="font-semibold text-lg tracking-tight">Speckula</span>
