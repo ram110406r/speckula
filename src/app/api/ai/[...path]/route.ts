@@ -4,7 +4,6 @@
 export const dynamic = 'force-dynamic';
 
 import { backendUrl } from '@/lib/env';
-const BACKEND_URL = backendUrl;
 const PROXY_TIMEOUT_MS = 90_000;
 
 // Allow-list of segments we are willing to forward to the backend. Prevents
@@ -39,7 +38,7 @@ async function forward(req: Request, segments: string[]) {
   req.signal.addEventListener('abort', () => controller.abort(), { once: true });
 
   try {
-    const upstream = await fetch(`${BACKEND_URL}/ai/${segments.join('/')}`, {
+    const upstream = await fetch(`${backendUrl()}/ai/${segments.join('/')}`, {
       method: req.method,
       headers: upstreamHeaders,
       body,
