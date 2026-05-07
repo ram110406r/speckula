@@ -227,14 +227,14 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
         {!isCollapsed && (
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 shrink-0 flex items-center justify-center">
-              <Image src="/logo.svg" alt="Speckula" width={32} height={32} className="object-contain" />
+              <Image src="/logo.png" alt="Speckula" width={32} height={32} className="object-contain" />
             </div>
             <span className="font-semibold text-sm tracking-tight truncate">Speckula</span>
           </div>
         )}
         {isCollapsed && (
           <div className="w-8 h-8 mx-auto flex items-center justify-center">
-            <Image src="/logo.svg" alt="Speckula" width={32} height={32} className="object-contain" />
+            <Image src="/logo.png" alt="Speckula" width={32} height={32} className="object-contain" />
           </div>
         )}
         <button
