@@ -1,24 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 96" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 100" fill="none">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="120" y2="96" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#9F7AEA"/>
+    <linearGradient id="g" x1="0" y1="0" x2="80" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9461FF"/>
       <stop offset="55%" stop-color="#7C3AED"/>
       <stop offset="100%" stop-color="#5B21B6"/>
     </linearGradient>
   </defs>
 
-  <!-- Bottom pill — behind, drawn first -->
-  <rect x="6"  y="62" width="76" height="26" rx="13" fill="url(#g)"/>
+  <!-- Bottom pill (offset left) — drawn first so middle overlaps -->
+  <rect x="2"  y="74" width="58" height="22" rx="11" fill="url(#g)"/>
 
-  <!-- Middle large rounded rect — sits on top of bottom pill -->
-  <rect x="6"  y="14" width="80" height="56" rx="28" fill="url(#g)"/>
+  <!-- Middle pill (center, wider) -->
+  <rect x="11" y="39" width="58" height="22" rx="11" fill="url(#g)"/>
 
-  <!-- Depth where middle overlaps bottom pill -->
-  <rect x="6"  y="62" width="50" height="17" rx="8"  fill="rgba(55,10,140,0.30)"/>
+  <!-- Top pill (offset right) — drawn last (front) -->
+  <rect x="20" y="4"  width="58" height="22" rx="11" fill="url(#g)"/>
 
-  <!-- Top pill — in front, drawn last -->
-  <rect x="40" y="1"  width="76" height="26" rx="13" fill="url(#g)"/>
+  <!-- Soft shadow under top→middle overlap to imply depth -->
+  <rect x="20" y="14" width="40" height="14" rx="7" fill="rgba(55,10,140,0.28)"/>
 
-  <!-- Depth where top pill overlaps middle -->
-  <rect x="40" y="14" width="46" height="16" rx="8"  fill="rgba(55,10,140,0.30)"/>
+  <!-- Soft shadow under middle→bottom overlap -->
+  <rect x="11" y="49" width="40" height="14" rx="7" fill="rgba(55,10,140,0.28)"/>
 </svg>
