@@ -4,7 +4,6 @@
 export const dynamic = 'force-dynamic';
 
 import { backendUrl } from '@/lib/env';
-const BACKEND_URL = backendUrl;
 
 const VALID_SEGMENT = /^[a-zA-Z0-9_-]+$/;
 const PROXY_TIMEOUT_MS = 60_000;
@@ -35,7 +34,7 @@ async function forward(req: Request, segments: string[]) {
   req.signal.addEventListener('abort', () => controller.abort(), { once: true });
 
   try {
-    const upstream = await fetch(`${BACKEND_URL}/import/${segments.join('/')}`, {
+    const upstream = await fetch(`${backendUrl()}/import/${segments.join('/')}`, {
       method: req.method,
       headers,
       body,

@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic';
 
 import { backendUrl } from '@/lib/env';
-const BACKEND_URL = backendUrl;
 const PROXY_TIMEOUT_MS = 30_000;
 
 const VALID_SEGMENT = /^[a-zA-Z0-9_-]+$/;
@@ -30,7 +29,7 @@ async function forward(req: Request, segments: string[]) {
   }
 
   const url = new URL(req.url);
-  const upstream_url = `${BACKEND_URL}/auth/slack/${segments.join('/')}${url.search}`;
+  const upstream_url = `${backendUrl()}/auth/slack/${segments.join('/')}${url.search}`;
   const rawBody = req.method === 'GET' || req.method === 'DELETE' ? undefined : await req.text();
   const body = rawBody || undefined;
 

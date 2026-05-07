@@ -3,18 +3,6 @@
 // A missing var throws immediately — catching the error at build/startup,
 // not silently at the first user request.
 
-// Helper function to validate required env vars (used by validateFirebaseConfig)
-const checkRequired = (name: string): string => {
-  const value = process.env[name];
-  if (!value || value.trim() === '') {
-    throw new Error(
-      `[env] Missing required environment variable: ${name}\n` +
-        `  Add it to .env.local (development) or your deployment platform secrets (production).`
-    );
-  }
-  return value;
-};
-
 // Validate Firebase configuration at build time
 const validateFirebaseConfig = () => {
   const requiredVars = [
@@ -62,7 +50,7 @@ export const firebaseConfig = {
 // BACKEND_URL is NOT prefixed with NEXT_PUBLIC_ — it must never appear in the
 // browser bundle. Only the Next.js API proxy routes (src/app/api/*/route.ts)
 // may import this.
-export const backendUrl = (() => {
+export function backendUrl(): string {
   if (typeof window !== 'undefined') return ''; // client bundle — never reached
   const url = process.env.BACKEND_URL;
   if (!url) {
@@ -75,4 +63,4 @@ export const backendUrl = (() => {
     throw new Error('[env] BACKEND_URL must not have a trailing slash');
   }
   return url;
-})();
+}
