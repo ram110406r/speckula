@@ -5,8 +5,7 @@ import {
   onAuthStateChanged,
   onIdTokenChanged,
   User,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   GoogleAuthProvider,
   signOut,
 } from "firebase/auth";
@@ -40,15 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let initializedFor: string | null = null;
 
-    // Whether getRedirectResult has finished. We hold the loading state
-    // until this resolves so a redirect-back doesn't flash the landing page
-    // before Firebase processes the OAuth result.
-    let redirectSettled = false;
-    // Buffered auth state received while waiting for redirect result.
-    // undefined = onAuthStateChanged hasn't fired yet.
-    let bufferedUser: User | null | undefined = undefined;
-
-    const settle = async (nextUser: User | null) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
       if (!nextUser) {
         initializedFor = null;
@@ -66,16 +57,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } finally {
         setLoading(false);
       }
-    };
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
-      if (!redirectSettled) {
-        // Buffer until redirect result is known, to avoid flashing the landing
-        // page for the brief moment before Firebase processes the redirect.
-        bufferedUser = nextUser;
-        return;
-      }
-      await settle(nextUser);
     });
 
     const unsubscribeToken = onIdTokenChanged(auth!, (nextUser) => {
@@ -83,24 +64,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         useAppStore.getState().resetState();
       }
     });
-
-    // Resolve any pending redirect sign-in before allowing the auth state
-    // to propagate to the rest of the app.
-    getRedirectResult(auth)
-      .catch((err) => {
-        if (err?.code !== "auth/no-current-user") {
-          console.error("getRedirectResult failed:", err);
-        }
-      })
-      .finally(async () => {
-        redirectSettled = true;
-        // If onAuthStateChanged already fired while we were waiting, process it now.
-        if (bufferedUser !== undefined) {
-          await settle(bufferedUser);
-        }
-        // If onAuthStateChanged hasn't fired yet, it will call settle() directly
-        // because redirectSettled is now true.
-      });
 
     return () => {
       unsubscribeAuth();
@@ -111,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithGoogle = async () => {
     if (!auth) throw new Error("Firebase is not configured.");
     const provider = new GoogleAuthProvider();
-    await signInWithRedirect(auth, provider);
+    await signInWithPopup(auth, provider);
   };
 
   const logout = async () => {
