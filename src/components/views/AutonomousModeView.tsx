@@ -201,6 +201,10 @@ export function AutonomousModeView() {
   const answerResolverRef = React.useRef<((value: string) => void) | null>(null);
   const answerRejecterRef = React.useRef<((reason: Error) => void) | null>(null);
   const chatScrollRef = React.useRef<HTMLDivElement>(null);
+  // Tracks which document was active when the current run started so that:
+  //   a) saves always go to the correct doc even if the user switches mid-run
+  //   b) switching to a different doc after a run clears stale results
+  const runDocIdRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
@@ -211,6 +215,38 @@ export function AutonomousModeView() {
     // so the UI hint is accurate before the user kicks off a new analysis.
     setRollbacks(getRollbackDecisions());
   }, []);
+
+  // Clear stale run output when the user switches to a different document.
+  // AutonomousModeView stays mounted across navigations, so without this the
+  // previous doc's results would remain visible and the doc-context indicator
+  // would show the new doc — making it look like results belong to the new doc.
+  React.useEffect(() => {
+    if (!runDocIdRef.current) return;          // no run has happened yet
+    if (isRunning) return;                     // leave running runs alone
+    if (currentDocId === runDocIdRef.current) return; // same doc, nothing to clear
+    // Doc changed after a completed run — reset all output state.
+    setChat([]);
+    setDecisions([]);
+    setStrategy(null);
+    setRoadmap([]);
+    setTopDecision(null);
+    setAssumptions([]);
+    setVerdict(null);
+    setPredictedOutcome(null);
+    setPredictionPromptRef(null);
+    setUserAccuracy(null);
+    setConfidenceExplanation([]);
+    setPastIdeas([]);
+    setPendingQuestion(null);
+    setAnswerText("");
+    setSavedDecisionId(null);
+    setFollowUpAnswer(null);
+    setFollowUpText("");
+    setCompetitors([]);
+    setFlippedAssumptions(new Set());
+    setAgentState("idle");
+    runDocIdRef.current = null;
+  }, [currentDocId, isRunning]);
 
   // item 16: elapsed timer
   React.useEffect(() => {
@@ -384,6 +420,7 @@ export function AutonomousModeView() {
     const trimmed = idea.trim();
     if (!trimmed || isRunning) return;
 
+    runDocIdRef.current = currentDocId;
     if (!resumeFrom) resumeDataRef.current = {};
     setChat([]);
     setDecisions([]);
@@ -440,7 +477,7 @@ export function AutonomousModeView() {
       answerResolverRef.current = null;
       answerRejecterRef.current = null;
     }
-  }, [idea, depth, isRunning, appendEntry, handleAgentEvent, user?.uid, strictness, autoMode, modeMeta]);
+  }, [idea, depth, isRunning, appendEntry, handleAgentEvent, user?.uid, strictness, autoMode, modeMeta, currentDocId]);
 
   const start = React.useCallback(() => startRun(), [startRun]);
   const resumeRun = React.useCallback(() => startRun({ ...resumeDataRef.current }), [startRun]);
@@ -517,7 +554,7 @@ export function AutonomousModeView() {
         risks: topDecision.risks,
         confidence: topDecision.confidence,
         strategyTheme: strategy?.theme ?? null,
-        sourceDocId: currentDocId ?? undefined,
+        sourceDocId: (runDocIdRef.current ?? currentDocId) ?? undefined,
         expectedOutcome: expectedOutcomePayload,
         metric: predictedOutcome?.metric.trim().toLowerCase(),
         predictionPromptRef: predictionPromptRef ?? undefined,
@@ -560,7 +597,7 @@ export function AutonomousModeView() {
         user.uid,
         textToTipTap(parts.join("\n\n")),
         topDecision.title,
-        currentDocId ?? undefined,
+        (runDocIdRef.current ?? currentDocId) ?? undefined,
       );
       toast.success("Spec created", `PRD: ${topDecision.title}`);
       setActiveView("prds");
@@ -594,7 +631,7 @@ export function AutonomousModeView() {
       const tasks = await suggestTasksAction(
         user.uid,
         textToTipTap(parts.join("\n\n")),
-        currentDocId ?? undefined,
+        (runDocIdRef.current ?? currentDocId) ?? undefined,
       );
       toast.success("Tasks created", `${tasks.length} task${tasks.length === 1 ? "" : "s"} added to your board`);
       setActiveView("tasks");
@@ -621,7 +658,7 @@ export function AutonomousModeView() {
         impact: d.impact, effort: d.effort, userStory: d.userStory, tradeoffs: d.tradeoffs,
         summary: d.summary, keyInsight: d.keyInsight, recommendation: d.recommendation,
         risks: d.risks, confidence: d.confidence, strategyTheme: strategy?.theme ?? null,
-        sourceDocId: currentDocId ?? undefined, decisionMode: strictness,
+        sourceDocId: (runDocIdRef.current ?? currentDocId) ?? undefined, decisionMode: strictness,
       })));
       toast.success("All decisions saved", `${decisions.length} decisions added to your board`);
       activity.success(`Saved ${decisions.length} decisions from Autonomous Mode`);
@@ -642,7 +679,7 @@ export function AutonomousModeView() {
           summary: topDecision.summary, keyInsight: topDecision.keyInsight,
           recommendation: topDecision.recommendation, risks: topDecision.risks,
           confidence: topDecision.confidence, strategyTheme: strategy?.theme ?? null,
-          sourceDocId: currentDocId ?? undefined, decisionMode: strictness,
+          sourceDocId: (runDocIdRef.current ?? currentDocId) ?? undefined, decisionMode: strictness,
         });
         setSavedDecisionId(newId);
         return newId;
