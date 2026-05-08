@@ -244,7 +244,18 @@ async function callAI(prompt: string, context: string, externalSignal?: AbortSig
 
       if (!response.ok) {
         const errorBody = await response.text().catch(() => "");
-        throw new Error(`AI call failed (${response.status}): ${errorBody || response.statusText}`);
+        // Try to extract a human-readable message from JSON error envelopes
+        // like { error: "..." } or { message: "..." } before falling back
+        // to the raw body or HTTP status text.
+        let displayMsg = errorBody || response.statusText;
+        if (errorBody) {
+          try {
+            const parsed = JSON.parse(errorBody) as Record<string, unknown>;
+            const msg = (parsed.error ?? parsed.message) as string | undefined;
+            if (typeof msg === "string" && msg.length > 0) displayMsg = msg;
+          } catch { /* keep raw body */ }
+        }
+        throw new Error(`AI call failed (${response.status}): ${displayMsg}`);
       }
 
       // We handle non-streaming for actions to get a clean structured result

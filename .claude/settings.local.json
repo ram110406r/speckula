@@ -4,7 +4,8 @@
       "Bash(npm run *)",
       "Bash(echo \"EXIT=$?\")",
       "Bash(npx tsc *)",
-      "Bash(npx --yes firebase-tools deploy --only firestore:rules --project buildcase-f103a)"
+      "Bash(npx --yes firebase-tools deploy --only firestore:rules --project buildcase-f103a)",
+      "PowerShell(cd \"e:\\\\SPECKULA\\\\backend\"; $env:DOTENV_CONFIG_PATH = \".env\"; node --input-type=module --eval \"import dotenv from 'dotenv'; dotenv.config\\(\\); const result = await import\\('./src/lib/env.ts'\\); console.log\\('env ok'\\);\" 2>&1 | head -20)"
     ]
   }
 }

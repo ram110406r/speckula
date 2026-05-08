@@ -18,7 +18,16 @@ export async function POST(req: Request) {
       headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
     });
   }
-  const body = await req.text();
+
+  let body: string;
+  try {
+    body = await req.text();
+  } catch {
+    return new Response('Failed to read request body.', {
+      status: 400,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);

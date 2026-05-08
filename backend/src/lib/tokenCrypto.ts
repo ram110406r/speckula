@@ -24,19 +24,25 @@ export class TokenDecryptError extends Error {
 
 // Key lookup is lazy (no module-level caching) so test environments can swap
 // SLACK_TOKEN_ENCRYPTION_KEY between tests without cache-busting module reimports.
+// Accepts 64-char hex (preferred) or 44-char base64 (openssl rand -base64 32 output).
 const getKey = (_version: string): Buffer => {
   const varName = 'SLACK_TOKEN_ENCRYPTION_KEY';
-  const hex = process.env[varName];
-  if (!hex) {
+  const raw = process.env[varName];
+  if (!raw) {
     throw new Error(
       `${varName} is not set. Generate with: ` +
         `node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"`
     );
   }
-  if (hex.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(hex)) {
-    throw new Error(`${varName} must be exactly 64 hex characters (32 bytes).`);
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    return Buffer.from(raw, 'hex');
   }
-  return Buffer.from(hex, 'hex');
+  // Also accept base64-encoded 32-byte keys (openssl rand -base64 32 produces these).
+  const buf = Buffer.from(raw, 'base64');
+  if (buf.length === 32) {
+    return buf;
+  }
+  throw new Error(`${varName} must be exactly 64 hex characters (32 bytes) or a valid base64-encoded 32-byte key.`);
 };
 
 export const encryptToken = (plaintext: string): string => {

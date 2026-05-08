@@ -57,10 +57,12 @@ const envSchema = z.object({
   SLACK_REDIRECT_URI: z.string().url().optional(),
   SLACK_SIGNING_SECRET: z.string().optional(),
   // 64-char hex (32 bytes). Required when Slack integration is enabled.
-  // Generate: node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"
+  // Accepts hex (64 chars) or base64 (44 chars) encoded 32-byte keys.
+  // Generate hex:    node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"
+  // Generate base64: openssl rand -base64 32
   SLACK_TOKEN_ENCRYPTION_KEY: z
     .string()
-    .regex(/^[0-9a-fA-F]{64}$/, 'SLACK_TOKEN_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)')
+    .min(32, 'SLACK_TOKEN_ENCRYPTION_KEY must be at least 32 characters')
     .optional(),
 
   // How many days to keep PromptLog / DecisionReasoning rows (default 60).
