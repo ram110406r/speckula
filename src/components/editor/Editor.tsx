@@ -528,13 +528,13 @@ export function Editor() {
           onJump={scrollToBlock}
         />
 
-        {/* Center: blocks */}
+        {/* Center: blocks — horizontal scroll row */}
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto min-w-0 px-3 sm:px-5 py-4 sm:py-5"
+          className="flex-1 overflow-x-auto overflow-y-hidden min-w-0 px-3 sm:px-4 py-4"
         >
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground/50">
+            <div className="flex flex-col items-center justify-center h-full w-full gap-3 text-muted-foreground/50">
               <Loader2 className="h-5 w-5 animate-spin" />
               <span className="font-mono text-[11px] uppercase tracking-widest">Loading…</span>
             </div>
@@ -545,12 +545,12 @@ export function Editor() {
               onDismiss={() => setDismissedEmptyState(true)}
             />
           ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {BLOCK_DEFS.map((def, i) => (
+            <div className="flex flex-row gap-3 h-full">
+              {BLOCK_DEFS.map((def) => (
                 <div
                   key={def.key}
                   id={`block-${def.key}`}
-                  className={i === BLOCK_DEFS.length - 1 ? "xl:col-span-2" : ""}
+                  className="w-[300px] shrink-0 h-full"
                 >
                   <ResearchBlock
                     def={def}
@@ -824,13 +824,6 @@ function ResearchBlock({
 }: ResearchBlockProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
-  React.useEffect(() => {
-    const el = textareaRef.current;
-    if (!el || collapsed) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.max(96, el.scrollHeight)}px`;
-  }, [value, collapsed]);
-
   const wc = wordCount(value);
   const completion = getBlockCompletion(value, wordTarget);
 
@@ -843,10 +836,10 @@ function ResearchBlock({
     completion === "partial"  ? "bg-amber-400"   : "bg-muted-foreground/20";
 
   return (
-    <div className={`rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-card shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-border/80 transition-all duration-200 overflow-hidden group ${borderAccent}`}>
+    <div className={`h-full flex flex-col rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-card shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-border/80 transition-all duration-200 overflow-hidden group ${borderAccent}`}>
 
       {/* Block header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-border/50 bg-slate-50/60 dark:bg-muted/20 min-w-0">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-border/50 bg-slate-50/60 dark:bg-muted/20 min-w-0 shrink-0">
         <div className="flex items-center gap-2 min-w-0 overflow-hidden">
           {/* Completion dot */}
           <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor} transition-colors duration-300`} />
@@ -888,23 +881,23 @@ function ResearchBlock({
         </div>
       </div>
 
-      {/* Body — hidden when collapsed */}
-      {!collapsed && (
-        <>
-          <div className="px-4 py-3">
+      {/* Body */}
+      {!collapsed ? (
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Scrollable textarea area */}
+          <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
             <textarea
               ref={textareaRef}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               placeholder={def.placeholder}
-              className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/30 focus:outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              style={{ minHeight: 96 }}
+              className="w-full h-full min-h-[120px] resize-none bg-transparent text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/30 focus:outline-none"
             />
           </div>
 
-          {/* AI hint card */}
-          {hint && (
-            <div className="mx-4 mb-3 rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2.5">
+          {/* Bottom strip: hint card OR empty state label */}
+          {hint ? (
+            <div className="mx-3 mb-3 shrink-0 rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2.5">
               <div className="flex items-start gap-2 mb-2">
                 <Sparkles className="h-3 w-3 text-primary mt-0.5 shrink-0" />
                 <p className="text-[11px] text-foreground/80 leading-relaxed">{hint}</p>
@@ -920,22 +913,19 @@ function ResearchBlock({
                 </button>
               </div>
             </div>
-          )}
-
-          {/* Empty state hint */}
-          {completion === "empty" && !hint && (
-            <div className="px-4 pb-3">
+          ) : completion === "empty" ? (
+            <div className="px-4 pb-3 shrink-0">
               <p className="text-[10px] text-muted-foreground/35 leading-relaxed">{def.hint}</p>
             </div>
-          )}
-        </>
-      )}
-
-      {/* Collapsed preview */}
-      {collapsed && value.trim() && (
-        <div className="px-4 py-2.5">
-          <p className="text-[11px] text-muted-foreground/50 leading-relaxed line-clamp-2">{value.trim()}</p>
+          ) : null}
         </div>
+      ) : (
+        /* Collapsed: show a short preview */
+        value.trim() ? (
+          <div className="px-4 py-2.5">
+            <p className="text-[11px] text-muted-foreground/50 leading-relaxed line-clamp-3">{value.trim()}</p>
+          </div>
+        ) : null
       )}
     </div>
   );
