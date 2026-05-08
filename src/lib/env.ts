@@ -3,8 +3,13 @@
 // A missing var throws immediately — catching the error at build/startup,
 // not silently at the first user request.
 
-// Validate Firebase configuration at build time
+// Validate Firebase configuration at startup (dev only).
+// In production the vars are baked into the bundle at docker build time as
+// ARG values — they don't exist in process.env at runtime, so checking them
+// would always appear missing. Let Firebase's own SDK surface bad config.
 const validateFirebaseConfig = () => {
+  if (process.env.NODE_ENV === 'production') return;
+
   const requiredVars = [
     'NEXT_PUBLIC_FIREBASE_API_KEY',
     'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
@@ -13,24 +18,19 @@ const validateFirebaseConfig = () => {
     'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
     'NEXT_PUBLIC_FIREBASE_APP_ID',
   ];
-  
+
   const missing = requiredVars.filter(v => !process.env[v] || process.env[v]?.trim() === '');
   if (missing.length > 0 && process.env.NODE_ENV !== 'test') {
-    const msg =
+    console.warn(
       `[env] Missing Firebase configuration: ${missing.join(', ')}\n` +
-      `  Copy .env.local.example to .env.local and fill in your values from Firebase Console.`;
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(msg);
-    }
-    console.warn(msg);
+      `  Copy .env.local.example to .env.local and fill in your values from Firebase Console.`
+    );
   }
 };
 
-// Run validation once at module load time — client-side only.
-// Server-side API routes only need backendUrl(); Firebase is browser-only.
-// In the Docker runner stage NEXT_PUBLIC_* vars are not in process.env
-// (they were baked into the JS bundle during build), so validating server-side
-// would always throw and break every /api/* route in production.
+// Only run client-side in development — server-side API routes don't use
+// Firebase, and the production browser bundle has the values inlined by
+// the Docker build (not available via process.env at runtime).
 if (typeof window !== 'undefined') {
   validateFirebaseConfig();
 }
