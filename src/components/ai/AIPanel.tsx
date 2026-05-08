@@ -205,6 +205,9 @@ export function AIPanel() {
         const msg = error instanceof Error ? error.message : "";
         if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
           setRateLimitBlock(msg);
+        } else if (/50[0-9]/.test(msg)) {
+          // Backend error — back off for the full cooldown window to avoid hammering
+          lastAnalyzedAtRef.current = Date.now();
         }
         console.error("Proactive analysis failed:", error);
       } finally {

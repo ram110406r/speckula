@@ -507,7 +507,7 @@ function ResearchBlock({ def, value, onChange, hint, hintLoading, onRequestHint,
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={def.placeholder}
-          className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/30 focus:outline-none"
+          className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/30 focus:outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           style={{ minHeight: 96 }}
         />
       </div>

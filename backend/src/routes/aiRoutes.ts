@@ -80,8 +80,9 @@ const classify = (error: unknown): { status: number; message: string } => {
   const status = (error as { status?: number; statusCode?: number })?.status
     ?? (error as { status?: number; statusCode?: number })?.statusCode;
   if (typeof status === 'number') {
+    if (status === 401) return { status: 503, message: 'AI service authentication failed — verify GROQ_API_KEY.' };
     if (status === 429) return { status: 429, message: 'Upstream rate limit reached. Try again shortly.' };
-    if (status >= 500) return { status: 502, message: 'Upstream AI service error' };
+    if (status >= 400) return { status: 502, message: 'Upstream AI service error' };
   }
   return { status: 500, message: 'Internal error' };
 };
