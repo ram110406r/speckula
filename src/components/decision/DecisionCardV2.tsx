@@ -111,8 +111,7 @@ export function DecisionCardV2({
   }
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // Don't trigger focus if a button inside was clicked
-    if ((e.target as HTMLElement).closest("button")) return;
+    if ((e.target as HTMLElement).closest("button, input, textarea, select, a")) return;
     onFocus?.();
   };
 
