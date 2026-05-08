@@ -26,8 +26,12 @@ const validateFirebaseConfig = () => {
   }
 };
 
-// Run validation once at module load time
-if (typeof window === 'undefined') {
+// Run validation once at module load time — client-side only.
+// Server-side API routes only need backendUrl(); Firebase is browser-only.
+// In the Docker runner stage NEXT_PUBLIC_* vars are not in process.env
+// (they were baked into the JS bundle during build), so validating server-side
+// would always throw and break every /api/* route in production.
+if (typeof window !== 'undefined') {
   validateFirebaseConfig();
 }
 
