@@ -989,6 +989,7 @@ function normalizeDecisionSuggestion(raw: unknown): DecisionSuggestion {
 export interface ClarifyingQuestion {
   question: string;
   why: string;
+  options?: string[];
 }
 
 export const clarifyIdeaAction = async (
@@ -1707,6 +1708,53 @@ Each item max 18 words. 2-4 items per array.`;
     opportunities: Array.isArray(parsed.opportunities) ? (parsed.opportunities as string[]) : [],
     missingInfo: Array.isArray(parsed.missingInfo) ? (parsed.missingInfo as string[]) : [],
   };
+};
+
+// ── Competitor / market signals ───────────────────────────────────────────────
+
+export interface CompetitorSignal {
+  name: string;
+  category: "direct" | "indirect" | "adjacent";
+  differentiation: string;
+}
+
+export const generateCompetitorAnalysis = async (
+  idea: string,
+  signal?: AbortSignal
+): Promise<CompetitorSignal[]> => {
+  const prompt = `You are a senior product strategist.
+
+Given this product idea, identify 3-4 comparable products or competitors.
+For each, note how this idea differentiates from them.
+
+Return JSON array only:
+[{"name":"...","category":"direct|indirect|adjacent","differentiation":"one sentence"}]
+
+Rules:
+- Be specific, not generic
+- Focus on meaningful differentiation
+- No markdown, return only the JSON array`;
+
+  const raw = await callAI(prompt, idea, signal);
+  const parsed = parseJsonPayload(raw);
+  if (!Array.isArray(parsed)) return [];
+  return (parsed as Partial<CompetitorSignal>[]).filter(
+    (item): item is CompetitorSignal =>
+      typeof item.name === "string" && typeof item.differentiation === "string"
+  );
+};
+
+// ── Follow-up Q&A about a completed run ──────────────────────────────────────
+
+export const queryAboutRun = async (
+  runContext: string,
+  question: string,
+  signal?: AbortSignal
+): Promise<string> => {
+  const prompt = `You are an expert product manager. The user just completed an autonomous analysis run.
+Answer their follow-up question concisely and insightfully (3-5 sentences max).
+Do not repeat information already in the output unless directly asked.`;
+  return callAI(prompt, `Run context:\n${runContext}\n\nQuestion: ${question}`, signal);
 };
 
 export const getBlockSuggestion = async (

@@ -8,6 +8,9 @@ import {
   RotateCcw, FileText, ListTodo, Save, Cpu, HelpCircle,
   DollarSign, MapPin, Gauge, TrendingUp, TrendingDown, Activity,
   Shield, Crosshair, Rocket, Info,
+  Clock, Download, Share2, Copy, Check, X, RefreshCw, History,
+  ChevronDown, Table2, LayoutList, MessageSquare, Users, Pencil,
+  ChevronRight, ChevronUp, BookOpen, PlayCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -34,10 +37,23 @@ import {
   getDecisionModeSettings,
   setDecisionModeSettings,
   getDecisionModeMeta,
+  getRecentPastRuns,
+  publishCase,
+  createDocument,
+  saveDocument,
   type DecisionMode,
   type DecisionModeMeta,
+  type PastRunRecord,
 } from "@/lib/firebase/db";
-import { generatePRDAction, suggestTasksAction, textToTipTap } from "@/lib/ai/actions";
+import {
+  generatePRDAction,
+  suggestTasksAction,
+  textToTipTap,
+  generateCompetitorAnalysis,
+  queryAboutRun,
+  type CompetitorSignal,
+} from "@/lib/ai/actions";
+import type { AgentResumeData } from "@/lib/ai/autonomousAgent";
 import { useAppStore } from "@/store/useAppStore";
 import { toast } from "@/store/useToastStore";
 import { activity } from "@/store/useActivityStore";
@@ -88,9 +104,15 @@ function getActiveStep(state: AgentState): number {
 
 export function AutonomousModeView() {
   const { user } = useAuth();
-  const { setActiveView, currentDocId } = useAppStore();
+  const { setActiveView, currentDocId, documents, setPendingImport, markDocumentAsNew, setCurrentDocId, setDocuments } = useAppStore();
   const [idea, setIdea] = React.useState("");
-  const [depth, setDepth] = React.useState<AgentDepth>("standard");
+  const [depth, setDepth] = React.useState<AgentDepth>(() => {
+    if (typeof localStorage !== "undefined") {
+      const saved = localStorage.getItem("speckula-am-depth");
+      if (saved === "quick" || saved === "standard" || saved === "deep") return saved;
+    }
+    return "standard";
+  });
   const [chat, setChat] = React.useState<ChatEntry[]>([]);
   const [agentState, setAgentState] = React.useState<AgentState>("idle");
   const [decisions, setDecisions] = React.useState<DecisionSuggestion[]>([]);
@@ -113,8 +135,65 @@ export function AutonomousModeView() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [isConvertingToSpec, setIsConvertingToSpec] = React.useState(false);
   const [isCreatingTasks, setIsCreatingTasks] = React.useState(false);
-  const [mobileTab, setMobileTab] = React.useState<"input" | "stream" | "output">("input");
+  const [mobileTab, setMobileTab] = React.useState<"input" | "stream" | "output">(() => {
+    if (typeof sessionStorage !== "undefined") {
+      const saved = sessionStorage.getItem("speckula-am-tab");
+      if (saved === "input" || saved === "stream" || saved === "output") return saved;
+    }
+    return "input";
+  });
 
+  // item 16: elapsed timer
+  const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
+  const elapsedTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // item 18: stream filter
+  const [showThinking, setShowThinking] = React.useState(true);
+
+  // item 8: output view mode
+  const [outputView, setOutputView] = React.useState<"cards" | "table">("cards");
+
+  // item 7: expanded decision card indices
+  const [expandedDecisions, setExpandedDecisions] = React.useState<Set<number>>(new Set());
+
+  // item 13: recent ideas history
+  const [recentIdeas, setRecentIdeas] = React.useState<PastRunRecord[]>([]);
+  const [showHistory, setShowHistory] = React.useState(false);
+
+  // item 22: publish case
+  const [savedDecisionId, setSavedDecisionId] = React.useState<string | null>(null);
+  const [isPublishing, setIsPublishing] = React.useState(false);
+
+  // item 4: save all decisions
+  const [isSavingAll, setIsSavingAll] = React.useState(false);
+
+  // item 23: send to editor
+  const [isSendingToEditor, setIsSendingToEditor] = React.useState(false);
+
+  // item 3: follow-up Q&A
+  const [followUpText, setFollowUpText] = React.useState("");
+  const [followUpAnswer, setFollowUpAnswer] = React.useState<string | null>(null);
+  const [isFollowingUp, setIsFollowingUp] = React.useState(false);
+  const followUpAbortRef = React.useRef<AbortController | null>(null);
+
+  // item 11: competitor signals
+  const [competitors, setCompetitors] = React.useState<CompetitorSignal[]>([]);
+  const [isLoadingCompetitors, setIsLoadingCompetitors] = React.useState(false);
+
+  // item 5: what-if flipped assumptions
+  const [flippedAssumptions, setFlippedAssumptions] = React.useState<Set<number>>(new Set());
+
+  // item 10: roadmap editing
+  const [editingPhase, setEditingPhase] = React.useState<number | null>(null);
+  const [editingRoadmap, setEditingRoadmap] = React.useState<typeof roadmap>([]);
+
+  // item 9: accuracy history (for sparkline)
+  const [accuracyHistory, setAccuracyHistory] = React.useState<number[]>([]);
+
+  // item 1: resume data from last stopped/errored run
+  const resumeDataRef = React.useRef<AgentResumeData>({});
+
+  // item 14: depth — persisted to localStorage
   const isRunning = agentState !== "idle" && agentState !== "stopped" && agentState !== "error" && agentState !== "output";
   const isDone = agentState === "output";
 
@@ -132,6 +211,31 @@ export function AutonomousModeView() {
     // so the UI hint is accurate before the user kicks off a new analysis.
     setRollbacks(getRollbackDecisions());
   }, []);
+
+  // item 16: elapsed timer
+  React.useEffect(() => {
+    if (isRunning) {
+      setElapsedSeconds(0);
+      elapsedTimerRef.current = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    } else {
+      if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
+    }
+    return () => { if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current); };
+  }, [isRunning]);
+
+  // item 13: load recent ideas from Firestore
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    void getRecentPastRuns(user.uid, 8).then(setRecentIdeas);
+  }, [user?.uid]);
+
+  // item 25: persist mobile tab to sessionStorage
+  React.useEffect(() => {
+    if (typeof sessionStorage !== "undefined") sessionStorage.setItem("speckula-am-tab", mobileTab);
+  }, [mobileTab]);
+
+  // item 10: sync editable roadmap when roadmap changes
+  React.useEffect(() => { setEditingRoadmap(roadmap); }, [roadmap]);
 
   // v2.7+v2.8: hydrate decision-mode settings (mode + auto flag) and the
   // recommendation metadata (score + lastSwitchAt) from Firestore on mount.
@@ -187,31 +291,38 @@ export function AutonomousModeView() {
         break;
       case "decisions":
         setDecisions(event.decisions);
+        resumeDataRef.current.decisions = event.decisions;
         appendEntry({ kind: "system", text: `Generated ${event.decisions.length} decisions.` });
         break;
       case "strategy":
         setStrategy(event.strategy);
+        resumeDataRef.current.strategy = event.strategy;
         appendEntry({ kind: "system", text: `Strategic theme: "${event.strategy.theme}"` });
         break;
       case "roadmap":
         setRoadmap(event.roadmap);
+        resumeDataRef.current.roadmap = event.roadmap;
         appendEntry({ kind: "system", text: `Drafted a ${event.roadmap.length}-phase roadmap.` });
         break;
       case "topDecision":
         setTopDecision(event.decision);
+        resumeDataRef.current.topDecision = event.decision;
         break;
       case "assumptions":
         setAssumptions(event.assumptions);
+        resumeDataRef.current.assumptions = event.assumptions;
         appendEntry({ kind: "system", text: `Surfaced ${event.assumptions.length} hidden assumption${event.assumptions.length === 1 ? "" : "s"}.` });
         break;
       case "verdict":
         setVerdict(event.verdict);
+        resumeDataRef.current.verdict = event.verdict;
         break;
       case "memoryLoaded":
         setPastIdeas(event.pastIdeas);
         break;
       case "expectedOutcome":
         setPredictedOutcome(event.outcome);
+        resumeDataRef.current.predictedOutcome = event.outcome;
         if (event.promptRef) {
           setPredictionPromptRef({
             id: event.promptRef.id,
@@ -269,10 +380,11 @@ export function AutonomousModeView() {
     }
   }, [appendEntry, user?.uid]);
 
-  const start = React.useCallback(async () => {
+  const startRun = React.useCallback(async (resumeFrom?: AgentResumeData) => {
     const trimmed = idea.trim();
     if (!trimmed || isRunning) return;
 
+    if (!resumeFrom) resumeDataRef.current = {};
     setChat([]);
     setDecisions([]);
     setStrategy(null);
@@ -287,9 +399,14 @@ export function AutonomousModeView() {
     setPastIdeas([]);
     setPendingQuestion(null);
     setAnswerText("");
+    setFlippedAssumptions(new Set());
+    setSavedDecisionId(null);
+    setFollowUpAnswer(null);
+    setFollowUpText("");
+    setCompetitors([]);
     setAgentState("understand_idea");
     setMobileTab("stream");
-    appendEntry({ kind: "user", text: trimmed });
+    appendEntry({ kind: "user", text: resumeFrom ? `↩ Resuming: ${trimmed}` : trimmed });
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -310,6 +427,7 @@ export function AutonomousModeView() {
           (modeMeta?.switchHistory ?? [])
             .map((t) => t?.toDate?.()?.getTime?.() ?? null)
             .filter((n): n is number => typeof n === "number"),
+        resumeData: resumeFrom,
         awaitUserResponse: (question) =>
           new Promise<string>((resolve, reject) => {
             answerResolverRef.current = resolve;
@@ -323,6 +441,9 @@ export function AutonomousModeView() {
       answerRejecterRef.current = null;
     }
   }, [idea, depth, isRunning, appendEntry, handleAgentEvent, user?.uid, strictness, autoMode, modeMeta]);
+
+  const start = React.useCallback(() => startRun(), [startRun]);
+  const resumeRun = React.useCallback(() => startRun({ ...resumeDataRef.current }), [startRun]);
 
   const stop = React.useCallback(() => {
     abortRef.current?.abort();
@@ -382,7 +503,7 @@ export function AutonomousModeView() {
           }
         : undefined;
 
-      await saveDecision(user.uid, {
+      const newId = await saveDecision(user.uid, {
         title: topDecision.title,
         justification: topDecision.justification,
         priority: topDecision.priority,
@@ -402,6 +523,7 @@ export function AutonomousModeView() {
         predictionPromptRef: predictionPromptRef ?? undefined,
         decisionMode: strictness,
       });
+      setSavedDecisionId(newId);
       toast.success("Decision saved", topDecision.title);
       activity.success("Decision saved from Autonomous Mode");
     } catch {
@@ -483,6 +605,149 @@ export function AutonomousModeView() {
     }
   }, [user, topDecision, strategy, roadmap, decisions, isCreatingTasks, currentDocId, setActiveView]);
 
+  // item 14: depth change with persistence
+  const handleDepthChange = React.useCallback((d: AgentDepth) => {
+    setDepth(d);
+    if (typeof localStorage !== "undefined") localStorage.setItem("speckula-am-depth", d);
+  }, []);
+
+  // item 4: save all decisions
+  const handleSaveAllDecisions = React.useCallback(async () => {
+    if (!user || !decisions.length || isSavingAll) return;
+    setIsSavingAll(true);
+    try {
+      await Promise.all(decisions.map((d) => saveDecision(user.uid, {
+        title: d.title, justification: d.justification, priority: d.priority,
+        impact: d.impact, effort: d.effort, userStory: d.userStory, tradeoffs: d.tradeoffs,
+        summary: d.summary, keyInsight: d.keyInsight, recommendation: d.recommendation,
+        risks: d.risks, confidence: d.confidence, strategyTheme: strategy?.theme ?? null,
+        sourceDocId: currentDocId ?? undefined, decisionMode: strictness,
+      })));
+      toast.success("All decisions saved", `${decisions.length} decisions added to your board`);
+      activity.success(`Saved ${decisions.length} decisions from Autonomous Mode`);
+    } catch { toast.error("Failed to save decisions"); }
+    finally { setIsSavingAll(false); }
+  }, [user, decisions, strategy, isSavingAll, currentDocId, strictness]);
+
+  // item 22: save decision then publish as public case
+  const handlePublishCase = React.useCallback(async () => {
+    if (!user || !topDecision || isPublishing) return;
+    setIsPublishing(true);
+    try {
+      const id = savedDecisionId ?? await (async () => {
+        const newId = await saveDecision(user.uid, {
+          title: topDecision.title, justification: topDecision.justification,
+          priority: topDecision.priority, impact: topDecision.impact, effort: topDecision.effort,
+          userStory: topDecision.userStory, tradeoffs: topDecision.tradeoffs,
+          summary: topDecision.summary, keyInsight: topDecision.keyInsight,
+          recommendation: topDecision.recommendation, risks: topDecision.risks,
+          confidence: topDecision.confidence, strategyTheme: strategy?.theme ?? null,
+          sourceDocId: currentDocId ?? undefined, decisionMode: strictness,
+        });
+        setSavedDecisionId(newId);
+        return newId;
+      })();
+      await publishCase(user.uid, id, {
+        title: topDecision.title,
+        context: topDecision.justification,
+        evidence: decisions.map((d) => d.title),
+        insights: assumptions,
+        decision: topDecision.recommendation ?? topDecision.title,
+        scoring: { impact: topDecision.impact, effort: topDecision.effort, confidence: topDecision.confidence ?? 5, demand: topDecision.demand ?? 5, score: topDecision.impact, reasoning: topDecision.summary },
+        risks: topDecision.risks ?? [],
+        verdict: { recommendation: verdict?.label === "PROCEED" ? "Build" : verdict?.label === "DO_NOT_BUILD" ? "Delay" : "Validate", rationale: verdict?.reason ?? "" },
+      }, { title: topDecision.title, score: topDecision.impact, priority: topDecision.priority });
+      toast.success("Case published", "Visible at your public profile");
+    } catch { toast.error("Failed to publish case"); }
+    finally { setIsPublishing(false); }
+  }, [user, topDecision, decisions, assumptions, verdict, strategy, savedDecisionId, isPublishing, currentDocId, strictness]);
+
+  // item 23: send run summary to editor as pending import
+  const handleSendToEditor = React.useCallback(async () => {
+    if (!user || !topDecision || isSendingToEditor) return;
+    setIsSendingToEditor(true);
+    try {
+      const parts: string[] = [`# Autonomous Run: ${topDecision.title}`];
+      if (topDecision.keyInsight) parts.push(`**Key Insight:** ${topDecision.keyInsight}`);
+      if (topDecision.recommendation) parts.push(`**Recommendation:** ${topDecision.recommendation}`);
+      if (verdict) parts.push(`**Verdict:** ${verdict.label} — ${verdict.reason}`);
+      if (predictedOutcome) parts.push(`**Predicted Outcome:** ${predictedOutcome.metric} → ${predictedOutcome.target}${predictedOutcome.unit ?? ""} in ${predictedOutcome.timeframeDays}d`);
+      if (assumptions.length) parts.push(`**Assumptions:**\n${assumptions.map((a) => `- ${a}`).join("\n")}`);
+      if (strategy) parts.push(`**Strategy:** ${strategy.theme}\n${strategy.rationale}`);
+      const docId = await createDocument(user.uid, `Run: ${topDecision.title}`);
+      await saveDocument(user.uid, docId, { title: `Run: ${topDecision.title}` });
+      markDocumentAsNew(docId);
+      setCurrentDocId(docId);
+      const allDocs = [{ id: docId, title: `Run: ${topDecision.title}`, updatedAt: null }, ...documents];
+      setDocuments(allDocs);
+      setPendingImport({ text: parts.join("\n\n"), title: null });
+      setActiveView("editor");
+      toast.success("Sent to editor", `Run: ${topDecision.title}`);
+    } catch { toast.error("Failed to send to editor"); }
+    finally { setIsSendingToEditor(false); }
+  }, [user, topDecision, verdict, predictedOutcome, assumptions, strategy, isSendingToEditor, documents, setDocuments, setPendingImport, markDocumentAsNew, setCurrentDocId, setActiveView]);
+
+  // item 21: export run as markdown
+  const handleExport = React.useCallback(() => {
+    if (!topDecision) return;
+    const lines: string[] = [`# Autonomous Run: ${topDecision.title}`, `*${new Date().toLocaleDateString()}*`, ""];
+    if (verdict) lines.push(`## Verdict: ${verdict.label}`, verdict.reason, "");
+    if (predictedOutcome) lines.push(`## Predicted Outcome`, `**${predictedOutcome.metric}:** ${predictedOutcome.baseline ?? "?"}${predictedOutcome.unit ?? ""} → ${predictedOutcome.target}${predictedOutcome.unit ?? ""} in ${predictedOutcome.timeframeDays}d (${Math.round(predictedOutcome.confidence * 100)}% confidence)`, "");
+    lines.push("## Decisions", ...decisions.map((d) => `### ${d.title}\n${d.summary || d.justification}\n- Impact: ${d.impact} | Effort: ${d.effort}\n${d.risks?.length ? `- Risks: ${d.risks.join("; ")}` : ""}`), "");
+    if (assumptions.length) lines.push("## Assumptions", ...assumptions.map((a) => `- ${a}`), "");
+    if (strategy) lines.push("## Strategy", `**${strategy.theme}**`, strategy.rationale, "");
+    if (roadmap.length) lines.push("## Roadmap", ...roadmap.map((p, i) => `### Phase ${i + 1}: ${p.name}\n${p.goal}\n${p.deliverables.map((d) => `- ${d}`).join("\n")}`));
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `run-${topDecision.title.toLowerCase().replace(/\s+/g, "-")}.md`; a.click();
+    URL.revokeObjectURL(url);
+  }, [topDecision, verdict, predictedOutcome, decisions, assumptions, strategy, roadmap]);
+
+  // item 11: load competitor signals
+  const handleLoadCompetitors = React.useCallback(async () => {
+    if (!idea.trim() || isLoadingCompetitors) return;
+    setIsLoadingCompetitors(true);
+    try {
+      const results = await generateCompetitorAnalysis(idea.trim());
+      setCompetitors(results);
+    } catch { toast.error("Failed to load competitor signals"); }
+    finally { setIsLoadingCompetitors(false); }
+  }, [idea, isLoadingCompetitors]);
+
+  // item 3: follow-up Q&A
+  const handleFollowUp = React.useCallback(async () => {
+    const q = followUpText.trim();
+    if (!q || isFollowingUp) return;
+    setIsFollowingUp(true);
+    setFollowUpAnswer(null);
+    const ctrl = new AbortController();
+    followUpAbortRef.current = ctrl;
+    try {
+      const ctx = [
+        topDecision ? `Top Decision: ${topDecision.title}\n${topDecision.justification}` : "",
+        verdict ? `Verdict: ${verdict.label} — ${verdict.reason}` : "",
+        strategy ? `Strategy: ${strategy.theme}\n${strategy.rationale}` : "",
+        assumptions.length ? `Assumptions:\n${assumptions.join("\n")}` : "",
+        predictedOutcome ? `Predicted: ${predictedOutcome.metric} → ${predictedOutcome.target}${predictedOutcome.unit ?? ""}` : "",
+      ].filter(Boolean).join("\n\n");
+      const answer = await queryAboutRun(ctx, q, ctrl.signal);
+      setFollowUpAnswer(answer);
+      setFollowUpText("");
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") toast.error("Follow-up failed");
+    } finally { setIsFollowingUp(false); followUpAbortRef.current = null; }
+  }, [followUpText, isFollowingUp, topDecision, verdict, strategy, assumptions, predictedOutcome]);
+
+  // item 5: re-run with flipped assumptions injected into the idea
+  const handleWhatIfRun = React.useCallback(() => {
+    if (!flippedAssumptions.size || isRunning) return;
+    const flipped = assumptions.filter((_, i) => flippedAssumptions.has(i));
+    const suffix = `\n\nChallenge these assumptions (treat as potentially false):\n${flipped.map((a) => `- ${a}`).join("\n")}`;
+    setIdea((prev) => prev.trim() + suffix);
+    setFlippedAssumptions(new Set());
+    toast.success("Assumptions injected", "Press Analyze to run the what-if scenario");
+  }, [flippedAssumptions, assumptions, isRunning]);
+
   const activeStep = getActiveStep(agentState);
   const hasOutput = decisions.length > 0 || !!strategy || roadmap.length > 0 || !!verdict || !!predictedOutcome;
 
@@ -534,7 +799,19 @@ export function AutonomousModeView() {
       </div>
 
       {/* ── Three-panel body ── */}
-      <div className="flex-1 flex overflow-hidden">
+      <div
+        className="flex-1 flex overflow-hidden"
+        onTouchStart={(e) => { (e.currentTarget as HTMLDivElement & { _touchX?: number })._touchX = e.touches[0].clientX; }}
+        onTouchEnd={(e) => {
+          const el = e.currentTarget as HTMLDivElement & { _touchX?: number };
+          const dx = e.changedTouches[0].clientX - (el._touchX ?? 0);
+          if (Math.abs(dx) < 40) return;
+          const tabs: Array<"input" | "stream" | "output"> = ["input", "stream", "output"];
+          const idx = tabs.indexOf(mobileTab);
+          if (dx < 0 && idx < 2) setMobileTab(tabs[idx + 1]);
+          if (dx > 0 && idx > 0) setMobileTab(tabs[idx - 1]);
+        }}
+      >
 
         {/* LEFT: Command input + mode cards + stepper */}
         <aside className={`${mobileTab !== "input" ? "hidden lg:flex" : "flex"} w-full lg:w-[272px] lg:shrink-0 flex-col border-r border-border bg-card overflow-y-auto custom-scrollbar`}>
@@ -542,9 +819,48 @@ export function AutonomousModeView() {
 
             {/* Command input */}
             <div className="space-y-1.5">
-              <label className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">
-                What do you want to build?
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">
+                  What do you want to build?
+                </label>
+                <div className="flex items-center gap-1.5">
+                  {/* item 2: doc context indicator */}
+                  {currentDocId && documents.find((d) => d.id === currentDocId) && (
+                    <span className="inline-flex items-center gap-1 font-mono text-[9px] text-primary/60 border border-primary/20 rounded px-1.5 py-0.5">
+                      <BookOpen className="h-2.5 w-2.5" />
+                      {documents.find((d) => d.id === currentDocId)?.title?.slice(0, 14) ?? "Doc"}
+                    </span>
+                  )}
+                  {/* item 13: history dropdown */}
+                  {recentIdeas.length > 0 && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowHistory((v) => !v)}
+                        disabled={isRunning}
+                        className="flex items-center gap-1 p-1 rounded text-muted-foreground/50 hover:text-foreground disabled:opacity-40 transition-colors"
+                        title="Recent ideas"
+                      >
+                        <History className="h-3 w-3" />
+                      </button>
+                      {showHistory && (
+                        <div className="absolute right-0 top-6 z-20 w-64 rounded-lg border border-border bg-card shadow-lg p-1">
+                          {recentIdeas.map((r, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => { setIdea(r.idea); setShowHistory(false); }}
+                              className="w-full text-left px-3 py-2 rounded-md text-[11px] text-foreground/80 hover:bg-muted truncate"
+                            >
+                              {r.idea}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
               <textarea
                 value={idea}
                 onChange={(e) => setIdea(e.target.value)}
@@ -559,6 +875,20 @@ export function AutonomousModeView() {
                 }}
                 className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:opacity-50 placeholder:text-muted-foreground/40"
               />
+              {/* item 12: idea templates */}
+              <div className="flex flex-wrap gap-1">
+                {[["New feature", "We want to add a feature that helps users…"], ["Pivot", "We're considering pivoting from… to…"], ["0→1", "We're building a brand-new product that solves…"], ["Pricing change", "We want to change our pricing model to…"]].map(([label, template]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={isRunning}
+                    onClick={() => setIdea((prev) => prev.trim() ? prev : template)}
+                    className="px-2 py-0.5 rounded border border-border/60 font-mono text-[9px] text-muted-foreground/60 hover:text-foreground hover:border-border transition-all disabled:opacity-40"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <p className="font-mono text-[9px] text-muted-foreground/35">⌘↵ to run</p>
             </div>
 
@@ -575,7 +905,7 @@ export function AutonomousModeView() {
                     <button
                       key={opt.id}
                       type="button"
-                      onClick={() => !isRunning && setDepth(opt.id)}
+                      onClick={() => !isRunning && handleDepthChange(opt.id)}
                       disabled={isRunning}
                       title={opt.hint}
                       className={`w-full flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
@@ -632,11 +962,16 @@ export function AutonomousModeView() {
               {(() => {
                 if (autoMode || !modeMeta) return null;
                 if (modeMeta.recommendedMode === strictness) return null;
-                const currentScore = (modeMeta as DecisionModeMeta & { score?: number }).score;
-                if (typeof currentScore !== "number" || !Number.isFinite(currentScore)) return null;
-                // Heuristic improvement % — score deltas across modes typically
-                // sit in the [0, 0.3] range, so ×100 gives a friendly number.
-                const deltaText = `recommended by your outcome history`;
+                const metaAny = modeMeta as DecisionModeMeta & { score?: number; previousScore?: number };
+                const recScore = metaAny.score;
+                const prevScore = metaAny.previousScore;
+                if (typeof recScore !== "number" || !Number.isFinite(recScore)) return null;
+                const deltaPct = typeof prevScore === "number" && Number.isFinite(prevScore) && prevScore > 0
+                  ? Math.round(((recScore - prevScore) / prevScore) * 100)
+                  : null;
+                const deltaText = deltaPct !== null && deltaPct > 0
+                  ? `+${deltaPct}% accuracy vs ${strictness}`
+                  : `better calibration than ${strictness}`;
                 return (
                   <p className="font-mono text-[9px] text-success/80 leading-snug">
                     Recommended: <span className="capitalize font-medium">{modeMeta.recommendedMode}</span> — {deltaText}
@@ -645,17 +980,25 @@ export function AutonomousModeView() {
               })()}
             </div>
 
-            {/* Analyze button */}
-            <button
-              onClick={start}
-              disabled={!idea.trim() || isRunning}
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-mono text-[12px] font-medium text-primary-foreground bg-primary hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isRunning
-                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing…</>
-                : <><Sparkles className="h-3.5 w-3.5" /> Analyze</>
-              }
-            </button>
+            {/* Analyze button + elapsed time (item 16) */}
+            <div className="space-y-1">
+              <button
+                onClick={start}
+                disabled={!idea.trim() || isRunning}
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-mono text-[12px] font-medium text-primary-foreground bg-primary hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isRunning
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing…</>
+                  : <><Sparkles className="h-3.5 w-3.5" /> Analyze</>
+                }
+              </button>
+              {isRunning && (
+                <div className="flex items-center justify-center gap-1 font-mono text-[9px] text-muted-foreground/50">
+                  <Clock className="h-2.5 w-2.5" />
+                  <span>{Math.floor(elapsedSeconds / 60).toString().padStart(2, "0")}:{(elapsedSeconds % 60).toString().padStart(2, "0")}</span>
+                </div>
+              )}
+            </div>
 
             {/* Stepper */}
             {agentState !== "idle" && (
@@ -716,8 +1059,18 @@ export function AutonomousModeView() {
 
         {/* CENTER: Agent stream */}
         <section className={`${mobileTab !== "stream" ? "hidden lg:flex" : "flex"} flex-col border-r border-border overflow-hidden w-full lg:w-[340px] lg:shrink-0`}>
-          <div className="px-4 py-2.5 border-b border-border shrink-0">
+          <div className="px-4 py-2.5 border-b border-border shrink-0 flex items-center justify-between">
             <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/50">Agent stream</span>
+            {/* item 18: stream filter toggle */}
+            <button
+              type="button"
+              onClick={() => setShowThinking((v) => !v)}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[9px] border transition-all ${showThinking ? "border-border text-muted-foreground/60 bg-transparent" : "border-primary/30 text-primary bg-primary/5"}`}
+              title={showThinking ? "Hide thinking entries" : "Show thinking entries"}
+            >
+              <Brain className="h-2.5 w-2.5" />
+              {showThinking ? "All" : "Events only"}
+            </button>
           </div>
 
           <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-2.5 custom-scrollbar">
@@ -733,7 +1086,7 @@ export function AutonomousModeView() {
               </div>
             )}
 
-            {chat.map((entry) => (
+            {chat.filter((e) => showThinking || e.kind !== "thinking").map((entry) => (
               <StreamEntry key={entry.id} entry={entry} />
             ))}
 
@@ -753,6 +1106,28 @@ export function AutonomousModeView() {
             )}
           </div>
 
+          {/* item 20: error/stopped retry + resume */}
+          {(agentState === "error" || agentState === "stopped") && (
+            <div className="border-t border-border p-3 bg-card shrink-0 flex items-center gap-2">
+              <button
+                onClick={start}
+                disabled={!idea.trim()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40"
+              >
+                <RefreshCw className="h-3 w-3" /> Retry fresh
+              </button>
+              {Object.keys(resumeDataRef.current).length > 0 && (
+                <button
+                  onClick={resumeRun}
+                  disabled={!idea.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-all disabled:opacity-40"
+                >
+                  <PlayCircle className="h-3 w-3" /> Resume
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Q&A answer box */}
           {pendingQuestion && (
             <div className="border-t border-border p-3 bg-primary/[0.04] shrink-0">
@@ -762,6 +1137,21 @@ export function AutonomousModeView() {
                   {pendingQuestion.why ?? "Your answer is needed to proceed."}
                 </p>
               </div>
+              {/* item 17: suggested answers */}
+              {pendingQuestion.options && pendingQuestion.options.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {pendingQuestion.options.map((opt, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { setAnswerText(opt); }}
+                      className="px-2.5 py-1 rounded-full border border-primary/25 bg-primary/5 font-mono text-[10px] text-primary hover:bg-primary/10 transition-all"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-2">
                 <Input
                   value={answerText}
@@ -787,11 +1177,18 @@ export function AutonomousModeView() {
 
         {/* RIGHT: Intelligence output */}
         <section className={`${mobileTab !== "output" ? "hidden lg:flex" : "flex"} flex-1 flex-col overflow-hidden`}>
-          <div className="px-6 py-2.5 border-b border-border shrink-0 flex items-center justify-between">
+          <div className="px-6 py-2.5 border-b border-border shrink-0 flex items-center justify-between gap-2">
             <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/50">Intelligence output</span>
-            {isDone && (
-              <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-success font-medium">Complete</span>
-            )}
+            <div className="flex items-center gap-2">
+              {/* item 8: view toggle */}
+              {decisions.length > 0 && (
+                <div className="flex items-center rounded border border-border p-0.5 gap-0.5">
+                  <button type="button" onClick={() => setOutputView("cards")} className={`p-1 rounded transition-colors ${outputView === "cards" ? "bg-muted text-foreground" : "text-muted-foreground/50 hover:text-foreground"}`} title="Card view"><LayoutList className="h-3 w-3" /></button>
+                  <button type="button" onClick={() => setOutputView("table")} className={`p-1 rounded transition-colors ${outputView === "table" ? "bg-muted text-foreground" : "text-muted-foreground/50 hover:text-foreground"}`} title="Table view"><Table2 className="h-3 w-3" /></button>
+                </div>
+              )}
+              {isDone && <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-success font-medium">Complete</span>}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -801,46 +1198,114 @@ export function AutonomousModeView() {
               <OutputPanel
                 decisions={decisions}
                 strategy={strategy}
-                roadmap={roadmap}
+                roadmap={editingRoadmap}
                 topDecision={topDecision}
                 assumptions={assumptions}
                 verdict={verdict}
                 predictedOutcome={predictedOutcome}
                 confidenceExplanation={confidenceExplanation}
+                competitors={competitors}
                 isRunning={isRunning}
                 depth={depth}
+                outputView={outputView}
+                expandedDecisions={expandedDecisions}
+                onToggleExpand={(i) => setExpandedDecisions((prev) => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; })}
+                flippedAssumptions={flippedAssumptions}
+                onFlipAssumption={(i) => setFlippedAssumptions((prev) => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; })}
+                editingPhase={editingPhase}
+                onEditPhase={setEditingPhase}
+                onUpdatePhase={(i, field, value) => setEditingRoadmap((prev) => prev.map((p, idx) => idx === i ? { ...p, [field]: value } : p))}
+                accuracyHistory={accuracyHistory}
               />
             )}
           </div>
 
+          {/* item 3: follow-up Q&A + item 5: what-if button */}
+          {isDone && (
+            <div className="border-t border-border shrink-0 bg-card/50">
+              {/* what-if re-run trigger */}
+              {flippedAssumptions.size > 0 && (
+                <div className="px-4 pt-3 pb-1 flex items-center gap-2">
+                  <AlertTriangle className="h-3 w-3 text-warning shrink-0" />
+                  <span className="text-[11px] text-foreground/70 flex-1">{flippedAssumptions.size} assumption(s) flipped.</span>
+                  <button onClick={handleWhatIfRun} className="flex items-center gap-1 px-2.5 py-1 rounded-[4px] font-mono text-[10px] font-medium border border-warning/40 text-warning bg-warning/5 hover:bg-warning/10 transition-all">
+                    <RefreshCw className="h-2.5 w-2.5" /> What-if
+                  </button>
+                </div>
+              )}
+              {/* follow-up Q&A */}
+              <div className="px-4 py-3 space-y-2">
+                <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/40 flex items-center gap-1">
+                  <MessageSquare className="h-2.5 w-2.5" /> Ask a follow-up
+                </div>
+                {followUpAnswer && (
+                  <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-foreground/80 leading-relaxed">
+                    {followUpAnswer}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    value={followUpText}
+                    onChange={(e) => setFollowUpText(e.target.value)}
+                    placeholder="Ask about this run…"
+                    className="flex-1 h-7 text-xs"
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleFollowUp(); } }}
+                  />
+                  <button
+                    onClick={handleFollowUp}
+                    disabled={!followUpText.trim() || isFollowingUp}
+                    className="flex items-center gap-1 px-2.5 h-7 rounded-[4px] font-mono text-[10px] font-medium text-primary-foreground bg-primary hover:opacity-90 disabled:opacity-40 transition-all"
+                  >
+                    {isFollowingUp ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Send className="h-2.5 w-2.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Action buttons once complete */}
           {isDone && (
-            <div className="border-t border-border p-4 shrink-0 bg-card">
+            <div className="border-t border-border p-4 shrink-0 bg-card space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/50 mr-1">Actions</span>
-                <button
-                  onClick={handleSaveDecision}
-                  disabled={!topDecision || isSaving}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                >
+                <button onClick={handleSaveDecision} disabled={!topDecision || isSaving} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                   {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                   {isSaving ? "Saving…" : "Save Decision"}
                 </button>
-                <button
-                  onClick={handleConvertToSpec}
-                  disabled={!topDecision || isConvertingToSpec}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                >
+                {/* item 4: save all */}
+                <button onClick={handleSaveAllDecisions} disabled={!decisions.length || isSavingAll} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  {isSavingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                  {isSavingAll ? "Saving…" : `Save All (${decisions.length})`}
+                </button>
+                <button onClick={handleConvertToSpec} disabled={!topDecision || isConvertingToSpec} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                   {isConvertingToSpec ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
                   {isConvertingToSpec ? "Creating spec…" : "Convert to Spec"}
                 </button>
-                <button
-                  onClick={handleCreateTasks}
-                  disabled={!topDecision || isCreatingTasks}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                >
+                <button onClick={handleCreateTasks} disabled={!topDecision || isCreatingTasks} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                   {isCreatingTasks ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListTodo className="h-3 w-3" />}
                   {isCreatingTasks ? "Creating tasks…" : "Create Tasks"}
+                </button>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/30 mr-1">More</span>
+                {/* item 23: send to editor */}
+                <button onClick={handleSendToEditor} disabled={!topDecision || isSendingToEditor} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  {isSendingToEditor ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookOpen className="h-3 w-3" />}
+                  {isSendingToEditor ? "Sending…" : "Send to Editor"}
+                </button>
+                {/* item 22: publish case */}
+                <button onClick={handlePublishCase} disabled={!topDecision || isPublishing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  {isPublishing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Share2 className="h-3 w-3" />}
+                  {isPublishing ? "Publishing…" : "Share as Case"}
+                </button>
+                {/* item 21: export markdown */}
+                <button onClick={handleExport} disabled={!topDecision} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Download className="h-3 w-3" /> Export .md
+                </button>
+                {/* item 11: competitor signals */}
+                <button onClick={handleLoadCompetitors} disabled={isLoadingCompetitors || !idea.trim()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  {isLoadingCompetitors ? <Loader2 className="h-3 w-3 animate-spin" /> : <Users className="h-3 w-3" />}
+                  {isLoadingCompetitors ? "Loading…" : "Market Signals"}
                 </button>
               </div>
             </div>
@@ -1024,11 +1489,21 @@ interface OutputPanelProps {
   verdict: Verdict | null;
   predictedOutcome: PredictedOutcome | null;
   confidenceExplanation: ConfidenceExplanationItem[];
+  competitors: CompetitorSignal[];
   isRunning: boolean;
   depth: AgentDepth;
+  outputView: "cards" | "table";
+  expandedDecisions: Set<number>;
+  onToggleExpand: (i: number) => void;
+  flippedAssumptions: Set<number>;
+  onFlipAssumption: (i: number) => void;
+  editingPhase: number | null;
+  onEditPhase: (i: number | null) => void;
+  onUpdatePhase: (i: number, field: string, value: string) => void;
+  accuracyHistory: number[];
 }
 
-function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, verdict, predictedOutcome, confidenceExplanation, isRunning, depth }: OutputPanelProps) {
+function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, verdict, predictedOutcome, confidenceExplanation, competitors, isRunning, depth, outputView, expandedDecisions, onToggleExpand, flippedAssumptions, onFlipAssumption, editingPhase, onEditPhase, onUpdatePhase, accuracyHistory }: OutputPanelProps) {
   return (
     <div className="p-6 space-y-5 max-w-2xl">
 
@@ -1063,12 +1538,30 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
       {/* Expected outcome (Stage 5) */}
       {predictedOutcome && <ExpectedOutcomeBlock outcome={predictedOutcome} />}
 
-      {/* Evidence block */}
-      {decisions.length > 0 && (
+      {/* item 8: decisions as table or cards */}
+      {decisions.length > 0 && outputView === "table" ? (
+        <OutputBlock label="Evidence" icon={Compass}>
+          <DecisionTable decisions={decisions} />
+        </OutputBlock>
+      ) : decisions.length > 0 ? (
         <OutputBlock label="Evidence" icon={Compass}>
           <div className="space-y-2.5">
             {decisions.map((d, i) => (
-              <DecisionCard key={`${d.title}-${i}`} decision={d} />
+              <DecisionCard key={`${d.title}-${i}`} decision={d} expanded={expandedDecisions.has(i)} onToggleExpand={() => onToggleExpand(i)} />
+            ))}
+          </div>
+        </OutputBlock>
+      ) : null}
+
+      {/* item 6: risks section */}
+      {decisions.some((d) => d.risks && d.risks.length > 0) && (
+        <OutputBlock label="Risks" icon={AlertTriangle}>
+          <div className="space-y-1.5">
+            {decisions.flatMap((d) => (d.risks ?? []).map((r) => ({ risk: r, title: d.title }))).map(({ risk, title }, i) => (
+              <div key={i} className="flex items-start gap-2 text-[11px]">
+                <AlertTriangle className="h-2.5 w-2.5 text-destructive/60 mt-0.5 shrink-0" />
+                <span className="text-foreground/75 leading-relaxed">{title}: {risk}</span>
+              </div>
             ))}
           </div>
         </OutputBlock>
@@ -1123,12 +1616,24 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         <OutputBlock label="Argument" icon={Brain}>
           {assumptions.length > 0 && (
             <div className="rounded-lg border border-warning/25 bg-warning/[0.05] p-3 mb-2.5">
-              <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-warning mb-2">Hidden assumptions</div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-warning">Hidden assumptions</div>
+                {flippedAssumptions.size > 0 && (
+                  <span className="font-mono text-[9px] text-primary">{flippedAssumptions.size} flipped for what-if</span>
+                )}
+              </div>
               <ul className="space-y-1.5">
                 {assumptions.map((a, i) => (
                   <li key={i} className="flex items-start gap-2 text-[11px] text-foreground/80 leading-relaxed">
-                    <AlertTriangle className="h-2.5 w-2.5 text-warning/80 mt-0.5 shrink-0" />
-                    <span>{a}</span>
+                    <button
+                      type="button"
+                      onClick={() => onFlipAssumption(i)}
+                      className={`mt-0.5 shrink-0 transition-colors ${flippedAssumptions.has(i) ? "text-primary" : "text-warning/80 hover:text-primary"}`}
+                      title={flippedAssumptions.has(i) ? "Unflip assumption" : "Flip for what-if re-run"}
+                    >
+                      <AlertTriangle className="h-2.5 w-2.5" />
+                    </button>
+                    <span className={flippedAssumptions.has(i) ? "line-through text-muted-foreground/50" : ""}>{a}</span>
                   </li>
                 ))}
               </ul>
@@ -1170,7 +1675,7 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         </OutputBlock>
       )}
 
-      {/* Roadmap */}
+      {/* item 10: editable roadmap */}
       {roadmap.length > 0 && (
         <OutputBlock label="Roadmap" icon={Map}>
           <div className="space-y-2.5">
@@ -1178,7 +1683,20 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
               <div key={i} className="rounded-lg border border-border/60 bg-card p-3.5">
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-primary font-medium">Phase {i + 1}</span>
-                  <h4 className="text-[12px] font-semibold text-foreground">{phase.name}</h4>
+                  {editingPhase === i ? (
+                    <input
+                      autoFocus
+                      value={phase.name}
+                      onChange={(e) => onUpdatePhase(i, "name", e.target.value)}
+                      onBlur={() => onEditPhase(null)}
+                      className="text-[12px] font-semibold bg-transparent border-b border-primary outline-none text-foreground"
+                    />
+                  ) : (
+                    <h4 className="text-[12px] font-semibold text-foreground">{phase.name}</h4>
+                  )}
+                  <button type="button" onClick={() => onEditPhase(editingPhase === i ? null : i)} className="p-0.5 text-muted-foreground/30 hover:text-foreground transition-colors">
+                    <Pencil className="h-2.5 w-2.5" />
+                  </button>
                   {phase.costCategory && <CostBadge category={phase.costCategory} />}
                   {phase.durationWeeks !== undefined && (
                     <span className="font-mono text-[9px] text-muted-foreground/50">{phase.durationWeeks}w</span>
@@ -1219,6 +1737,30 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         </OutputBlock>
       )}
 
+      {/* item 11: competitor signals */}
+      {competitors.length > 0 && (
+        <OutputBlock label="Market Signals" icon={Users}>
+          <div className="space-y-2">
+            {competitors.map((c, i) => (
+              <div key={i} className="rounded-lg border border-border/60 bg-card p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[12px] font-semibold text-foreground">{c.name}</span>
+                  <span className={`font-mono text-[9px] uppercase px-1.5 py-0.5 rounded border ${c.category === "direct" ? "border-destructive/30 text-destructive" : c.category === "indirect" ? "border-warning/30 text-warning" : "border-border text-muted-foreground"}`}>{c.category}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{c.differentiation}</p>
+              </div>
+            ))}
+          </div>
+        </OutputBlock>
+      )}
+
+      {/* item 9: accuracy history sparkline */}
+      {accuracyHistory.length > 1 && (
+        <OutputBlock label="Accuracy Trend" icon={TrendingUp}>
+          <AccuracySparkline values={accuracyHistory} />
+        </OutputBlock>
+      )}
+
       {!isRunning && depth === "quick" && roadmap.length === 0 && decisions.length > 0 && (
         <p className="font-mono text-[10px] text-muted-foreground/45 italic">
           Quick mode skipped the roadmap. Switch to Standard or Deep for a full plan.
@@ -1228,13 +1770,23 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
   );
 }
 
-function OutputBlock({ label, icon: Icon, children }: { label: string; icon: React.ElementType; children: React.ReactNode }) {
+function OutputBlock({ label, icon: Icon, children, copyText }: { label: string; icon: React.ElementType; children: React.ReactNode; copyText?: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const handleCopy = () => {
+    if (!copyText) return;
+    navigator.clipboard.writeText(copyText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  };
   return (
     <section className="space-y-2.5">
       <div className="flex items-center gap-2">
         <Icon className="h-3 w-3 text-primary" />
         <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground/60 font-semibold">{label}</span>
         <div className="flex-1 h-px bg-border/50" />
+        {copyText && (
+          <button type="button" onClick={handleCopy} className="p-1 rounded text-muted-foreground/40 hover:text-foreground transition-colors" title="Copy to clipboard">
+            {copied ? <Check className="h-2.5 w-2.5 text-success" /> : <Copy className="h-2.5 w-2.5" />}
+          </button>
+        )}
       </div>
       {children}
     </section>
@@ -1346,7 +1898,7 @@ function FactorBar({ label, value, weight }: { label: string; value: number; wei
   );
 }
 
-function DecisionCard({ decision }: { decision: DecisionSuggestion }) {
+function DecisionCard({ decision, expanded, onToggleExpand }: { decision: DecisionSuggestion; expanded?: boolean; onToggleExpand?: () => void }) {
   const priorityCls =
     decision.priority === "high"   ? "border-primary/30 bg-primary/10 text-primary" :
     decision.priority === "medium" ? "border-border bg-muted/30 text-muted-foreground" :
@@ -1388,7 +1940,90 @@ function DecisionCard({ decision }: { decision: DecisionSuggestion }) {
           <p className="text-[10px] text-foreground/75 leading-relaxed">{decision.recommendation}</p>
         </div>
       )}
+      {/* item 7: expandable userStory + tradeoffs */}
+      {(decision.userStory || decision.tradeoffs) && (
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="flex items-center gap-1 text-[9px] font-mono text-muted-foreground/50 hover:text-foreground transition-colors pt-1"
+        >
+          {expanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
+          {expanded ? "Less" : "More"}
+        </button>
+      )}
+      {expanded && (
+        <div className="pt-1.5 space-y-1.5 border-t border-border/30">
+          {decision.userStory && (
+            <div>
+              <div className="font-mono text-[8px] uppercase tracking-[0.06em] text-muted-foreground/50 mb-0.5">User Story</div>
+              <p className="text-[11px] text-foreground/70 leading-relaxed">{decision.userStory}</p>
+            </div>
+          )}
+          {decision.tradeoffs && (
+            <div>
+              <div className="font-mono text-[8px] uppercase tracking-[0.06em] text-muted-foreground/50 mb-0.5">Tradeoffs</div>
+              <p className="text-[11px] text-foreground/70 leading-relaxed">{decision.tradeoffs}</p>
+            </div>
+          )}
+        </div>
+      )}
     </article>
+  );
+}
+
+// ── DecisionTable (item 8) ────────────────────────────────────────────────────
+
+function DecisionTable({ decisions }: { decisions: DecisionSuggestion[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[11px] border-collapse">
+        <thead>
+          <tr className="border-b border-border/60">
+            {["Decision", "Priority", "Impact", "Effort", "Conf.", "Demand"].map((h) => (
+              <th key={h} className="text-left font-mono text-[9px] uppercase tracking-[0.06em] text-muted-foreground/50 py-1.5 pr-3 last:pr-0">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/30">
+          {decisions.map((d, i) => (
+            <tr key={i} className="hover:bg-muted/20 transition-colors">
+              <td className="py-2 pr-3 font-medium text-foreground leading-snug max-w-[160px]">{d.title}</td>
+              <td className="py-2 pr-3">
+                <span className={`font-mono text-[9px] uppercase ${d.priority === "high" ? "text-primary" : d.priority === "medium" ? "text-foreground/60" : "text-muted-foreground/50"}`}>{d.priority}</span>
+              </td>
+              <td className="py-2 pr-3 font-mono tabular-nums text-foreground/80">{d.impact}</td>
+              <td className="py-2 pr-3 font-mono tabular-nums text-foreground/80">{d.effort}</td>
+              <td className="py-2 pr-3 font-mono tabular-nums text-foreground/80">{typeof d.confidence === "number" ? d.confidence : "—"}</td>
+              <td className="py-2 font-mono tabular-nums text-foreground/80">{typeof d.demand === "number" ? d.demand : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── AccuracySparkline (item 9) ────────────────────────────────────────────────
+
+function AccuracySparkline({ values }: { values: number[] }) {
+  const max = Math.max(...values, 1);
+  const w = 120; const h = 32; const pad = 2;
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((v / max) * (h - pad * 2));
+    return `${x},${y}`;
+  }).join(" ");
+  const last = values[values.length - 1];
+  return (
+    <div className="flex items-center gap-3">
+      <svg width={w} height={h} className="text-primary">
+        <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div className="font-mono text-[11px]">
+        <span className={`font-semibold ${last >= 0.5 ? "text-success" : "text-destructive"}`}>{Math.round(last * 100)}%</span>
+        <span className="text-muted-foreground/50 ml-1">latest accuracy</span>
+      </div>
+    </div>
   );
 }
 

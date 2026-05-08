@@ -98,6 +98,19 @@ export type AgentEvent =
   | { type: "error"; message: string }
   | { type: "done" };
 
+// Pre-computed agent output for resume-from-checkpoint. Any field that is
+// present is treated as already done — the agent skips the stage that would
+// have produced it and re-emits the stored value before continuing.
+export interface AgentResumeData {
+  decisions?: DecisionSuggestion[];
+  strategy?: StrategicGuidance;
+  roadmap?: RoadmapPhase[];
+  topDecision?: DecisionSuggestion;
+  assumptions?: string[];
+  predictedOutcome?: PredictedOutcome;
+  verdict?: import("./verdict").Verdict;
+}
+
 export interface AgentRunOptions {
   idea: string;
   depth: AgentDepth;
@@ -121,6 +134,9 @@ export interface AgentRunOptions {
   // same getDecisionModeMeta() read on mount.
   freezeUntilMs?: number | null;
   switchHistoryMs?: number[];
+  // Resume support: pre-computed outputs from a stopped/errored run.
+  // Stages whose data is present are replayed immediately rather than re-run.
+  resumeData?: AgentResumeData;
 }
 
 const stateLabels: Record<AgentState, string> = {
@@ -258,6 +274,7 @@ export async function runAutonomousAgent({
   lastSwitchAtMs = null,
   freezeUntilMs = null,
   switchHistoryMs = [],
+  resumeData = {},
 }: AgentRunOptions): Promise<void> {
   const enterState = (state: AgentState) => {
     throwIfAborted(signal);
@@ -500,92 +517,101 @@ export async function runAutonomousAgent({
       context = `${context}\n\nQ: ${question.question}\nA: ${answer.trim()}`;
     }
 
-    // 4. GENERATE_DECISIONS — with cost models, then user-level + calibration
-    //    feedback adjustment. Pattern factor is held back until predict_outcome.
-    enterState("generate_decisions");
-    emit({
-      type: "thinking",
-      message: "Drafting 3 candidate directions — each with assumptions, risks, and a production cost model.",
-    });
-    // Snapshot the prompt fingerprint alongside the call. Re-rendering is
-    // deterministic and microsecond-cheap; we use it for forensic logging.
-    const directionsRefRaw = renderPrompt(
-      "suggest_direction",
-      { pastIdeas, refinement: undefined },
-      { userId: userId ?? null }
-    );
-    const directionsPromptRef: PromptRef = {
-      id: directionsRefRaw.promptId,
-      version: directionsRefRaw.version,
-      hash: directionsRefRaw.hash,
-    };
-    let decisions = await suggestDirectionAction(userId ?? "", context, {
-      pastIdeas,
-      calibrationBias,
-    });
-    throwIfAborted(signal);
-    decisions = applyFeedbackToDecisions(decisions, { userAccuracy, calibrationError, calibrationBias });
-    emit({ type: "decisions", decisions });
-    emit({ type: "checkpoint", message: `${decisions.length} directions generated` });
+    // 4. GENERATE_DECISIONS — skip if resume data already has them
+    let directionsPromptRef: PromptRef = { id: "suggest_direction", version: "resumed", hash: "" };
+    let decisions: DecisionSuggestion[];
 
-    // 5. EVALUATE_DECISIONS
-    enterState("evaluate_decisions");
-    emit({
-      type: "thinking",
-      message: `Scored ${decisions.length} candidates on impact, effort, confidence, demand, and cost viability.`,
-    });
-
-    // 6. VALIDATION_LAYER + REFLECTION
-    enterState("validation_layer");
-    const totalRisks = decisions.reduce((sum, d) => sum + (d.risks?.length ?? 0), 0);
-    emit({
-      type: "thinking",
-      message: `Detected ${totalRisks} risk${totalRisks === 1 ? "" : "s"} across directions. Scanning for cost overruns and hidden assumptions.`,
-    });
-
-    const reflection = reflectionInstructionFor(decisions);
-    if (reflection) {
-      enterState("reflection");
-      const isCostRelated = reflection.includes("HIGH-cost");
+    if (resumeData.decisions && resumeData.decisions.length > 0) {
+      decisions = resumeData.decisions;
+      emit({ type: "thinking", message: "Resuming — replaying previous decisions from checkpoint." });
+      emit({ type: "decisions", decisions });
+    } else {
+      enterState("generate_decisions");
       emit({
         type: "thinking",
-        message: isCostRelated
-          ? "High-cost direction has multiple risks — re-evaluating whether cost assumptions are realistic…"
-          : "Re-evaluating approach due to uncertainty…",
+        message: "Drafting 3 candidate directions — each with assumptions, risks, and a production cost model.",
       });
-      try {
-        const refined = await suggestDirectionAction("", context, {
-          pastIdeas,
-          refinement: reflection,
-          calibrationBias,
+      const directionsRefRaw = renderPrompt(
+        "suggest_direction",
+        { pastIdeas, refinement: undefined },
+        { userId: userId ?? null }
+      );
+      directionsPromptRef = {
+        id: directionsRefRaw.promptId,
+        version: directionsRefRaw.version,
+        hash: directionsRefRaw.hash,
+      };
+      decisions = await suggestDirectionAction(userId ?? "", context, {
+        pastIdeas,
+        calibrationBias,
+      });
+      throwIfAborted(signal);
+      decisions = applyFeedbackToDecisions(decisions, { userAccuracy, calibrationError, calibrationBias });
+      emit({ type: "decisions", decisions });
+      emit({ type: "checkpoint", message: `${decisions.length} directions generated` });
+
+      // 5. EVALUATE_DECISIONS
+      enterState("evaluate_decisions");
+      emit({
+        type: "thinking",
+        message: `Scored ${decisions.length} candidates on impact, effort, confidence, demand, and cost viability.`,
+      });
+
+      // 6. VALIDATION_LAYER + REFLECTION
+      enterState("validation_layer");
+      const totalRisks = decisions.reduce((sum, d) => sum + (d.risks?.length ?? 0), 0);
+      emit({
+        type: "thinking",
+        message: `Detected ${totalRisks} risk${totalRisks === 1 ? "" : "s"} across directions. Scanning for cost overruns and hidden assumptions.`,
+      });
+
+      const reflection = reflectionInstructionFor(decisions);
+      if (reflection) {
+        enterState("reflection");
+        const isCostRelated = reflection.includes("HIGH-cost");
+        emit({
+          type: "thinking",
+          message: isCostRelated
+            ? "High-cost direction has multiple risks — re-evaluating whether cost assumptions are realistic…"
+            : "Re-evaluating approach due to uncertainty…",
         });
-        throwIfAborted(signal);
-        if (refined.length > 0) {
-          decisions = applyFeedbackToDecisions(refined, { userAccuracy, calibrationError });
-          emit({ type: "decisions", decisions });
+        try {
+          const refined = await suggestDirectionAction("", context, {
+            pastIdeas,
+            refinement: reflection,
+            calibrationBias,
+          });
+          throwIfAborted(signal);
+          if (refined.length > 0) {
+            decisions = applyFeedbackToDecisions(refined, { userAccuracy, calibrationError });
+            emit({ type: "decisions", decisions });
+          }
+        } catch (error) {
+          console.warn("[autonomousAgent] reflection pass failed:", error);
         }
-      } catch (error) {
-        console.warn("[autonomousAgent] reflection pass failed:", error);
       }
+      emit({ type: "checkpoint", message: "Directions scored and validated" });
     }
 
-    const assumptions = collectAssumptions(decisions);
+    const assumptions = resumeData.assumptions ?? collectAssumptions(decisions);
     if (assumptions.length > 0) {
       emit({ type: "assumptions", assumptions });
     }
-    let top = pickTopDecision(decisions);
+    let top = resumeData.topDecision ?? pickTopDecision(decisions);
     if (top) {
       emit({ type: "topDecision", decision: top });
     }
-    emit({ type: "checkpoint", message: "Directions scored and validated" });
 
     // 7. PREDICT_OUTCOME — Stage 5. Mandatory and structured before strategy.
-    let predictedOutcome: PredictedOutcome | null = null;
+    let predictedOutcome: PredictedOutcome | null = resumeData.predictedOutcome ?? null;
     let patternAccuracy: number | null = null;
     let patternKey = "";
     let predictionPromptRef: PromptRef | undefined;
 
-    if (top) {
+    if (predictedOutcome) {
+      emit({ type: "expectedOutcome", outcome: predictedOutcome });
+      emit({ type: "thinking", message: "Resuming — replaying previous outcome prediction." });
+    } else if (top) {
       enterState("predict_outcome");
       emit({
         type: "thinking",
@@ -678,7 +704,7 @@ export async function runAutonomousAgent({
           message: "Could not generate a structured prediction. Verdict will lean toward VALIDATE_FIRST.",
         });
       }
-    }
+    } // end predict_outcome block
 
     // Emit the explanation row stack now that all feedback factors are known.
     const explanation = buildExplanation({ userAccuracy, calibrationError, patternAccuracy, patternKey });
@@ -711,29 +737,47 @@ export async function runAutonomousAgent({
     }
 
     // 9. STRATEGY_GENERATION
-    enterState("strategy_generation");
-    emit({ type: "thinking", message: "Defining the strategic theme, gaps to close, and cost constraints." });
-    const strategy = await strategicGuidanceAction(context);
-    throwIfAborted(signal);
-    emit({ type: "strategy", strategy });
-    emit({ type: "checkpoint", message: "Strategy defined" });
+    let strategy: StrategicGuidance;
+    if (resumeData.strategy) {
+      strategy = resumeData.strategy;
+      emit({ type: "thinking", message: "Resuming — replaying previous strategy." });
+      emit({ type: "strategy", strategy });
+    } else {
+      enterState("strategy_generation");
+      emit({ type: "thinking", message: "Defining the strategic theme, gaps to close, and cost constraints." });
+      strategy = await strategicGuidanceAction(context);
+      throwIfAborted(signal);
+      emit({ type: "strategy", strategy });
+      emit({ type: "checkpoint", message: "Strategy defined" });
+    }
 
     // 10. ROADMAP_GENERATION (Standard + Deep only)
     if (depth !== "quick") {
-      enterState("roadmap_generation");
-      emit({ type: "thinking", message: "Drafting a 3-phase roadmap with budget estimates and validation gates." });
-      const roadmap = await generateRoadmapAction(idea, decisions, strategy.theme);
-      throwIfAborted(signal);
-      emit({ type: "roadmap", roadmap });
-      emit({ type: "checkpoint", message: "Roadmap drafted" });
+      if (resumeData.roadmap && resumeData.roadmap.length > 0) {
+        emit({ type: "thinking", message: "Resuming — replaying previous roadmap." });
+        emit({ type: "roadmap", roadmap: resumeData.roadmap });
+      } else {
+        enterState("roadmap_generation");
+        emit({ type: "thinking", message: "Drafting a 3-phase roadmap with budget estimates and validation gates." });
+        const roadmap = await generateRoadmapAction(idea, decisions, strategy.theme);
+        throwIfAborted(signal);
+        emit({ type: "roadmap", roadmap });
+        emit({ type: "checkpoint", message: "Roadmap drafted" });
+      }
     }
 
     // 11. VERDICT — multi-factor + prediction guardrail
-    emit({
-      type: "thinking",
-      message: "Computing final verdict using composite score: confidence (40%), cost (30%), demand (20%), strategic fit (10%).",
-    });
-    const verdict = computeVerdict(decisions, predictedOutcome);
+    let verdict: import("./verdict").Verdict;
+    if (resumeData.verdict) {
+      verdict = resumeData.verdict;
+      emit({ type: "thinking", message: "Resuming — replaying previous verdict." });
+    } else {
+      emit({
+        type: "thinking",
+        message: "Computing final verdict using composite score: confidence (40%), cost (30%), demand (20%), strategic fit (10%).",
+      });
+      verdict = computeVerdict(decisions, predictedOutcome);
+    }
     emit({ type: "verdict", verdict });
 
     // 12. MEMORY WRITE — persists prediction + accuracy + prompt snapshots.
