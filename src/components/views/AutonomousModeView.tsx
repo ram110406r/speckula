@@ -153,6 +153,9 @@ export function AutonomousModeView() {
   // item 8: output view mode
   const [outputView, setOutputView] = React.useState<"cards" | "table">("cards");
 
+  // output tab navigation
+  const [outputTab, setOutputTab] = React.useState<"overview" | "decisions" | "strategy" | "roadmap">("overview");
+
   // item 7: expanded decision card indices
   const [expandedDecisions, setExpandedDecisions] = React.useState<Set<number>>(new Set());
 
@@ -929,12 +932,10 @@ export function AutonomousModeView() {
               <p className="font-mono text-[9px] text-muted-foreground/35">⌘↵ to run</p>
             </div>
 
-            {/* Mode cards */}
+            {/* Depth selector — compact pills */}
             <div className="space-y-1.5">
-              <label className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">
-                Depth
-              </label>
-              <div className="space-y-1.5">
+              <label className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">Depth</label>
+              <div className="flex rounded-lg border border-border overflow-hidden">
                 {depthOptions.map((opt) => {
                   const Icon = opt.icon;
                   const active = depth === opt.id;
@@ -945,73 +946,72 @@ export function AutonomousModeView() {
                       onClick={() => !isRunning && handleDepthChange(opt.id)}
                       disabled={isRunning}
                       title={opt.hint}
-                      className={`w-full flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
-                        active
-                          ? "border-primary/40 bg-primary/[0.07]"
-                          : "border-border bg-background hover:bg-muted/40 hover:border-border/80"
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-r last:border-r-0 border-border ${
+                        active ? "bg-primary/10 text-primary" : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/40 bg-transparent"
+                      }`}
                     >
-                      <Icon className={`h-3.5 w-3.5 shrink-0 ${active ? "text-primary" : "text-muted-foreground/50"}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className={`font-mono text-[11px] font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}>
-                          {opt.label}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground/60 leading-snug mt-0.5">{opt.description}</div>
-                      </div>
-                      {active && <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />}
+                      <Icon className="h-3.5 w-3.5" />
+                      <span className="font-mono text-[10px] font-medium">{opt.label}</span>
                     </button>
                   );
                 })}
               </div>
+              <p className="font-mono text-[9px] text-muted-foreground/40">
+                {depthOptions.find(o => o.id === depth)?.description}
+              </p>
             </div>
 
-            {/* Prediction strictness */}
+            {/* Prediction mode — compact pills + auto toggle */}
             <div className="space-y-1.5">
-              <label className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">
-                Prediction strictness
-              </label>
-              <StrictnessSelector value={strictness} onChange={handleStrictnessChange} disabled={isRunning || autoMode} />
-              <p className="font-mono text-[9px] text-muted-foreground/55 leading-snug">
-                {strictness === "conservative" && "Mode: Conservative — safer targets, higher confidence"}
-                {strictness === "balanced" && "Mode: Balanced — honest uncertainty"}
-                {strictness === "aggressive" && "Mode: Aggressive — stretch targets, lower confidence"}
-              </p>
-
-              {/* v2.8: Auto mode toggle + recommendation hint. The hint only
-                  appears when there's a meaningful recommendation different
-                  from the current selection — otherwise stays out of the way. */}
-              <label className="flex items-center justify-between gap-2 pt-1.5 cursor-pointer">
-                <span className="font-mono text-[10px] text-muted-foreground/70">Auto mode</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={autoMode}
-                  onClick={() => !isRunning && handleAutoModeChange(!autoMode)}
-                  disabled={isRunning}
-                  className={`relative h-3.5 w-7 rounded-full transition-colors disabled:opacity-50 ${autoMode ? "bg-primary/80" : "bg-muted"}`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-card transition-all ${autoMode ? "left-3.5" : "left-0.5"}`}
-                  />
-                </button>
-              </label>
-
+              <div className="flex items-center justify-between">
+                <label className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">Mode</label>
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                  <span className="font-mono text-[9px] text-muted-foreground/60">Auto</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoMode}
+                    onClick={() => !isRunning && handleAutoModeChange(!autoMode)}
+                    disabled={isRunning}
+                    className={`relative h-3.5 w-7 rounded-full transition-colors disabled:opacity-50 ${autoMode ? "bg-primary/80" : "bg-muted"}`}
+                  >
+                    <span className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-card transition-all ${autoMode ? "left-3.5" : "left-0.5"}`} />
+                  </button>
+                </label>
+              </div>
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                {STRICTNESS_OPTIONS.map((opt) => {
+                  const active = strictness === opt.id;
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => !isRunning && !autoMode && handleStrictnessChange(opt.id)}
+                      disabled={isRunning || autoMode}
+                      title={opt.hint}
+                      className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed border-r last:border-r-0 border-border ${
+                        active ? "bg-primary/10 text-primary" : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/40 bg-transparent"
+                      }`}
+                    >
+                      <Icon className="h-3 w-3" />
+                      <span className="font-mono text-[9px] font-medium">{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
               {(() => {
-                if (autoMode || !modeMeta) return null;
-                if (modeMeta.recommendedMode === strictness) return null;
+                if (autoMode || !modeMeta || modeMeta.recommendedMode === strictness) return null;
                 const metaAny = modeMeta as DecisionModeMeta & { score?: number; previousScore?: number };
                 const recScore = metaAny.score;
                 const prevScore = metaAny.previousScore;
                 if (typeof recScore !== "number" || !Number.isFinite(recScore)) return null;
                 const deltaPct = typeof prevScore === "number" && Number.isFinite(prevScore) && prevScore > 0
-                  ? Math.round(((recScore - prevScore) / prevScore) * 100)
-                  : null;
-                const deltaText = deltaPct !== null && deltaPct > 0
-                  ? `+${deltaPct}% accuracy vs ${strictness}`
-                  : `better calibration than ${strictness}`;
+                  ? Math.round(((recScore - prevScore) / prevScore) * 100) : null;
+                const deltaText = deltaPct !== null && deltaPct > 0 ? `+${deltaPct}% accuracy` : "better calibration";
                 return (
-                  <p className="font-mono text-[9px] text-success/80 leading-snug">
-                    Recommended: <span className="capitalize font-medium">{modeMeta.recommendedMode}</span> — {deltaText}
+                  <p className="font-mono text-[9px] text-success/80">
+                    Tip: <span className="capitalize font-medium">{modeMeta.recommendedMode}</span> — {deltaText}
                   </p>
                 );
               })()}
@@ -1214,18 +1214,49 @@ export function AutonomousModeView() {
 
         {/* RIGHT: Intelligence output */}
         <section className={`${mobileTab !== "output" ? "hidden lg:flex" : "flex"} flex-1 flex-col overflow-hidden`}>
-          <div className="px-6 py-2.5 border-b border-border shrink-0 flex items-center justify-between gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/50">Intelligence output</span>
-            <div className="flex items-center gap-2">
-              {/* item 8: view toggle */}
-              {decisions.length > 0 && (
-                <div className="flex items-center rounded border border-border p-0.5 gap-0.5">
-                  <button type="button" onClick={() => setOutputView("cards")} className={`p-1 rounded transition-colors ${outputView === "cards" ? "bg-muted text-foreground" : "text-muted-foreground/50 hover:text-foreground"}`} title="Card view"><LayoutList className="h-3 w-3" /></button>
-                  <button type="button" onClick={() => setOutputView("table")} className={`p-1 rounded transition-colors ${outputView === "table" ? "bg-muted text-foreground" : "text-muted-foreground/50 hover:text-foreground"}`} title="Table view"><Table2 className="h-3 w-3" /></button>
-                </div>
-              )}
-              {isDone && <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-success font-medium">Complete</span>}
+          {/* Header */}
+          <div className="px-5 pt-2.5 pb-0 border-b border-border shrink-0 bg-card">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/50">Intelligence Output</span>
+                {isDone && <span className="font-mono text-[9px] px-1.5 py-0.5 rounded-full bg-success/10 text-success border border-success/20">Complete</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                {decisions.length > 0 && outputTab === "decisions" && (
+                  <div className="flex items-center rounded border border-border p-0.5 gap-0.5">
+                    <button type="button" onClick={() => setOutputView("cards")} className={`p-1 rounded transition-colors ${outputView === "cards" ? "bg-muted text-foreground" : "text-muted-foreground/50 hover:text-foreground"}`} title="Card view"><LayoutList className="h-3 w-3" /></button>
+                    <button type="button" onClick={() => setOutputView("table")} className={`p-1 rounded transition-colors ${outputView === "table" ? "bg-muted text-foreground" : "text-muted-foreground/50 hover:text-foreground"}`} title="Table view"><Table2 className="h-3 w-3" /></button>
+                  </div>
+                )}
+              </div>
             </div>
+            {/* Tab bar — only shows when there's output */}
+            {hasOutput && (
+              <div className="flex gap-0.5 -mb-px">
+                {(([
+                  { id: "overview",   label: "Overview"  },
+                  { id: "decisions",  label: `Decisions${decisions.length ? ` · ${decisions.length}` : ""}` },
+                  { id: "strategy",   label: "Strategy",  hidden: !strategy && assumptions.length === 0 },
+                  { id: "roadmap",    label: "Roadmap",   hidden: roadmap.length === 0 },
+                ]) as { id: "overview"|"decisions"|"strategy"|"roadmap"; label: string; hidden?: boolean }[])
+                  .filter(t => !t.hidden)
+                  .map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setOutputTab(tab.id)}
+                      className={`px-3.5 py-1.5 font-mono text-[10px] rounded-t transition-colors ${
+                        outputTab === tab.id
+                          ? "text-primary bg-primary/[0.06] border border-b-card border-border"
+                          : "text-muted-foreground/50 hover:text-foreground"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))
+                }
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -1245,6 +1276,7 @@ export function AutonomousModeView() {
                 isRunning={isRunning}
                 depth={depth}
                 outputView={outputView}
+                activeTab={outputTab}
                 expandedDecisions={expandedDecisions}
                 onToggleExpand={(i) => setExpandedDecisions((prev) => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; })}
                 flippedAssumptions={flippedAssumptions}
@@ -1300,51 +1332,60 @@ export function AutonomousModeView() {
             </div>
           )}
 
-          {/* Action buttons once complete */}
+          {/* Action bar — shown once complete */}
           {isDone && (
-            <div className="border-t border-border p-4 shrink-0 bg-card space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/50 mr-1">Actions</span>
-                <button onClick={handleSaveDecision} disabled={!topDecision || isSaving} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  {isSaving ? "Saving…" : "Save Decision"}
-                </button>
-                {/* item 4: save all */}
-                <button onClick={handleSaveAllDecisions} disabled={!decisions.length || isSavingAll} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  {isSavingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  {isSavingAll ? "Saving…" : `Save All (${decisions.length})`}
-                </button>
-                <button onClick={handleConvertToSpec} disabled={!topDecision || isConvertingToSpec} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  {isConvertingToSpec ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
-                  {isConvertingToSpec ? "Creating spec…" : "Convert to Spec"}
-                </button>
-                <button onClick={handleCreateTasks} disabled={!topDecision || isCreatingTasks} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  {isCreatingTasks ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListTodo className="h-3 w-3" />}
-                  {isCreatingTasks ? "Creating tasks…" : "Create Tasks"}
-                </button>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/30 mr-1">More</span>
-                {/* item 23: send to editor */}
-                <button onClick={handleSendToEditor} disabled={!topDecision || isSendingToEditor} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  {isSendingToEditor ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookOpen className="h-3 w-3" />}
-                  {isSendingToEditor ? "Sending…" : "Send to Editor"}
-                </button>
-                {/* item 22: publish case */}
-                <button onClick={handlePublishCase} disabled={!topDecision || isPublishing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  {isPublishing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Share2 className="h-3 w-3" />}
-                  {isPublishing ? "Publishing…" : "Share as Case"}
-                </button>
-                {/* item 21: export markdown */}
-                <button onClick={handleExport} disabled={!topDecision} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  <Download className="h-3 w-3" /> Export .md
-                </button>
-                {/* item 11: competitor signals */}
-                <button onClick={handleLoadCompetitors} disabled={isLoadingCompetitors || !idea.trim()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  {isLoadingCompetitors ? <Loader2 className="h-3 w-3 animate-spin" /> : <Users className="h-3 w-3" />}
-                  {isLoadingCompetitors ? "Loading…" : "Market Signals"}
-                </button>
-              </div>
+            <div className="border-t border-border shrink-0 bg-card px-4 py-3 flex items-center gap-2 flex-wrap">
+              {/* Primary actions */}
+              <button
+                onClick={handleSaveDecision}
+                disabled={!topDecision || isSaving}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] font-semibold text-primary-foreground bg-primary hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                {isSaving ? "Saving…" : "Save Decision"}
+              </button>
+              <button
+                onClick={handleSaveAllDecisions}
+                disabled={!decisions.length || isSavingAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isSavingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                {isSavingAll ? "Saving…" : `Save All (${decisions.length})`}
+              </button>
+              <button
+                onClick={handleConvertToSpec}
+                disabled={!topDecision || isConvertingToSpec}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isConvertingToSpec ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
+                {isConvertingToSpec ? "Creating…" : "Convert to Spec"}
+              </button>
+              <button
+                onClick={handleCreateTasks}
+                disabled={!topDecision || isCreatingTasks}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] font-medium border border-border bg-card text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isCreatingTasks ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListTodo className="h-3 w-3" />}
+                {isCreatingTasks ? "Creating…" : "Create Tasks"}
+              </button>
+              {/* Divider */}
+              <div className="w-px h-5 bg-border/60 mx-0.5" />
+              {/* Secondary actions */}
+              <button onClick={handleSendToEditor} disabled={!topDecision || isSendingToEditor} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                {isSendingToEditor ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookOpen className="h-3 w-3" />}
+                {isSendingToEditor ? "Sending…" : "Send to Editor"}
+              </button>
+              <button onClick={handlePublishCase} disabled={!topDecision || isPublishing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                {isPublishing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Share2 className="h-3 w-3" />}
+                {isPublishing ? "Publishing…" : "Share as Case"}
+              </button>
+              <button onClick={handleExport} disabled={!topDecision} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                <Download className="h-3 w-3" /> Export .md
+              </button>
+              <button onClick={handleLoadCompetitors} disabled={isLoadingCompetitors || !idea.trim()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                {isLoadingCompetitors ? <Loader2 className="h-3 w-3 animate-spin" /> : <Users className="h-3 w-3" />}
+                {isLoadingCompetitors ? "Loading…" : "Market Signals"}
+              </button>
             </div>
           )}
         </section>
@@ -1432,57 +1473,60 @@ function AgentStepper({ activeStep, isRunning }: { activeStep: number; isRunning
 function StreamEntry({ entry }: { entry: ChatEntry }) {
   if (entry.kind === "user") {
     return (
-      <div className="rounded-lg border border-primary/20 bg-primary/[0.06] px-3 py-2.5">
-        <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-primary/50 mb-1">Idea</div>
-        <p className="text-[12px] leading-relaxed text-foreground">{entry.text}</p>
+      <div className="rounded-xl border border-primary/25 bg-primary/[0.07] px-3.5 py-3">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+          <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-primary/70 font-semibold">Idea</span>
+        </div>
+        <p className="text-[12px] font-medium leading-relaxed text-foreground">{entry.text}</p>
       </div>
     );
   }
   if (entry.kind === "thinking") {
     return (
-      <div className="flex items-start gap-2">
-        <Brain className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground/35" />
-        <p className="text-[11px] text-muted-foreground/65 leading-relaxed italic">{entry.text}</p>
+      <div className="flex items-start gap-2.5 pl-1">
+        <Brain className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground/30" />
+        <p className="text-[11px] text-muted-foreground/55 leading-relaxed">{entry.text}</p>
       </div>
     );
   }
   if (entry.kind === "question") {
     return (
-      <div className="rounded-lg border border-primary/30 bg-primary/[0.06] px-3 py-2.5">
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <HelpCircle className="h-3 w-3 text-primary" />
-          <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-primary font-semibold">Clarification needed</span>
+      <div className="rounded-xl border border-warning/30 bg-warning/[0.06] px-3.5 py-3">
+        <div className="flex items-center gap-1.5 mb-2">
+          <HelpCircle className="h-3 w-3 text-warning" />
+          <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-warning font-semibold">Needs input</span>
         </div>
-        <p className="text-[12px] font-medium text-foreground leading-relaxed">→ {entry.question.question}</p>
+        <p className="text-[12px] font-medium text-foreground leading-relaxed">{entry.question.question}</p>
         {entry.question.why && (
-          <p className="text-[10px] text-muted-foreground/70 mt-1.5 leading-relaxed">{entry.question.why}</p>
+          <p className="text-[10px] text-muted-foreground/60 mt-1.5 leading-relaxed">{entry.question.why}</p>
         )}
       </div>
     );
   }
   if (entry.kind === "system") {
     return (
-      <div className="flex items-center gap-1.5">
-        <CheckCircle2 className="h-2.5 w-2.5 text-success shrink-0" />
-        <span className="font-mono text-[10px] text-muted-foreground/55">{entry.text}</span>
+      <div className="flex items-center gap-2 py-0.5 pl-1">
+        <CheckCircle2 className="h-3 w-3 text-success/70 shrink-0" />
+        <span className="font-mono text-[10px] text-foreground/60">{entry.text}</span>
       </div>
     );
   }
   if (entry.kind === "checkpoint") {
     return (
-      <div className="flex items-center gap-2 py-0.5">
-        <div className="h-px flex-1 bg-border/40" />
-        <div className="flex items-center gap-1 shrink-0">
-          <MapPin className="h-2.5 w-2.5 text-primary/50" />
-          <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/40">{entry.text}</span>
+      <div className="flex items-center gap-2 py-1">
+        <div className="h-px flex-1 bg-border/50" />
+        <div className="flex items-center gap-1.5 shrink-0 px-2 py-0.5 rounded-full bg-muted/50 border border-border/50">
+          <MapPin className="h-2.5 w-2.5 text-primary/60" />
+          <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/60">{entry.text}</span>
         </div>
-        <div className="h-px flex-1 bg-border/40" />
+        <div className="h-px flex-1 bg-border/50" />
       </div>
     );
   }
   return (
-    <div className="rounded-md border-l-2 border-l-destructive bg-destructive/[0.05] px-3 py-2">
-      <span className="font-mono text-[10px] text-destructive font-semibold">Error: </span>
+    <div className="rounded-lg border-l-2 border-l-destructive bg-destructive/[0.05] px-3 py-2.5">
+      <span className="font-mono text-[10px] text-destructive font-semibold">Error · </span>
       <span className="text-[11px] text-foreground/80">{entry.text}</span>
     </div>
   );
@@ -1530,6 +1574,7 @@ interface OutputPanelProps {
   isRunning: boolean;
   depth: AgentDepth;
   outputView: "cards" | "table";
+  activeTab: "overview" | "decisions" | "strategy" | "roadmap";
   expandedDecisions: Set<number>;
   onToggleExpand: (i: number) => void;
   flippedAssumptions: Set<number>;
@@ -1540,72 +1585,80 @@ interface OutputPanelProps {
   accuracyHistory: number[];
 }
 
-function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, verdict, predictedOutcome, confidenceExplanation, competitors, isRunning, depth, outputView, expandedDecisions, onToggleExpand, flippedAssumptions, onFlipAssumption, editingPhase, onEditPhase, onUpdatePhase, accuracyHistory }: OutputPanelProps) {
-  return (
-    <div className="p-6 space-y-5 max-w-2xl">
+function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, verdict, predictedOutcome, confidenceExplanation, competitors, isRunning, depth, outputView, activeTab, expandedDecisions, onToggleExpand, flippedAssumptions, onFlipAssumption, editingPhase, onEditPhase, onUpdatePhase, accuracyHistory }: OutputPanelProps) {
+  const showOverview   = activeTab === "overview";
+  const showDecisions  = activeTab === "decisions";
+  const showStrategy   = activeTab === "strategy";
+  const showRoadmap    = activeTab === "roadmap";
 
-      {/* Top decision summary card */}
-      {topDecision && (
-        <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/[0.08] to-transparent p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Flame className="h-3.5 w-3.5 text-primary" />
-            <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-primary font-medium">Critical decision</span>
-          </div>
-          <h3 className="text-[13px] font-semibold text-foreground leading-snug">{topDecision.title}</h3>
-          {topDecision.keyInsight && (
-            <p className="text-[11px] text-muted-foreground leading-relaxed mt-1.5">{topDecision.keyInsight}</p>
-          )}
-          {topDecision.recommendation && (
-            <div className="flex items-start gap-1.5 mt-2.5 pt-2.5 border-t border-primary/15">
-              <Target className="h-3 w-3 text-primary mt-0.5 shrink-0" />
-              <p className="text-[11px] text-foreground/80 leading-relaxed">{topDecision.recommendation}</p>
+  return (
+    <div className="p-5 space-y-5 max-w-2xl">
+
+      {/* ── Overview tab ───────────────────────────────────────────────────── */}
+      {showOverview && (
+        <>
+          {topDecision && (
+            <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/[0.08] to-transparent p-4 shadow-sm">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Flame className="h-3.5 w-3.5 text-primary" />
+                <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-primary font-medium">Top Decision</span>
+              </div>
+              <h3 className="text-[14px] font-semibold text-foreground leading-snug">{topDecision.title}</h3>
+              {topDecision.keyInsight && (
+                <p className="text-[12px] text-muted-foreground leading-relaxed mt-1.5">{topDecision.keyInsight}</p>
+              )}
+              {topDecision.recommendation && (
+                <div className="flex items-start gap-1.5 mt-3 pt-3 border-t border-primary/15">
+                  <Target className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                  <p className="text-[12px] text-foreground/85 leading-relaxed font-medium">{topDecision.recommendation}</p>
+                </div>
+              )}
             </div>
           )}
-        </div>
+          {confidenceExplanation.length > 0 && <ConfidenceExplanationPills items={confidenceExplanation} />}
+          {verdict && <VerdictBlock verdict={verdict} />}
+          {predictedOutcome && <ExpectedOutcomeBlock outcome={predictedOutcome} />}
+          {!isRunning && depth === "quick" && roadmap.length === 0 && decisions.length > 0 && (
+            <p className="font-mono text-[10px] text-muted-foreground/45">
+              Quick mode skipped the roadmap. Switch to Standard or Deep for a full plan.
+            </p>
+          )}
+        </>
       )}
 
-      {/* Confidence explanation (Stage 11 → UI) */}
-      {confidenceExplanation.length > 0 && (
-        <ConfidenceExplanationPills items={confidenceExplanation} />
-      )}
-
-      {/* Final verdict */}
-      {verdict && <VerdictBlock verdict={verdict} />}
-
-      {/* Expected outcome (Stage 5) */}
-      {predictedOutcome && <ExpectedOutcomeBlock outcome={predictedOutcome} />}
-
-      {/* item 8: decisions as table or cards */}
-      {decisions.length > 0 && outputView === "table" ? (
-        <OutputBlock label="Evidence" icon={Compass}>
-          <DecisionTable decisions={decisions} />
-        </OutputBlock>
-      ) : decisions.length > 0 ? (
-        <OutputBlock label="Evidence" icon={Compass}>
-          <div className="space-y-2.5">
-            {decisions.map((d, i) => (
-              <DecisionCard key={`${d.title}-${i}`} decision={d} expanded={expandedDecisions.has(i)} onToggleExpand={() => onToggleExpand(i)} />
-            ))}
-          </div>
-        </OutputBlock>
-      ) : null}
-
-      {/* item 6: risks section */}
-      {decisions.some((d) => d.risks && d.risks.length > 0) && (
-        <OutputBlock label="Risks" icon={AlertTriangle}>
-          <div className="space-y-1.5">
-            {decisions.flatMap((d) => (d.risks ?? []).map((r) => ({ risk: r, title: d.title }))).map(({ risk, title }, i) => (
-              <div key={i} className="flex items-start gap-2 text-[11px]">
-                <AlertTriangle className="h-2.5 w-2.5 text-destructive/60 mt-0.5 shrink-0" />
-                <span className="text-foreground/75 leading-relaxed">{title}: {risk}</span>
+      {/* ── Decisions tab ──────────────────────────────────────────────────── */}
+      {showDecisions && (
+        <>
+          {decisions.length > 0 && outputView === "table" ? (
+            <OutputBlock label="Decisions" icon={Compass}>
+              <DecisionTable decisions={decisions} />
+            </OutputBlock>
+          ) : decisions.length > 0 ? (
+            <OutputBlock label="Decisions" icon={Compass}>
+              <div className="space-y-2.5">
+                {decisions.map((d, i) => (
+                  <DecisionCard key={`${d.title}-${i}`} decision={d} expanded={expandedDecisions.has(i)} onToggleExpand={() => onToggleExpand(i)} />
+                ))}
               </div>
-            ))}
-          </div>
-        </OutputBlock>
+            </OutputBlock>
+          ) : null}
+          {decisions.some((d) => d.risks && d.risks.length > 0) && (
+            <OutputBlock label="Risks" icon={AlertTriangle}>
+              <div className="space-y-1.5">
+                {decisions.flatMap((d) => (d.risks ?? []).map((r) => ({ risk: r, title: d.title }))).map(({ risk, title }, i) => (
+                  <div key={i} className="flex items-start gap-2 text-[11px]">
+                    <AlertTriangle className="h-2.5 w-2.5 text-destructive/60 mt-0.5 shrink-0" />
+                    <span className="text-foreground/75 leading-relaxed">{title}: {risk}</span>
+                  </div>
+                ))}
+              </div>
+            </OutputBlock>
+          )}
+        </>
       )}
 
-      {/* Cost analysis */}
-      {decisions.some((d) => d.costModel) && (
+      {/* ── Strategy tab ───────────────────────────────────────────────────── */}
+      {showStrategy && decisions.some((d) => d.costModel) && (
         <OutputBlock label="Cost Analysis" icon={DollarSign}>
           <div className="space-y-2">
             {decisions.filter((d) => d.costModel).map((d, i) => (
@@ -1634,13 +1687,12 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         </OutputBlock>
       )}
 
-      {/* Key insights */}
-      {decisions.some((d) => d.keyInsight) && (
-        <OutputBlock label="Insights" icon={Lightbulb}>
+      {showStrategy && decisions.some((d) => d.keyInsight) && (
+        <OutputBlock label="Key Insights" icon={Lightbulb}>
           <ul className="space-y-2">
             {decisions.filter((d) => d.keyInsight).map((d, i) => (
-              <li key={i} className="rounded-lg border border-destructive/15 bg-destructive/[0.04] px-3 py-2.5">
-                <span className="font-mono text-[10px] font-semibold text-destructive">{d.title}: </span>
+              <li key={i} className="rounded-lg border border-border/60 bg-card px-3 py-2.5">
+                <span className="font-mono text-[10px] font-semibold text-primary/80">{d.title}: </span>
                 <span className="text-[11px] text-foreground/80 leading-relaxed">{d.keyInsight}</span>
               </li>
             ))}
@@ -1648,8 +1700,7 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         </OutputBlock>
       )}
 
-      {/* Argument block */}
-      {(assumptions.length > 0 || strategy) && (
+      {showStrategy && (assumptions.length > 0 || strategy) && (
         <OutputBlock label="Argument" icon={Brain}>
           {assumptions.length > 0 && (
             <div className="rounded-lg border border-warning/25 bg-warning/[0.05] p-3 mb-2.5">
@@ -1712,8 +1763,8 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         </OutputBlock>
       )}
 
-      {/* item 10: editable roadmap */}
-      {roadmap.length > 0 && (
+      {/* ── Roadmap tab ────────────────────────────────────────────────────── */}
+      {showRoadmap && roadmap.length > 0 && (
         <OutputBlock label="Roadmap" icon={Map}>
           <div className="space-y-2.5">
             {roadmap.map((phase, i) => (
@@ -1774,8 +1825,8 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         </OutputBlock>
       )}
 
-      {/* item 11: competitor signals */}
-      {competitors.length > 0 && (
+      {/* Market signals — shown in overview */}
+      {showOverview && competitors.length > 0 && (
         <OutputBlock label="Market Signals" icon={Users}>
           <div className="space-y-2">
             {competitors.map((c, i) => (
@@ -1791,17 +1842,10 @@ function OutputPanel({ decisions, strategy, roadmap, topDecision, assumptions, v
         </OutputBlock>
       )}
 
-      {/* item 9: accuracy history sparkline */}
-      {accuracyHistory.length > 1 && (
+      {showOverview && accuracyHistory.length > 1 && (
         <OutputBlock label="Accuracy Trend" icon={TrendingUp}>
           <AccuracySparkline values={accuracyHistory} />
         </OutputBlock>
-      )}
-
-      {!isRunning && depth === "quick" && roadmap.length === 0 && decisions.length > 0 && (
-        <p className="font-mono text-[10px] text-muted-foreground/45 italic">
-          Quick mode skipped the roadmap. Switch to Standard or Deep for a full plan.
-        </p>
       )}
     </div>
   );
