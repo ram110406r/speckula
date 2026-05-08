@@ -362,8 +362,8 @@ export function Editor() {
       const el = document.getElementById(`block-${def.key}`);
       if (!el) return;
       const obs = new IntersectionObserver(
-        ([entry]) => { if (entry.isIntersecting) setActiveNavBlock(def.key); },
-        { root: container, threshold: 0.35 }
+        ([entry]) => { if (entry.intersectionRatio >= 0.5) setActiveNavBlock(def.key); },
+        { root: container, threshold: 0.5 }
       );
       obs.observe(el);
       observers.push(obs);
@@ -424,9 +424,8 @@ export function Editor() {
     if (!el || !container) return;
     const containerRect = container.getBoundingClientRect();
     const elRect = el.getBoundingClientRect();
-    container.scrollTo({ top: container.scrollTop + (elRect.top - containerRect.top) - 16, behavior: "smooth" });
+    container.scrollTo({ left: container.scrollLeft + (elRect.left - containerRect.left), behavior: "smooth" });
     setActiveNavBlock(key);
-    // Expand if collapsed
     setCollapsedBlocks((prev) => { const n = new Set(prev); n.delete(key); return n; });
   }, []);
 
@@ -528,29 +527,31 @@ export function Editor() {
           onJump={scrollToBlock}
         />
 
-        {/* Center: blocks — horizontal scroll row */}
+        {/* Center: blocks — full-width snap carousel */}
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-x-auto overflow-y-hidden min-w-0 px-3 sm:px-4 py-4"
+          className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory flex flex-row"
         >
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center h-full w-full gap-3 text-muted-foreground/50">
+            <div className="flex flex-col items-center justify-center h-full w-full gap-3 text-muted-foreground/50 shrink-0">
               <Loader2 className="h-5 w-5 animate-spin" />
               <span className="font-mono text-[11px] uppercase tracking-widest">Loading…</span>
             </div>
           ) : showEmptyState ? (
-            <EmptyStateTemplates
-              templates={TEMPLATES}
-              onApply={applyTemplate}
-              onDismiss={() => setDismissedEmptyState(true)}
-            />
+            <div className="w-full shrink-0 h-full overflow-y-auto">
+              <EmptyStateTemplates
+                templates={TEMPLATES}
+                onApply={applyTemplate}
+                onDismiss={() => setDismissedEmptyState(true)}
+              />
+            </div>
           ) : (
-            <div className="flex flex-row gap-3 h-full">
+            <>
               {BLOCK_DEFS.map((def) => (
                 <div
                   key={def.key}
                   id={`block-${def.key}`}
-                  className="w-[300px] shrink-0 h-full"
+                  className="w-full shrink-0 h-full snap-start p-3 sm:p-4"
                 >
                   <ResearchBlock
                     def={def}
@@ -574,7 +575,7 @@ export function Editor() {
                   />
                 </div>
               ))}
-            </div>
+            </>
           )}
         </div>
 
