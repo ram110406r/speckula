@@ -37,19 +37,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
+
     let initializedFor: string | null = null;
 
-    // Pick up any pending redirect result from a previous signInWithRedirect call.
-    // Must run before onAuthStateChanged so a fresh redirect isn't treated as a
-    // cold load (which would flash the landing page momentarily).
-    getRedirectResult(auth).catch((err) => {
-      // Log but don't block — if there's no pending redirect this resolves null.
-      if (err?.code !== "auth/no-current-user") {
-        console.error("getRedirectResult failed:", err);
-      }
-    });
+    // Whether getRedirectResult has finished. We hold the loading state
+    // until this resolves so a redirect-back doesn't flash the landing page
+    // before Firebase processes the OAuth result.
+    let redirectSettled = false;
+    // Buffered auth state received while waiting for redirect result.
+    // undefined = onAuthStateChanged hasn't fired yet.
+    let bufferedUser: User | null | undefined = undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
+    const settle = async (nextUser: User | null) => {
       setUser(nextUser);
       if (!nextUser) {
         initializedFor = null;
@@ -67,14 +66,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } finally {
         setLoading(false);
       }
+    };
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (nextUser) => {
+      if (!redirectSettled) {
+        // Buffer until redirect result is known, to avoid flashing the landing
+        // page for the brief moment before Firebase processes the redirect.
+        bufferedUser = nextUser;
+        return;
+      }
+      await settle(nextUser);
     });
 
-    // Cross-tab token sync: react to revocations / refreshes immediately.
     const unsubscribeToken = onIdTokenChanged(auth!, (nextUser) => {
       if (!nextUser) {
         useAppStore.getState().resetState();
       }
     });
+
+    // Resolve any pending redirect sign-in before allowing the auth state
+    // to propagate to the rest of the app.
+    getRedirectResult(auth)
+      .catch((err) => {
+        if (err?.code !== "auth/no-current-user") {
+          console.error("getRedirectResult failed:", err);
+        }
+      })
+      .finally(async () => {
+        redirectSettled = true;
+        // If onAuthStateChanged already fired while we were waiting, process it now.
+        if (bufferedUser !== undefined) {
+          await settle(bufferedUser);
+        }
+        // If onAuthStateChanged hasn't fired yet, it will call settle() directly
+        // because redirectSettled is now true.
+      });
 
     return () => {
       unsubscribeAuth();
@@ -85,9 +111,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithGoogle = async () => {
     if (!auth) throw new Error("Firebase is not configured.");
     const provider = new GoogleAuthProvider();
-    // signInWithRedirect is more reliable in production than signInWithPopup:
-    // popups are blocked by third-party cookie restrictions and some browsers.
-    // The redirect result is picked up by getRedirectResult on next page load.
     await signInWithRedirect(auth, provider);
   };
 
