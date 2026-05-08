@@ -10,6 +10,7 @@ import {
   orderBy,
   serverTimestamp,
   addDoc,
+  writeBatch,
   limit as firestoreLimit,
   onSnapshot,
   Timestamp as FsTimestamp,
@@ -315,9 +316,12 @@ export const saveInsightsBatch = async (userId: string, items: Omit<Insight, "us
     const recent = await getDocs(query(userInsightsCollection(userId), orderBy("createdAt", "desc"), firestoreLimit(50)));
     const existingFps = new Set(recent.docs.map((d) => insightFingerprint(d.data() as Insight)));
     const newItems = items.filter((item) => !existingFps.has(insightFingerprint(item)));
+    if (newItems.length === 0) return;
+    const batch = writeBatch(db);
     for (const item of newItems) {
-      await addDoc(userInsightsCollection(userId), { ...item, userId, createdAt: serverTimestamp() });
+      batch.set(doc(userInsightsCollection(userId)), { ...item, userId, createdAt: serverTimestamp() });
     }
+    await batch.commit();
   } catch (error) {
     logFirestorePermissionHint("saveInsightsBatch", error);
     throw error;
@@ -414,7 +418,8 @@ export const publishCase = async (
   meta: Pick<DecisionRecord, "title" | "score" | "priority">
 ): Promise<void> => {
   try {
-    await setDoc(publicCaseRef(decisionId), {
+    const batch = writeBatch(db);
+    batch.set(publicCaseRef(decisionId), {
       userId,
       decisionId,
       visibility: "unlisted",
@@ -425,7 +430,8 @@ export const publishCase = async (
       publishedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    await updateDecision(userId, decisionId, { published: true, caseBrief: brief });
+    batch.set(doc(userDecisionsCollection(userId), decisionId), { published: true, caseBrief: brief, updatedAt: serverTimestamp() }, { merge: true });
+    await batch.commit();
   } catch (error) {
     logFirestorePermissionHint("publishCase", error);
     throw error;
@@ -434,8 +440,10 @@ export const publishCase = async (
 
 export const unpublishCase = async (userId: string, decisionId: string): Promise<void> => {
   try {
-    await deleteDoc(publicCaseRef(decisionId));
-    await updateDecision(userId, decisionId, { published: false });
+    const batch = writeBatch(db);
+    batch.delete(publicCaseRef(decisionId));
+    batch.set(doc(userDecisionsCollection(userId), decisionId), { published: false, updatedAt: serverTimestamp() }, { merge: true });
+    await batch.commit();
   } catch (error) {
     logFirestorePermissionHint("unpublishCase", error);
     throw error;
