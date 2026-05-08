@@ -29,12 +29,15 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              // apis.google.com: Firebase Auth SDK entry point
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: https://lh3.googleusercontent.com",
-              "connect-src 'self' https://*.googleapis.com https://*.google.com https://*.firebase.com https://*.firebaseio.com https://firestore.googleapis.com https://slack.com wss://*.firebaseio.com",
+              "img-src 'self' data: https://lh3.googleusercontent.com https://*.googleusercontent.com",
+              // identitytoolkit + securetoken: Firebase Auth REST calls
+              "connect-src 'self' https://*.googleapis.com https://*.google.com https://*.firebase.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://slack.com wss://*.firebaseio.com",
               "font-src 'self'",
-              "frame-src 'none'",
+              // firebaseapp.com: redirect-result iframe; accounts.google.com: OAuth
+              "frame-src https://accounts.google.com https://*.firebaseapp.com https://*.web.app",
               "object-src 'none'",
               "base-uri 'self'",
             ].join("; "),
