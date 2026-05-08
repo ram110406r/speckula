@@ -5,13 +5,13 @@ import { useAppStore } from "@/store/useAppStore";
 import dynamic from "next/dynamic";
 const Editor = dynamic(() => import("@/components/editor/Editor").then(m => ({ default: m.Editor })), { ssr: false });
 import { AIPanel } from "@/components/ai/AIPanel";
-import { SidebarNav } from "@/components/layout/SidebarNav";
+import { ModernSidebar } from "@/components/ui/modern-side-bar";
 import { InsightsView } from "../views/InsightsView";
 import { PRDsView } from "../views/PRDsView";
 import { TasksView } from "../views/TasksView";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { LandingPage } from "./LandingPage";
-import { DashboardView } from "../views/DashboardView";
+import { DecisionView } from "../views/DecisionView";
 import { PlatformView } from "../views/PlatformView";
 import { SlackView } from "../views/SlackView";
 import { AutonomousModeView } from "../views/AutonomousModeView";
@@ -108,6 +108,7 @@ export function Shell() {
   const { user, loading } = useAuth();
   const { aiPanelOpen, toggleAiPanel, activeView, setActiveView, documents, currentDocId } =
     useAppStore();
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   // Track whether Autonomous Mode has ever been visited so we can keep it
   // mounted (but hidden) instead of unmounting on navigation, preserving state.
   const [autonomousMounted, setAutonomousMounted] = React.useState(false);
@@ -138,7 +139,7 @@ export function Shell() {
       case "insights":   return <InsightsView />;
       case "prds":       return <PRDsView />;
       case "tasks":      return <TasksView />;
-      case "decisions":  return <DashboardView />;
+      case "decisions":  return <DecisionView />;
       case "platform":   return <PlatformView />;
       case "slack":      return <SlackView />;
       // "autonomous" is rendered persistently below — not here
@@ -201,12 +202,12 @@ export function Shell() {
       <div
         className={
           showAIPanel
-            ? "grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,1fr)_360px]"
-            : "grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)]"
+            ? `grid min-h-0 flex-1 grid-cols-1 ${sidebarCollapsed ? "md:grid-cols-[68px_minmax(0,1fr)] lg:grid-cols-[68px_minmax(0,1fr)_360px]" : "md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_360px]"}`
+            : `grid min-h-0 flex-1 grid-cols-1 ${sidebarCollapsed ? "md:grid-cols-[68px_minmax(0,1fr)]" : "md:grid-cols-[240px_minmax(0,1fr)]"}`
         }
       >
-        <div className="hidden min-h-0 border-r border-border/70 md:block">
-          <SidebarNav />
+        <div className="hidden min-h-0 border-r border-border/70 md:block transition-all duration-300">
+          <ModernSidebar onCollapsedChange={setSidebarCollapsed} />
         </div>
 
         <div className="min-h-0 min-w-0 overflow-hidden bg-card">

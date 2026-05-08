@@ -1,24 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Playfair_Display, DM_Mono } from "next/font/google";
+import { Sora, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/firebase/AuthProvider";
 import { Toaster } from "@/components/ui/toaster";
 import { ExportDialog } from "@/components/ui/export-dialog";
 
-const inter = Inter({
+const sora = Sora({
   subsets: ["latin"],
   variable: "--font-sans",
 });
 
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-heading",
-});
-
-const dmMono = DM_Mono({
-  weight: ["400", "500"],
+const plexMono = IBM_Plex_Mono({
+  weight: ["400", "500", "600"],
   subsets: ["latin"],
   variable: "--font-mono",
 });
@@ -66,7 +60,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body suppressHydrationWarning className={`${inter.variable} ${playfair.variable} ${dmMono.variable} font-sans min-h-screen bg-background antialiased`}>
+      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
           <Toaster />
