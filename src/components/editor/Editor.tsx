@@ -161,6 +161,15 @@ function extractTipTapText(node: unknown): string {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "$1")  // bold
+    .replace(/\*(.*?)\*/g, "$1")       // italic
+    .replace(/^#{1,6}\s+/gm, "")      // headings
+    .replace(/^[-*]\s+/gm, "• ")      // unordered lists
+    .replace(/`([^`]+)`/g, "$1");     // inline code
+}
+
 function wordCount(text: string): number {
   return text.trim() ? text.trim().split(/\s+/).length : 0;
 }
@@ -379,7 +388,8 @@ export function Editor() {
     if (!user || hintLoading || !blocks[key]) return;
     setHintLoading(key);
     const other = BLOCK_DEFS.filter((b) => b.key !== key).map((b) => blocks[b.key]).filter(Boolean).join(" ");
-    const hint = await getBlockSuggestion(user.uid, BLOCK_DEFS.find((b) => b.key === key)!.label, blocks[key], other);
+    const rawHint = await getBlockSuggestion(user.uid, BLOCK_DEFS.find((b) => b.key === key)!.label, blocks[key], other);
+    const hint = rawHint ? stripMarkdown(rawHint) : rawHint;
     setBlockHints((prev) => ({ ...prev, [key]: hint ?? undefined }));
     setHintLoading(null);
   }, [user, blocks, hintLoading]);
@@ -552,7 +562,8 @@ export function Editor() {
                     onApplyHint={() => {
                       const h = blockHints[def.key];
                       if (h) {
-                        updateBlock(def.key, blocks[def.key] ? `${blocks[def.key]}\n\n${h}` : h);
+                        const clean = stripMarkdown(h);
+                        updateBlock(def.key, blocks[def.key] ? `${blocks[def.key]}\n\n${clean}` : clean);
                         setBlockHints((prev) => ({ ...prev, [def.key]: undefined }));
                       }
                     }}
@@ -835,20 +846,20 @@ function ResearchBlock({
     <div className={`rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-card shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-border/80 transition-all duration-200 overflow-hidden group ${borderAccent}`}>
 
       {/* Block header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-border/50 bg-slate-50/60 dark:bg-muted/20">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-border/50 bg-slate-50/60 dark:bg-muted/20 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
           {/* Completion dot */}
           <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor} transition-colors duration-300`} />
-          <span className="font-mono text-[10px] uppercase tracking-[0.1em] font-semibold text-muted-foreground">
+          <span className="font-mono text-[10px] uppercase tracking-[0.1em] font-semibold text-muted-foreground shrink-0">
             {def.label}
           </span>
           {/* Word count with target */}
           {wc > 0 && (
-            <span className={`font-mono text-[9px] tabular-nums transition-colors ${
+            <span className={`font-mono text-[9px] tabular-nums whitespace-nowrap shrink-0 transition-colors ${
               completion === "complete" ? "text-emerald-500/70" :
               completion === "partial"  ? "text-amber-500/70"   : "text-muted-foreground/40"
             }`}>
-              {wc} / {wordTarget}w
+              {wc}/{wordTarget}w
             </span>
           )}
         </div>
