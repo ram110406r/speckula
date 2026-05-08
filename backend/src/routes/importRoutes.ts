@@ -143,6 +143,55 @@ const cleanHtmlText = (raw: string): string => {
     .trim();
 };
 
+// Extracts readable conversation text from __NEXT_DATA__ JSON (ChatGPT shared
+// chats and other Next.js SSR pages that embed conversation data in JSON).
+function extractNextData(html: string): { title: string | null; text: string } | null {
+  const match = html.match(/<script[^>]+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+  if (!match) return null;
+
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+
+  // ChatGPT shared conversation: props.pageProps.serverResponse.data
+  try {
+    const props = (data as any)?.props?.pageProps;
+    const serverData = props?.serverResponse?.data ?? props?.sharedConversation;
+    const mapping: Record<string, unknown> = serverData?.mapping ?? {};
+    const lines: string[] = [];
+    for (const node of Object.values(mapping)) {
+      const msg = (node as any)?.message;
+      if (!msg) continue;
+      const role: string = msg.author?.role ?? '';
+      if (role !== 'user' && role !== 'assistant') continue;
+      const parts: unknown[] = msg.content?.parts ?? [];
+      const text = parts.filter((p) => typeof p === 'string').join(' ').trim();
+      if (!text) continue;
+      lines.push(`${role === 'user' ? 'User' : 'Assistant'}: ${text}`);
+    }
+    if (lines.length > 0) {
+      const title = (serverData?.title as string | undefined)?.trim() || null;
+      return { title, text: lines.join('\n\n') };
+    }
+  } catch {
+    // fall through
+  }
+
+  return null;
+}
+
+// Strip <script> and <style> blocks then strip all remaining HTML tags, giving
+// a plain-text fallback for pages where the article extractor finds nothing.
+function rawHtmlFallback(html: string): string {
+  const stripped = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '');
+  return cleanHtmlText(striptags(stripped, [], '\n'));
+}
+
 export default async function importRoutes(fastify: FastifyInstance) {
   // Auth and rate-limit are configured at the /import prefix scope in
   // app.ts so multipart never streams a body for an unauthenticated caller.
@@ -308,35 +357,57 @@ export default async function importRoutes(fastify: FastifyInstance) {
         clearTimeout(timeoutId);
       }
 
+      // ── Extraction: article extractor → __NEXT_DATA__ → raw strip ──────────
+      let extractedText: string | null = null;
+      let extractedTitle: string | null = null;
+
+      // Pass 1: article extractor (works for most articles / blogs)
       try {
         const extract = await getArticleExtractor();
         const article = await extract(html, undefined, {
           headers: { 'User-Agent': 'Speckula/1.0 (content import)' },
         });
-
         const rawContent = article?.content ?? '';
-        const stripped = striptags(rawContent, [], '\n');
-        const text = cleanHtmlText(stripped);
-
-        if (!text || text.length < 40) {
-          return replyError(reply, 422, 'Could not extract readable content from this URL.');
+        const text = cleanHtmlText(striptags(rawContent, [], '\n'));
+        if (text.length >= 40) {
+          extractedText = text;
+          extractedTitle = (article?.title ?? '').trim() || null;
         }
-
-        const title = (article?.title ?? '').trim() || null;
-
-        reply.code(200).send({
-          ok: true,
-          data: {
-            title,
-            text,
-            sourceUrl: parsedUrl.toString(),
-            charCount: text.length,
-          },
-        });
-      } catch (error) {
-        fastify.log.error(error);
-        replyError(reply, 422, 'Could not extract readable content from this URL.');
+      } catch {
+        // fall through to next pass
       }
+
+      // Pass 2: __NEXT_DATA__ (ChatGPT shared chats, Next.js SSR apps)
+      if (!extractedText) {
+        const nextData = extractNextData(html);
+        if (nextData && nextData.text.length >= 40) {
+          extractedText = nextData.text;
+          extractedTitle = nextData.title;
+        }
+      }
+
+      // Pass 3: strip all scripts/styles then strip tags (last resort)
+      if (!extractedText) {
+        const fallback = rawHtmlFallback(html);
+        if (fallback.length >= 40) {
+          // Cap at 20 000 chars to avoid flooding the editor with nav/footer soup
+          extractedText = fallback.slice(0, 20_000);
+        }
+      }
+
+      if (!extractedText) {
+        return replyError(reply, 422, 'Could not extract readable content from this URL. The page may require a login or block automated access.');
+      }
+
+      return reply.code(200).send({
+        ok: true,
+        data: {
+          title: extractedTitle,
+          text: extractedText,
+          sourceUrl: parsedUrl.toString(),
+          charCount: extractedText.length,
+        },
+      });
     }
   );
 
