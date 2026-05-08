@@ -345,6 +345,137 @@
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Print: case brief only, sans UI chrome                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Futuristic AI workspace — animations & glassmorphism utilities              */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 1; }
+}
+
+@keyframes ai-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(139, 92, 246, 0.12),
+      0 0 60px rgba(139, 92, 246, 0.04);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(139, 92, 246, 0.32),
+      0 0 100px rgba(79, 140, 255, 0.12),
+      0 0 140px rgba(34, 211, 238, 0.06);
+  }
+}
+
+@keyframes float-particle {
+  0%, 100% { transform: translateY(0)    translateX(0);   opacity: 0; }
+  20%       {                                              opacity: 0.6; }
+  50%       { transform: translateY(-40px) translateX(18px); }
+  80%       {                                              opacity: 0.15; }
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0%   50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+@keyframes timeline-glow {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 0.9; }
+}
+
+@keyframes node-pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(139, 92, 246, 0.55); }
+  70%  { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0);    }
+  100% { box-shadow: 0 0 0 0   rgba(139, 92, 246, 0);    }
+}
+
+@keyframes case-card-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25); }
+  50%       { box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.55), 0 0 18px rgba(139, 92, 246, 0.12); }
+}
+
+.animate-glow-pulse       { animation: glow-pulse       2s   ease-in-out infinite; }
+.animate-ai-breathe       { animation: ai-breathe       4s   ease-in-out infinite; }
+.animate-gradient-shift   { animation: gradient-shift   6s   ease          infinite; background-size: 200% 200%; }
+.animate-timeline-glow    { animation: timeline-glow    2.5s ease-in-out infinite; }
+.animate-node-pulse       { animation: node-pulse       2s   ease-out      infinite; }
+.animate-case-card-glow   { animation: case-card-glow   3s   ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-glow-pulse,
+  .animate-ai-breathe,
+  .animate-gradient-shift,
+  .animate-timeline-glow,
+  .animate-node-pulse,
+  .animate-case-card-glow {
+    animation: none;
+  }
+}
+
+/* Glassmorphism surfaces */
+.glass-surface {
+  background: rgba(18, 24, 38, 0.70);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.glass-surface-dark {
+  background: rgba(5, 8, 22, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+/* Floating particle field */
+.particle-field {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.55);
+  animation: float-particle var(--p-dur, 5s) ease-in-out infinite;
+  animation-delay: var(--p-del, 0s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .particle { animation: none; opacity: 0; }
+}
+
+/* Gradient border via pseudo-element */
+.gradient-border-card {
+  position: relative;
+  isolation: isolate;
+}
+
+.gradient-border-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.45),
+    rgba(79, 140, 255, 0.25),
+    rgba(34, 211, 238, 0.20)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+
 @media print {
   body {
     background: #ffffff !important;
