@@ -64,14 +64,15 @@ export const getFirebaseApp = (): App => {
 };
 
 // In-memory cache for token verification results (revocation status).
-// TTL: 2 minutes. Trades accuracy for latency — revoked tokens take up to
-// 2 min to be rejected, but normal request latency drops from 60-200ms to <1ms.
+// TTL: 30 seconds. Limits the window in which a revoked/disabled account can
+// still make authenticated requests before the cache expires and Firebase
+// re-checks revocation status (checkRevoked: true).
 interface CachedTokenVerification {
   decoded: any;
   expiresAt: number;
 }
 const tokenVerificationCache = new Map<string, CachedTokenVerification>();
-const TOKEN_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const TOKEN_CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
 const cleanExpiredTokens = () => {
   const now = Date.now();
@@ -98,7 +99,7 @@ export const verifyFirebaseIdToken = async (idToken: string) => {
   const app = getFirebaseApp();
   const now = Date.now();
   
-  // Check cache first (revocation status within 2 minutes)
+  // Check cache first (revocation status within 30 seconds)
   const cached = tokenVerificationCache.get(idToken);
   if (cached && cached.expiresAt > now) {
     return cached.decoded;
@@ -115,6 +116,12 @@ export const verifyFirebaseIdToken = async (idToken: string) => {
   });
   
   return decoded;
+};
+
+// Call this on explicit logout to immediately invalidate the cached token,
+// rather than waiting for the 30-second TTL to expire.
+export const invalidateTokenCache = (idToken: string): void => {
+  tokenVerificationCache.delete(idToken);
 };
 
 export const getFirebaseFirestore = (): Firestore => {
