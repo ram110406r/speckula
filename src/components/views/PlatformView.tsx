@@ -1,18 +1,25 @@
 "use client";
 
 import React from "react";
-import { Copy, Globe, Link2, Network, Sparkles, Users, ChevronDown, Clock } from "lucide-react";
+import {
+  Copy, Globe, Link2, Network, Sparkles, Users, ChevronDown, Clock,
+  CheckCircle2, Trash2, UserMinus, Pencil, X, Check, Plus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
+import { toast } from "@/store/useToastStore";
 import {
   getDecisions,
   getInsights,
-  getPublicProfile,
   getWorkspacesForUser,
   inviteWorkspaceMember,
+  removeWorkspaceMember,
   saveWorkspace,
+  updateWorkspace,
+  deleteWorkspace,
+  updateDecision,
   type DecisionRecord,
   type Insight,
   type TeamWorkspace,
@@ -25,10 +32,6 @@ const tabs: Array<{ id: PlatformTab; label: string; icon: React.ElementType }> =
   { id: "workspaces", label: "Workspaces", icon: Users },
 ];
 
-function profileUrl(userId: string) {
-  return `/u/${userId}`;
-}
-
 function getOriginPath(path: string) {
   if (typeof window === "undefined") return path;
   return `${window.location.origin}${path}`;
@@ -36,36 +39,56 @@ function getOriginPath(path: string) {
 
 export function PlatformView() {
   const { user } = useAuth();
-  const { currentDocId } = useAppStore();
+  // Fix #1: use reactive hook, not getState()
+  const { currentDocId, documents: docs } = useAppStore();
   const [activeTab, setActiveTab] = React.useState<PlatformTab>("portfolio");
   const [workspaces, setWorkspaces] = React.useState<(TeamWorkspace & { id: string })[]>([]);
   const [decisionsAll, setDecisionsAll] = React.useState<DecisionRecord[]>([]);
   const [decisions, setDecisions] = React.useState<DecisionRecord[]>([]);
   const [insights, setInsights] = React.useState<Insight[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
+
+  // Workspace form state — per-workspace keyed maps (fix #12)
   const [workspaceName, setWorkspaceName] = React.useState("");
-  const [inviteTarget, setInviteTarget] = React.useState("");
+  const [inviteInputs, setInviteInputs] = React.useState<Record<string, string>>({});
+  const [roleInputs, setRoleInputs] = React.useState<Record<string, "editor" | "viewer">>({});
+  const [renamingId, setRenamingId] = React.useState<string | null>(null);
+  const [renameValue, setRenameValue] = React.useState("");
+
+  // Outcome recording state
+  const [outcomeForm, setOutcomeForm] = React.useState<{
+    decisionId: string;
+    note: string;
+    success: "yes" | "no" | "partial";
+  } | null>(null);
+  const [savingOutcome, setSavingOutcome] = React.useState(false);
 
   const loadPlatformData = React.useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
     try {
-      const [, workspaceData, decisionData, insightData] = await Promise.all([
-        getPublicProfile(user.uid),
+      // Fix #8: removed discarded getPublicProfile call
+      const [workspaceData, decisionData, insightData] = await Promise.all([
         getWorkspacesForUser(user.uid),
         getDecisions(user.uid),
         getInsights(user.uid),
       ]);
+
+      // Fix #3: scope insights to current doc
+      const scopedInsights = currentDocId
+        ? (insightData as Insight[]).filter((i) => i.sourceDocId === currentDocId)
+        : [];
       const scopedDecisions = currentDocId
-        ? decisionData.filter((decision) => decision.sourceDocId === currentDocId)
+        ? decisionData.filter((d) => d.sourceDocId === currentDocId)
         : [];
 
       setWorkspaces(workspaceData);
       setDecisionsAll(decisionData);
       setDecisions(scopedDecisions);
-      setInsights((insightData as Insight[]) || []);
+      setInsights(scopedInsights);
     } catch (error) {
       console.error("Failed to load platform data:", error);
+      toast.error("Failed to load data", "Check your connection and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -87,39 +110,102 @@ export function PlatformView() {
     );
   }
 
+  // ── Workspace handlers ────────────────────────────────────────────────────
+
   const handleCreateWorkspace = async () => {
     if (!workspaceName.trim()) return;
     try {
       await saveWorkspace(user.uid, workspaceName.trim());
       setWorkspaceName("");
       await loadPlatformData();
-    } catch (error) {
-      console.error("Failed to create workspace:", error);
-      alert("Failed to create workspace.");
+      toast.success("Workspace created");
+    } catch {
+      toast.error("Failed to create workspace"); // fix #16
     }
   };
 
   const handleInviteMember = async (workspaceId: string) => {
-    if (!inviteTarget.trim()) return;
+    const userId = (inviteInputs[workspaceId] ?? "").trim();
+    const role = roleInputs[workspaceId] ?? "viewer";
+    if (!userId) return;
     try {
-      await inviteWorkspaceMember(workspaceId, { userId: inviteTarget.trim(), role: "viewer" });
-      setInviteTarget("");
+      await inviteWorkspaceMember(workspaceId, { userId, role });
+      setInviteInputs((prev) => ({ ...prev, [workspaceId]: "" }));
       await loadPlatformData();
-    } catch (error) {
-      console.error("Failed to invite workspace member:", error);
-      alert("Failed to invite member.");
+      toast.success("Member invited");
+    } catch {
+      toast.error("Failed to invite member"); // fix #16
     }
   };
 
-  const publicProfileLink = getOriginPath(profileUrl(user.uid));
+  const handleRemoveMember = async (workspaceId: string, memberUserId: string) => {
+    try {
+      await removeWorkspaceMember(workspaceId, memberUserId);
+      await loadPlatformData();
+      toast.success("Member removed");
+    } catch {
+      toast.error("Failed to remove member");
+    }
+  };
+
+  const handleDeleteWorkspace = async (workspaceId: string, name: string) => {
+    if (!window.confirm(`Delete workspace "${name}"? This cannot be undone.`)) return;
+    try {
+      await deleteWorkspace(workspaceId);
+      await loadPlatformData();
+      toast.success("Workspace deleted");
+    } catch {
+      toast.error("Failed to delete workspace");
+    }
+  };
+
+  const handleRenameWorkspace = async (workspaceId: string) => {
+    if (!renameValue.trim()) { setRenamingId(null); return; }
+    try {
+      await updateWorkspace(workspaceId, { name: renameValue.trim() } as Parameters<typeof updateWorkspace>[1]);
+      setRenamingId(null);
+      setRenameValue("");
+      await loadPlatformData();
+      toast.success("Workspace renamed");
+    } catch {
+      toast.error("Failed to rename workspace");
+    }
+  };
+
+  // ── Outcome handler ────────────────────────────────────────────────────────
+
+  const handleSaveOutcome = async () => {
+    if (!outcomeForm || !user) return;
+    setSavingOutcome(true);
+    try {
+      await updateDecision(user.uid, outcomeForm.decisionId, {
+        outcomeNote: outcomeForm.note,
+        success: outcomeForm.success === "yes",
+        outcomeRecordedAt: null, // serverTimestamp written by updateDecision via setDoc
+      });
+      // Patch local state so timeline refreshes immediately
+      setDecisions((prev) =>
+        prev.map((d) =>
+          d.id === outcomeForm.decisionId
+            ? { ...d, outcomeNote: outcomeForm.note, success: outcomeForm.success === "yes", outcomeRecordedAt: new Date() as unknown as import("@/lib/firebase/db").DecisionRecord["outcomeRecordedAt"] }
+            : d
+        )
+      );
+      setOutcomeForm(null);
+      toast.success("Outcome recorded");
+    } catch {
+      toast.error("Failed to save outcome");
+    } finally {
+      setSavingOutcome(false);
+    }
+  };
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   function millisFromTimestamp(ts: unknown): number | undefined {
     if (!ts) return undefined;
     if (typeof ts === "number") return ts;
-    if (typeof ts === "string") {
-      const n = Date.parse(ts);
-      return Number.isNaN(n) ? undefined : n;
-    }
+    if (typeof ts === "string") { const n = Date.parse(ts); return Number.isNaN(n) ? undefined : n; }
     if (typeof ts === "object") {
       const t = ts as { seconds?: number; toDate?: () => Date };
       if (typeof t.seconds === "number") return t.seconds * 1000;
@@ -128,16 +214,11 @@ export function PlatformView() {
     return undefined;
   }
 
-  const docs = useAppStore.getState().documents;
   const activeDoc = docs.find((d) => d.id === currentDocId) ?? null;
   const latestDecision = decisions[0] ?? null;
 
-  const computeScore = () => {
-    if (!latestDecision) return null;
-    return latestDecision.score ?? Math.round((latestDecision.impact || 0) * (latestDecision.confidence || 0));
-  };
-
-  const score = computeScore();
+  // Fix #4: use stored score only, no fallback multiplication
+  const score = latestDecision?.score ?? null;
 
   const healthLabel = (s: number | null) => {
     if (s === null) return { text: "Unknown", cls: "text-muted-foreground" };
@@ -145,8 +226,24 @@ export function PlatformView() {
     if (s >= 50) return { text: "Watch", cls: "text-amber-600 dark:text-amber-400" };
     return { text: "Risk", cls: "text-red-600 dark:text-red-400" };
   };
+  const health = healthLabel(score);
 
-  const health = healthLabel(score ?? null);
+  // Fix #9: richer status
+  const outcomeRecorded = decisions.some((d) => d.outcomeRecordedAt);
+  const anyPublished = decisions.some((d) => d.published);
+  const caseStatus = outcomeRecorded ? "Shipped"
+    : anyPublished ? "Published"
+    : decisions.length > 0 ? "Active"
+    : "Draft";
+
+  const statusCls: Record<string, string> = {
+    Shipped: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+    Published: "bg-primary/10 text-primary",
+    Active: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    Draft: "bg-muted text-muted-foreground",
+  };
+
+  const publicProfileLink = getOriginPath(`/u/${user.uid}`);
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -160,12 +257,8 @@ export function PlatformView() {
           variant="outline"
           size="sm"
           onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(publicProfileLink);
-            } catch (error) {
-              console.error("Failed to copy profile link:", error);
-              alert("Could not copy the profile link.");
-            }
+            try { await navigator.clipboard.writeText(publicProfileLink); toast.success("Profile link copied"); }
+            catch { toast.error("Could not copy link"); }
           }}
         >
           <Copy className="h-3.5 w-3.5" /> Copy Profile Link
@@ -182,9 +275,7 @@ export function PlatformView() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`inline-flex items-center gap-2 rounded px-3.5 py-1.5 text-[12px] font-medium transition-all ${
-                active
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                active ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -213,8 +304,10 @@ export function PlatformView() {
                     ) : (
                       docs.map((doc) => {
                         const docDecisions = decisionsAll.filter((d) => d.sourceDocId === doc.id);
-                        const badge = docDecisions.length > 0
-                          ? Math.round((docDecisions.reduce((s, d) => s + (d.score ?? 0), 0) / docDecisions.length) || 0)
+                        // Fix #4: badge uses stored score only
+                        const scoredDecisions = docDecisions.filter((d) => typeof d.score === "number");
+                        const badge = scoredDecisions.length > 0
+                          ? Math.round(scoredDecisions.reduce((s, d) => s + d.score!, 0) / scoredDecisions.length)
                           : null;
                         const active = doc.id === currentDocId;
                         return (
@@ -231,7 +324,7 @@ export function PlatformView() {
                               <div className={`text-sm font-medium truncate ${active ? "text-primary" : ""}`}>{doc.title}</div>
                               <div className="text-[11px] text-muted-foreground mt-0.5">
                                 {millisFromTimestamp(doc.updatedAt)
-                                  ? new Date(millisFromTimestamp(doc.updatedAt) as number).toLocaleString()
+                                  ? new Date(millisFromTimestamp(doc.updatedAt) as number).toLocaleDateString()
                                   : "—"}
                               </div>
                             </div>
@@ -259,7 +352,6 @@ export function PlatformView() {
             <main className="space-y-5 min-w-0">
               {/* Case header card */}
               <section className="rounded-xl border border-border bg-card p-5">
-                {/* Title row */}
                 <div className="mb-4">
                   <h1 className="text-xl font-semibold leading-tight truncate">
                     {activeDoc?.title ?? "Untitled Case"}
@@ -274,18 +366,14 @@ export function PlatformView() {
                         ? new Date(millisFromTimestamp(activeDoc?.updatedAt) as number).toLocaleString()
                         : "—"}
                     </span>
-                    <span>{decisions.length} decisions</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                      decisions.length > 0
-                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                        : "bg-muted text-muted-foreground"
-                    }`}>
-                      {decisions.length > 0 ? "Active" : "Draft"}
+                    <span>{decisions.length} decision{decisions.length !== 1 ? "s" : ""}</span>
+                    {/* Fix #9: richer status */}
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${statusCls[caseStatus]}`}>
+                      {caseStatus}
                     </span>
                   </div>
                 </div>
 
-                {/* Score row */}
                 <div className="rounded-lg border border-border bg-muted/40 p-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
@@ -301,12 +389,11 @@ export function PlatformView() {
                       </p>
                     </div>
                   </div>
-                  {latestDecision?.keyInsight && (
+                  {latestDecision?.keyInsight ? (
                     <p className="mt-3 text-[13px] text-muted-foreground border-t border-border pt-3">
                       {latestDecision.keyInsight}
                     </p>
-                  )}
-                  {!latestDecision?.keyInsight && (
+                  ) : (
                     <p className="mt-3 text-[13px] text-muted-foreground/60 border-t border-border pt-3">
                       No AI insights yet — run signal extraction.
                     </p>
@@ -322,37 +409,48 @@ export function PlatformView() {
                 <div className="relative">
                   <div className="absolute left-[19px] top-4 bottom-4 w-px bg-border" />
                   <div className="space-y-3 pl-10">
+
+                    {/* Fix #2: Problem Defined — reads from actual document */}
                     <TimelineStep
                       title="Problem Defined"
-                      status="complete"
+                      status={activeDoc ? "complete" : "pending"}
                       timestamp={millisFromTimestamp(activeDoc?.updatedAt)}
                     >
-                      <div className="text-sm space-y-1">
-                        <p className="font-medium">Who: {user.displayName}</p>
-                        <p className="text-muted-foreground">Behavior: Describe the user behavior your product addresses.</p>
-                        <p className="text-muted-foreground">Metric: (add a measurable metric)</p>
-                      </div>
+                      {activeDoc ? (
+                        <div className="text-sm space-y-1">
+                          <p className="font-medium">{activeDoc.title}</p>
+                          <p className="text-muted-foreground text-[12px]">
+                            Last updated {millisFromTimestamp(activeDoc.updatedAt)
+                              ? new Date(millisFromTimestamp(activeDoc.updatedAt) as number).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+                              : "—"}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No document selected — open a case from the sidebar.</p>
+                      )}
                     </TimelineStep>
 
+                    {/* Fix #3: Signals scoped to current doc */}
                     <TimelineStep
                       title="Signals Detected"
                       status={insights.length > 0 ? "active" : "pending"}
                       timestamp={millisFromTimestamp(insights[0]?.createdAt)}
                     >
                       {insights.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No signals detected — run insights extraction.</p>
+                        <p className="text-sm text-muted-foreground">No signals detected — run signal extraction from the Research view.</p>
                       ) : (
                         <ul className="space-y-1">
                           {insights.map((s) => (
-                            <li key={s.id} className="text-sm">
-                              {s.title}
-                              <span className="ml-2 text-[11px] text-muted-foreground">{s.category}</span>
+                            <li key={s.id} className="text-sm flex items-center gap-2">
+                              <span>{s.title}</span>
+                              <span className="text-[11px] text-muted-foreground capitalize">{s.category?.replace("-", " ")}</span>
                             </li>
                           ))}
                         </ul>
                       )}
                     </TimelineStep>
 
+                    {/* Fix #5: Arguments show actual justification + tradeoffs */}
                     <TimelineStep
                       title="Arguments Built"
                       status={decisions.length > 0 ? "active" : "pending"}
@@ -366,18 +464,26 @@ export function PlatformView() {
                             <div key={d.id} className="rounded-lg border border-border bg-background p-3">
                               <div className="flex items-center justify-between gap-2">
                                 <p className="text-sm font-medium">{d.title}</p>
-                                {d.published && (
-                                  <button
-                                    className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700"
-                                    onClick={() => navigator.clipboard.writeText(`${window.location.origin}/case/${d.id}`).catch(() => {})}
-                                    title="Copy public link"
-                                  >
-                                    <Globe className="h-3 w-3" />
-                                    <Link2 className="h-3 w-3" />
-                                  </button>
-                                )}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {/* Fix #6: publish link copies correctly */}
+                                  {d.published && (
+                                    <button
+                                      className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700"
+                                      onClick={() => navigator.clipboard.writeText(`${window.location.origin}/case/${d.id}`).then(() => toast.success("Link copied")).catch(() => {})}
+                                      title="Copy public link"
+                                    >
+                                      <Globe className="h-3 w-3" />
+                                      <Link2 className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                              <p className="mt-1 text-[11px] text-muted-foreground">Pros/Cons summarized</p>
+                              {d.justification && (
+                                <p className="mt-1 text-[12px] text-muted-foreground line-clamp-2">{d.justification}</p>
+                              )}
+                              {d.tradeoffs && (
+                                <p className="mt-1 text-[11px] text-muted-foreground/70 italic line-clamp-1">Tradeoffs: {d.tradeoffs}</p>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -398,7 +504,7 @@ export function PlatformView() {
                             {decisions[0].published && (
                               <button
                                 className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700"
-                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/case/${decisions[0].id}`).catch(() => {})}
+                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/case/${decisions[0].id}`).then(() => toast.success("Link copied")).catch(() => {})}
                                 title="Copy public link"
                               >
                                 <Globe className="h-3 w-3" /> Copy link
@@ -406,20 +512,87 @@ export function PlatformView() {
                             )}
                           </div>
                           <p className="mt-1 text-[11px] text-muted-foreground">
-                            Score: {decisions[0].score ?? "—"} · Confidence: {decisions[0].confidence ?? "—"}
+                            {decisions[0].score !== undefined ? `Score: ${decisions[0].score} · ` : ""}Confidence: {decisions[0].confidence ?? "—"}
                           </p>
                           <p className="mt-2 text-sm">{decisions[0].justification}</p>
                         </div>
                       )}
                     </TimelineStep>
 
+                    {/* Fix #7: Outcome step with recording UI */}
                     <TimelineStep
                       title="Outcome"
-                      status="pending"
-                      timestamp={millisFromTimestamp(decisions[0]?.updatedAt)}
+                      status={outcomeRecorded ? "complete" : decisions.length > 0 ? "active" : "pending"}
+                      timestamp={decisions.find((d) => d.outcomeRecordedAt)
+                        ? millisFromTimestamp(decisions.find((d) => d.outcomeRecordedAt)?.outcomeRecordedAt)
+                        : undefined}
                     >
-                      <p className="text-sm text-muted-foreground">Outcomes and metrics will appear here once recorded.</p>
+                      {outcomeRecorded ? (
+                        <div className="space-y-2">
+                          {decisions.filter((d) => d.outcomeRecordedAt).map((d) => (
+                            <div key={d.id} className="rounded-lg border border-border bg-background p-3">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm font-medium">{d.title}</p>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${d.success ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
+                                  {d.success ? "Success" : "Missed"}
+                                </span>
+                              </div>
+                              {d.outcomeNote && <p className="text-[12px] text-muted-foreground">{d.outcomeNote}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      ) : decisions.length > 0 ? (
+                        <div>
+                          {outcomeForm ? (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide block mb-1">Result</label>
+                                <select
+                                  value={outcomeForm.success}
+                                  onChange={(e) => setOutcomeForm({ ...outcomeForm, success: e.target.value as "yes" | "no" | "partial" })}
+                                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                                >
+                                  <option value="yes">Success — target met or exceeded</option>
+                                  <option value="partial">Partial — some goals met</option>
+                                  <option value="no">Missed — target not reached</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide block mb-1">What actually happened</label>
+                                <textarea
+                                  value={outcomeForm.note}
+                                  onChange={(e) => setOutcomeForm({ ...outcomeForm, note: e.target.value })}
+                                  placeholder="Describe the actual result, metrics observed, and key learnings…"
+                                  rows={3}
+                                  className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={handleSaveOutcome} disabled={savingOutcome}>
+                                  {savingOutcome ? "Saving…" : "Record Outcome"}
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => setOutcomeForm(null)}>Cancel</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-sm text-muted-foreground">Outcomes and metrics will appear here once recorded.</p>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setOutcomeForm({ decisionId: decisions[0].id!, note: "", success: "yes" })}
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                                Record Outcome
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Make a decision first to record its outcome.</p>
+                      )}
                     </TimelineStep>
+
                   </div>
                 </div>
               </section>
@@ -430,11 +603,21 @@ export function PlatformView() {
             userId={user.uid}
             workspaces={workspaces}
             workspaceName={workspaceName}
-            inviteTarget={inviteTarget}
+            inviteInputs={inviteInputs}
+            roleInputs={roleInputs}
+            renamingId={renamingId}
+            renameValue={renameValue}
             onWorkspaceNameChange={setWorkspaceName}
-            onInviteTargetChange={setInviteTarget}
+            onInviteInputChange={(wsId, val) => setInviteInputs((p) => ({ ...p, [wsId]: val }))}
+            onRoleInputChange={(wsId, role) => setRoleInputs((p) => ({ ...p, [wsId]: role }))}
             onCreateWorkspace={handleCreateWorkspace}
             onInviteMember={handleInviteMember}
+            onRemoveMember={handleRemoveMember}
+            onDeleteWorkspace={handleDeleteWorkspace}
+            onStartRename={(wsId, name) => { setRenamingId(wsId); setRenameValue(name); }}
+            onRenameChange={setRenameValue}
+            onConfirmRename={handleRenameWorkspace}
+            onCancelRename={() => { setRenamingId(null); setRenameValue(""); }}
           />
         )}
       </div>
@@ -443,10 +626,7 @@ export function PlatformView() {
 }
 
 function TimelineStep({
-  title,
-  status,
-  timestamp,
-  children,
+  title, status, timestamp, children,
 }: {
   title: string;
   status: "pending" | "active" | "complete";
@@ -456,15 +636,12 @@ function TimelineStep({
   const [open, setOpen] = React.useState(false);
 
   const dotCls =
-    status === "complete"
-      ? "bg-emerald-500"
-      : status === "active"
-      ? "bg-amber-500"
-      : "bg-muted-foreground/25 border border-border";
+    status === "complete" ? "bg-emerald-500"
+    : status === "active" ? "bg-amber-500"
+    : "bg-muted-foreground/25 border border-border";
 
   return (
     <div className="relative">
-      {/* Timeline dot */}
       <div className={`absolute -left-[29px] top-3.5 h-3 w-3 rounded-full ${dotCls}`} />
       <div className="rounded-xl border border-border bg-card shadow-sm">
         <div className="flex items-center justify-between gap-4 px-4 py-3">
@@ -472,7 +649,7 @@ function TimelineStep({
             <h4 className="text-sm font-medium">{title}</h4>
             {timestamp && (
               <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-                {new Date(timestamp).toLocaleString()}
+                {new Date(timestamp).toLocaleDateString()}
               </span>
             )}
           </div>
@@ -494,37 +671,57 @@ function TimelineStep({
   );
 }
 
-function WorkspaceSection({
-  userId,
-  workspaces,
-  workspaceName,
-  inviteTarget,
-  onWorkspaceNameChange,
-  onInviteTargetChange,
-  onCreateWorkspace,
-  onInviteMember,
-}: {
+// ── WorkspaceSection ──────────────────────────────────────────────────────────
+
+interface WorkspaceSectionProps {
   userId: string;
   workspaces: (TeamWorkspace & { id: string })[];
   workspaceName: string;
-  inviteTarget: string;
-  onWorkspaceNameChange: (value: string) => void;
-  onInviteTargetChange: (value: string) => void;
+  inviteInputs: Record<string, string>;
+  roleInputs: Record<string, "editor" | "viewer">;
+  renamingId: string | null;
+  renameValue: string;
+  onWorkspaceNameChange: (v: string) => void;
+  onInviteInputChange: (wsId: string, val: string) => void;
+  onRoleInputChange: (wsId: string, role: "editor" | "viewer") => void;
   onCreateWorkspace: () => void;
-  onInviteMember: (workspaceId: string) => void;
-}) {
+  onInviteMember: (wsId: string) => void;
+  onRemoveMember: (wsId: string, userId: string) => void;
+  onDeleteWorkspace: (wsId: string, name: string) => void;
+  onStartRename: (wsId: string, name: string) => void;
+  onRenameChange: (v: string) => void;
+  onConfirmRename: (wsId: string) => void;
+  onCancelRename: () => void;
+}
+
+function WorkspaceSection({
+  userId, workspaces, workspaceName, inviteInputs, roleInputs,
+  renamingId, renameValue,
+  onWorkspaceNameChange, onInviteInputChange, onRoleInputChange,
+  onCreateWorkspace, onInviteMember, onRemoveMember, onDeleteWorkspace,
+  onStartRename, onRenameChange, onConfirmRename, onCancelRename,
+}: WorkspaceSectionProps) {
   return (
     <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+      {/* Create workspace panel */}
       <section className="rounded-xl border border-border bg-card p-6 space-y-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Workspace Dashboard</p>
           <h3 className="mt-2 text-base font-semibold">Create a team workspace</h3>
         </div>
-        <Input value={workspaceName} onChange={(e) => onWorkspaceNameChange(e.target.value)} placeholder="Workspace name" />
-        <Button onClick={onCreateWorkspace} className="w-full">Create Workspace</Button>
-        <p className="text-xs text-muted-foreground">Owners manage membership; viewers can inspect shared work.</p>
+        <Input
+          value={workspaceName}
+          onChange={(e) => onWorkspaceNameChange(e.target.value)}
+          placeholder="Workspace name"
+          onKeyDown={(e) => e.key === "Enter" && onCreateWorkspace()} // fix #17
+        />
+        <Button onClick={onCreateWorkspace} disabled={!workspaceName.trim()} className="w-full">
+          <Plus className="h-3.5 w-3.5 mr-1.5" /> Create Workspace
+        </Button>
+        <p className="text-xs text-muted-foreground">Owners manage membership; editors and viewers can inspect shared work.</p>
       </section>
 
+      {/* Workspaces list panel */}
       <section className="rounded-xl border border-border bg-card p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -537,24 +734,130 @@ function WorkspaceSection({
         {workspaces.length === 0 ? (
           <p className="text-sm text-muted-foreground">No workspaces yet. Create one to start collaborating.</p>
         ) : (
-          <div className="space-y-3">
-            {workspaces.map((workspace) => (
-              <div key={workspace.id} className="rounded-lg border border-border p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold">{workspace.name}</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{(workspace.members || []).length} members</p>
+          <div className="space-y-4">
+            {workspaces.map((workspace) => {
+              const myRole = (workspace.members ?? []).find((m) => m.userId === userId)?.role ?? "viewer";
+              const isOwner = myRole === "owner";
+              const isRenaming = renamingId === workspace.id;
+
+              return (
+                <div key={workspace.id} className="rounded-lg border border-border p-4 space-y-3">
+                  {/* Header row */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      {isRenaming ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={renameValue}
+                            onChange={(e) => onRenameChange(e.target.value)}
+                            className="h-7 text-sm"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") onConfirmRename(workspace.id);
+                              if (e.key === "Escape") onCancelRename();
+                            }}
+                          />
+                          <button onClick={() => onConfirmRename(workspace.id)} className="text-primary hover:opacity-80"><Check className="h-4 w-4" /></button>
+                          <button onClick={onCancelRename} className="text-muted-foreground hover:opacity-80"><X className="h-4 w-4" /></button>
+                        </div>
+                      ) : (
+                        <p className="text-sm font-semibold">{workspace.name}</p>
+                      )}
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{(workspace.members ?? []).length} member{(workspace.members ?? []).length !== 1 ? "s" : ""}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] bg-muted text-muted-foreground">
+                        {myRole}
+                      </span>
+                      {isOwner && !isRenaming && (
+                        <>
+                          <button
+                            onClick={() => onStartRename(workspace.id, workspace.name)}
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            title="Rename workspace"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => onDeleteWorkspace(workspace.id, workspace.name)}
+                            className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            title="Delete workspace"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <span className="rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] bg-muted text-muted-foreground">
-                    {(workspace.members || []).find((m) => m.userId === userId)?.role ?? "viewer"}
-                  </span>
+
+                  {/* Fix #14: Members list */}
+                  {(workspace.members ?? []).length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Members</p>
+                      {(workspace.members ?? []).map((member) => (
+                        <div key={member.userId} className="flex items-center justify-between gap-2 py-1 border-b border-border/40 last:border-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-mono text-muted-foreground truncate max-w-[160px]" title={member.userId}>
+                              {member.userId === userId ? "You" : member.userId.slice(0, 12) + "…"}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground capitalize">{member.role}</span>
+                          </div>
+                          {isOwner && member.userId !== userId && (
+                            <button
+                              onClick={() => onRemoveMember(workspace.id, member.userId)}
+                              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                              title="Remove member"
+                            >
+                              <UserMinus className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Fix #11/12/13: per-workspace invite with role selector */}
+                  {isOwner && (
+                    <div className="pt-1 space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Invite member</p>
+                      <p className="text-[11px] text-muted-foreground/70">Enter the member's Speckula user ID (found in their profile URL).</p>
+                      <div className="flex gap-2">
+                        <Input
+                          value={inviteInputs[workspace.id] ?? ""}
+                          onChange={(e) => onInviteInputChange(workspace.id, e.target.value)}
+                          placeholder="User ID"
+                          className="flex-1 h-8 text-sm"
+                          onKeyDown={(e) => e.key === "Enter" && onInviteMember(workspace.id)} // fix #17
+                        />
+                        {/* Fix #13: role selector */}
+                        <select
+                          value={roleInputs[workspace.id] ?? "viewer"}
+                          onChange={(e) => onRoleInputChange(workspace.id, e.target.value as "editor" | "viewer")}
+                          className="h-8 rounded-md border border-border bg-background px-2 text-sm shrink-0"
+                        >
+                          <option value="viewer">Viewer</option>
+                          <option value="editor">Editor</option>
+                        </select>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 shrink-0"
+                          onClick={() => onInviteMember(workspace.id)}
+                          disabled={!(inviteInputs[workspace.id] ?? "").trim()}
+                        >
+                          Invite
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fix #18: note about shared content */}
+                  <p className="text-[11px] text-muted-foreground/60 italic border-t border-border/40 pt-2">
+                    Shared document and decision access coming soon.
+                  </p>
                 </div>
-                <div className="mt-3 flex gap-2">
-                  <Input value={inviteTarget} onChange={(e) => onInviteTargetChange(e.target.value)} placeholder="Invite by userId" />
-                  <Button variant="outline" onClick={() => onInviteMember(workspace.id)}>Invite</Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

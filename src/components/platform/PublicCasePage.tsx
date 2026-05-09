@@ -40,7 +40,7 @@ export function PublicCasePage({ caseId }: { caseId: string }) {
           This case may have been unpublished or the link is invalid.
         </p>
         <Link href="/" className="text-sm text-primary hover:underline">
-          Go to Buildcase
+          Go to Speckula
         </Link>
       </div>
     );
@@ -54,7 +54,7 @@ export function PublicCasePage({ caseId }: { caseId: string }) {
         <div className="mb-6 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-3.5 w-3.5" />
-            Buildcase
+            Speckula
           </Link>
           <div className="flex items-center gap-2">
             {score !== undefined && (
@@ -163,7 +163,7 @@ export function PublicCasePage({ caseId }: { caseId: string }) {
         <p className="mt-6 text-center text-xs text-muted-foreground">
           Published with{" "}
           <Link href="/" className="hover:underline">
-            Buildcase
+            Speckula
           </Link>
         </p>
       </div>

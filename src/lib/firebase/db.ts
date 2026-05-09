@@ -149,6 +149,7 @@ export interface DecisionRecord {
   // these rows. Legacy records without the field default to "include" so
   // historical data still contributes.
   isValid?: boolean;
+  outcomeNote?: string;
   userId: string;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -1553,6 +1554,29 @@ export const inviteWorkspaceMember = async (workspaceId: string, member: Workspa
     await setDoc(workspaceRef(workspaceId), { members: nextMembers, memberIds: nextMemberIds, workspaceId, updatedAt: serverTimestamp() }, { merge: true });
   } catch (error) {
     logFirestorePermissionHint("inviteWorkspaceMember", error);
+    throw error;
+  }
+};
+
+export const removeWorkspaceMember = async (workspaceId: string, memberUserId: string) => {
+  try {
+    const snap = await getDoc(workspaceRef(workspaceId));
+    if (!snap.exists()) return;
+    const current = snap.data() as TeamWorkspace;
+    const nextMembers = (current.members ?? []).filter((m) => m.userId !== memberUserId);
+    const nextMemberIds = (current.memberIds ?? []).filter((id) => id !== memberUserId);
+    await setDoc(workspaceRef(workspaceId), { members: nextMembers, memberIds: nextMemberIds, workspaceId, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (error) {
+    logFirestorePermissionHint("removeWorkspaceMember", error);
+    throw error;
+  }
+};
+
+export const deleteWorkspace = async (workspaceId: string) => {
+  try {
+    await deleteDoc(workspaceRef(workspaceId));
+  } catch (error) {
+    logFirestorePermissionHint("deleteWorkspace", error);
     throw error;
   }
 };
