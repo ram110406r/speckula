@@ -160,6 +160,17 @@
   .node-card-animate { animation: none; }
 }
 
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.6;
+  cursor: pointer;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
