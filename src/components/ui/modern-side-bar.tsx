@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import {
-  FileText,
   Lightbulb,
   CheckSquare,
   LayoutDashboard,
@@ -24,6 +23,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import { ResearchBotIcon } from "@/components/ui/icons/ResearchBotIcon";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore, type AppView } from "@/store/useAppStore";
 import { NotificationBell } from "@/components/ui/notification-bell";
@@ -45,7 +45,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { icon: Bot,           label: "Autonomous Mode", view: "autonomous", group: "Agent"    },
-  { icon: FileText,      label: "Research",         view: "editor",     group: "Evidence" },
+  { icon: ResearchBotIcon, label: "Research",         view: "editor",     group: "Evidence" },
   { icon: Lightbulb,     label: "Signals",          view: "insights",   group: "Evidence" },
   { icon: Compass,       label: "Decisions",        view: "decisions",  group: "Argument" },
   { icon: LayoutDashboard, label: "Spec",           view: "prds",       group: "Verdict"  },
