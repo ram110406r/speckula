@@ -55,6 +55,17 @@ interface OutcomeLoopState {
   confidenceAfter: number;
 }
 
+interface PendingInsightForDecision {
+  title: string;
+  description: string;
+}
+
+interface PhaseHasContent {
+  insights: boolean;
+  decisions: boolean;
+  prds: boolean;
+}
+
 interface AppState {
   aiPanelOpen: boolean;
   toggleAiPanel: () => void;
@@ -88,6 +99,13 @@ interface AppState {
   setTaskDependencies: (deps: TaskDependencyRecord[] | null) => void;
   outcomeLoop: OutcomeLoopState;
   setOutcomeLoop: (state: Partial<OutcomeLoopState>) => void;
+  // Cross-view handoffs
+  pendingInsightForDecision: PendingInsightForDecision | null;
+  setPendingInsightForDecision: (insight: PendingInsightForDecision | null) => void;
+  pendingPRDId: string | null;
+  setPendingPRDId: (id: string | null) => void;
+  phaseHasContent: PhaseHasContent;
+  setPhaseHasContent: (patch: Partial<PhaseHasContent>) => void;
   resetForNewDocument: () => void;
   resetState: () => void;
 }
@@ -114,6 +132,9 @@ const initialState = {
     confidenceBefore: 0,
     confidenceAfter: 0,
   },
+  pendingInsightForDecision: null,
+  pendingPRDId: null,
+  phaseHasContent: { insights: false, decisions: false, prds: false },
 };
 
 const initialOutcomeLoopState: OutcomeLoopState = {
@@ -141,6 +162,9 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   setPendingDecisionForPRD: (decision) => set({ pendingDecisionForPRD: decision }),
   setSelectedPRDForTasks: (prd) => set({ selectedPRDForTasks: prd }),
   setTaskDependencies: (deps) => set({ taskDependencies: deps }),
+  setPendingInsightForDecision: (insight) => set({ pendingInsightForDecision: insight }),
+  setPendingPRDId: (id) => set({ pendingPRDId: id }),
+  setPhaseHasContent: (patch) => set((s) => ({ phaseHasContent: { ...s.phaseHasContent, ...patch } })),
   setOutcomeLoop: (state) =>
     set((current) => ({
       outcomeLoop: {

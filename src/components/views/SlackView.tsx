@@ -12,6 +12,7 @@ import {
   Download,
   Trash2,
   Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -74,6 +75,7 @@ export function SlackView() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [analyzingChannelId, setAnalyzingChannelId] = useState<string | null>(null);
   const setActiveView = useAppStore((s) => s.setActiveView);
+  const setPendingInsightForDecision = useAppStore((s) => s.setPendingInsightForDecision);
 
   // Subscribe to user's connected workspaces
   useEffect(() => {
@@ -375,7 +377,7 @@ export function SlackView() {
                 {messages.map((msg) => (
                   <li
                     key={msg.id}
-                    className="rounded-lg border border-border/60 bg-card/50 p-3 shadow-sm"
+                    className="group/msg rounded-lg border border-border/60 bg-card/50 p-3 shadow-sm"
                   >
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <div className="flex items-center gap-2">
@@ -392,7 +394,23 @@ export function SlackView() {
                           </span>
                         )}
                       </div>
-                      <span>{formatRelativeTime(msg.slackTs)}</span>
+                      <div className="flex items-center gap-3">
+                        <span>{formatRelativeTime(msg.slackTs)}</span>
+                        {msg.text && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const title = msg.text!.slice(0, 80).trimEnd() + (msg.text!.length > 80 ? "…" : "");
+                              setPendingInsightForDecision({ title, description: msg.text! });
+                              setActiveView("decisions");
+                            }}
+                            className="hidden group-hover/msg:flex items-center gap-1 text-[11px] font-medium text-primary hover:underline underline-offset-2 transition-colors"
+                            title="Turn this message into a decision"
+                          >
+                            Decision <ArrowRight className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
                       {msg.text || <em className="text-muted-foreground">(no text)</em>}

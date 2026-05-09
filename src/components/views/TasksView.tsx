@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { CheckSquare, Plus, Circle, CheckCircle2, Clock, Loader2, ArrowRight, Zap, Users, Trash2, Download, LayoutList, Columns3, CalendarDays, AlertCircle, GripVertical } from "lucide-react";
+import { CheckSquare, Plus, Circle, CheckCircle2, Clock, Loader2, ArrowRight, Zap, Users, Trash2, Download, LayoutList, Columns3, CalendarDays, AlertCircle, GripVertical, FileText, Compass } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -51,7 +51,7 @@ function formatDueDate(dueDate: string): { text: string; overdue: boolean } {
 
 export function TasksView() {
   const { user } = useAuth();
-  const { currentDocId } = useAppStore();
+  const { currentDocId, selectedPRDForTasks, setSelectedPRDForTasks, setActiveView, setPendingPRDId } = useAppStore();
   const [tasks, setTasks] = React.useState<ExecutionTask[]>([]);
   const [prds, setPRDs] = React.useState<PRD[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -100,6 +100,15 @@ export function TasksView() {
   useEffect(() => {
     setAssigneeInput(selectedTask?.assignee || "");
   }, [selectedTask?.id]);
+
+  // Auto-generate tasks when arriving from PRDsView "Tasks" button
+  useEffect(() => {
+    if (!selectedPRDForTasks) return;
+    const prd = selectedPRDForTasks;
+    setSelectedPRDForTasks(null);
+    handleGenerateFromPRD({ id: prd.id, title: prd.title, content: prd.content, status: "draft", userId: "", updatedAt: null });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleGenerateFromPRD = async (prd: PRD) => {
     if (!user) return;
@@ -402,6 +411,22 @@ export function TasksView() {
           </Button>
         </div>
       </div>
+
+      {/* All-done CTA — record outcome in Decisions */}
+      {tasks.length > 0 && completedCount === tasks.length && (
+        <div className="flex items-center justify-between px-3 md:px-8 py-2.5 bg-success/10 border-b border-success/20 shrink-0">
+          <div className="flex items-center gap-2 text-success text-xs font-medium">
+            <CheckCircle2 className="h-4 w-4" />
+            All tasks complete — close the loop on your decision
+          </div>
+          <button
+            onClick={() => setActiveView("decisions")}
+            className="flex items-center gap-1.5 text-xs font-medium text-success hover:underline underline-offset-2 transition-colors"
+          >
+            <Compass className="h-3.5 w-3.5" /> Record outcome
+          </button>
+        </div>
+      )}
 
       {/* Filter pills — only in list view */}
       {viewMode === "list" && (
@@ -791,9 +816,20 @@ export function TasksView() {
               >
                 <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setSelectedTask(null)}>
-                Close
-              </Button>
+              <div className="flex items-center gap-2">
+                {selectedTask.prdId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { setPendingPRDId(selectedTask.prdId!); setActiveView("prds"); setSelectedTask(null); }}
+                  >
+                    <FileText className="mr-1.5 h-3.5 w-3.5" /> View Spec
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => setSelectedTask(null)}>
+                  Close
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
