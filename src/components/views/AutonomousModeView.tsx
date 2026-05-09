@@ -566,12 +566,13 @@ export function AutonomousModeView() {
       setSavedDecisionId(newId);
       toast.success("Decision saved", topDecision.title);
       activity.success("Decision saved from Autonomous Mode");
+      setActiveView("decisions");
     } catch {
       toast.error("Failed to save decision");
     } finally {
       setIsSaving(false);
     }
-  }, [user, topDecision, strategy, predictedOutcome, predictionPromptRef, isSaving, currentDocId, strictness]);
+  }, [user, topDecision, strategy, predictedOutcome, predictionPromptRef, isSaving, currentDocId, strictness, setActiveView]);
 
   const handleConvertToSpec = React.useCallback(async () => {
     if (!user || !topDecision || isConvertingToSpec) return;
@@ -665,6 +666,7 @@ export function AutonomousModeView() {
       })));
       toast.success("All decisions saved", `${decisions.length} decisions added to your board`);
       activity.success(`Saved ${decisions.length} decisions from Autonomous Mode`);
+      setActiveView("decisions");
     } catch { toast.error("Failed to save decisions"); }
     finally { setIsSavingAll(false); }
   }, [user, decisions, strategy, isSavingAll, currentDocId, strictness]);

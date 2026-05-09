@@ -116,7 +116,7 @@ function formFromDecision(d: ScoredDecision): DecisionFormState {
 
 export function DecisionView() {
   const { user } = useAuth();
-  const { currentDocId, setPendingInsertion, setActiveView, setPendingDecisionForPRD, setOutcomeLoop } = useAppStore();
+  const { currentDocId, setPendingInsertion, setActiveView, setPendingDecisionForPRD, setOutcomeLoop, pendingInsightForDecision, setPendingInsightForDecision, setPhaseHasContent } = useAppStore();
   const [suggestions, setSuggestions] = React.useState<DecisionSuggestion[]>([]);
   const [scoredSuggestions, setScoredSuggestions] = React.useState<ScoredDecision[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -186,11 +186,12 @@ export function DecisionView() {
         });
         setScoredSuggestions(scored);
         setSuggestions(scored); // keeps "no decisions" empty state accurate
+        setPhaseHasContent({ decisions: scored.length > 0 });
       } catch {
         // silent — first load failure is non-critical
       }
     })();
-  }, [user, currentDocId]);
+  }, [user, currentDocId, setPhaseHasContent]);
 
   React.useEffect(() => {
     if (currentDocId) {
@@ -199,6 +200,18 @@ export function DecisionView() {
       setActualOutcomeState(getActualOutcome(currentDocId));
     }
   }, [currentDocId]);
+
+  // Auto-open new decision form when arriving from Insights "Convert to Decision"
+  React.useEffect(() => {
+    if (!pendingInsightForDecision) return;
+    setDecisionForm({
+      ...emptyForm(),
+      title: pendingInsightForDecision.title,
+      justification: pendingInsightForDecision.description,
+    });
+    setEditingDecisionId(null);
+    setPendingInsightForDecision(null);
+  }, [pendingInsightForDecision, setPendingInsightForDecision]);
 
   // ── Feedback helpers ─────────────────────────────────────────────────────────
   const getFeedbackState = (decisionId: string): FeedbackCardState =>
@@ -847,6 +860,7 @@ export function DecisionView() {
             onFocusDecision={setFocusPanelData}
             onDeleteDecision={handleDeleteDecision}
             onEditDecision={openEditDecision}
+            onViewEvidence={() => setActiveView("insights")}
           />
         )}
 
@@ -957,6 +971,7 @@ interface DecisionGridProps {
   onFocusDecision: (data: FocusPanelData) => void;
   onDeleteDecision: (decisionId: string) => void;
   onEditDecision: (decision: ScoredDecision) => void;
+  onViewEvidence: () => void;
 }
 
 function DecisionGrid({
@@ -976,6 +991,7 @@ function DecisionGrid({
   onFocusDecision,
   onDeleteDecision,
   onEditDecision,
+  onViewEvidence,
 }: DecisionGridProps) {
   const annotated = React.useMemo(
     () => scoredSuggestions.map((decision, index) => ({
@@ -1080,6 +1096,7 @@ function DecisionGrid({
         onEdit={() => onEditDecision(decision)}
         onGenerateBrief={() => onGenerateBrief(decision)}
         onConvert={() => onConvertToPRD(decision, index)}
+        onViewEvidence={onViewEvidence}
         onFocus={() => onFocusDecision({
           decisionId: decision.decisionId,
           title: decision.title,
