@@ -15,7 +15,7 @@ const AutonomousModeView = dynamic(() => import("../views/AutonomousModeView").t
 import { ModernSidebar } from "@/components/ui/modern-side-bar";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { LandingPage } from "./LandingPage";
-import { Loader2, Sparkles, ChevronRight } from "lucide-react";
+import { Loader2, Sparkles, ChevronRight, CheckCircle2 } from "lucide-react";
 import type { AppView } from "@/store/useAppStore";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -41,10 +41,14 @@ interface Phase {
   views: AppView[];
 }
 
-const PHASES: Phase[] = [
-  { label: "Evidence", entry: "editor", views: ["editor", "insights"] },
-  { label: "Argument", entry: "decisions", views: ["decisions"] },
-  { label: "Verdict", entry: "prds", views: ["prds", "tasks"] },
+interface PhaseWithContent extends Phase {
+  contentKey?: "insights" | "decisions" | "prds";
+}
+
+const PHASES: PhaseWithContent[] = [
+  { label: "Evidence", entry: "editor", views: ["editor", "insights"], contentKey: "insights" },
+  { label: "Argument", entry: "decisions", views: ["decisions"], contentKey: "decisions" },
+  { label: "Verdict", entry: "prds", views: ["prds", "tasks"], contentKey: "prds" },
 ];
 
 function PhaseBreadcrumb({
@@ -54,6 +58,7 @@ function PhaseBreadcrumb({
   activeView: AppView;
   setActiveView: (v: AppView) => void;
 }) {
+  const { phaseHasContent } = useAppStore();
   const activePhaseIndex = PHASES.findIndex((p) => p.views.includes(activeView));
 
   return (
@@ -65,6 +70,7 @@ function PhaseBreadcrumb({
         const isActive = i === activePhaseIndex;
         const isPast = i < activePhaseIndex;
         const isLast = i === PHASES.length - 1;
+        const hasContent = phase.contentKey ? phaseHasContent[phase.contentKey] : false;
 
         return (
           <React.Fragment key={phase.label}>
@@ -72,7 +78,7 @@ function PhaseBreadcrumb({
               type="button"
               onClick={() => setActiveView(phase.entry)}
               className={`
-                px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150
+                flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150
                 ${
                   isActive
                     ? "bg-primary/10 text-primary"
@@ -87,6 +93,9 @@ function PhaseBreadcrumb({
               }`}>
                 {phase.label}
               </span>
+              {hasContent && (
+                <CheckCircle2 className={`h-2.5 w-2.5 shrink-0 ${isActive ? "text-primary" : "text-success"}`} />
+              )}
             </button>
             {!isLast && (
               <ChevronRight

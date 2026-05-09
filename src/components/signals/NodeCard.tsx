@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { AlertTriangle, Zap, GitBranch, User, Trash2, Pencil, Check, X } from "lucide-react";
+import { AlertTriangle, Zap, GitBranch, User, Trash2, Pencil, Check, X, ArrowRight } from "lucide-react";
 import type { Insight } from "@/lib/firebase/db";
 
 const NODE_CONFIG = {
@@ -16,9 +16,10 @@ interface NodeCardProps {
   animationDelay?: number;
   onDelete?: (id: string) => void;
   onUpdate?: (id: string, title: string, description: string) => void;
+  onConvertToDecision?: (insight: Insight) => void;
 }
 
-export function NodeCard({ insight, animationDelay = 0, onDelete, onUpdate }: NodeCardProps) {
+export function NodeCard({ insight, animationDelay = 0, onDelete, onUpdate, onConvertToDecision }: NodeCardProps) {
   const cfg = NODE_CONFIG[insight.category] ?? NODE_CONFIG["opportunity"];
   const { Icon } = cfg;
 
@@ -135,6 +136,15 @@ export function NodeCard({ insight, animationDelay = 0, onDelete, onUpdate }: No
             <span className="font-mono text-[11px] text-muted-foreground/60 truncate max-w-[140px]">
               From Research Document
             </span>
+            {onConvertToDecision && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onConvertToDecision(insight); }}
+                title="Convert to Decision"
+                className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline underline-offset-2 transition-colors"
+              >
+                Decision <ArrowRight className="h-3 w-3" />
+              </button>
+            )}
           </div>
         )}
       </div>
