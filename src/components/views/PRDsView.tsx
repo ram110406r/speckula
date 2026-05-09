@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { LayoutDashboard, Plus, FileText, Clock, Loader2, Download, Copy, Sparkles, ChevronLeft } from "lucide-react";
+import { LayoutDashboard, Plus, FileText, Clock, Loader2, Download, Copy, Sparkles, ChevronLeft, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
@@ -18,7 +18,7 @@ const statusConfig = {
 
 export function PRDsView() {
   const { user } = useAuth();
-  const { currentDocId, documents } = useAppStore();
+  const { currentDocId, documents, setActiveView, setSelectedPRDForTasks, setPendingPRDId, setPhaseHasContent } = useAppStore();
   const [prds, setPrds] = React.useState<PRD[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isGenerating, setIsGenerating] = React.useState(false);
@@ -29,14 +29,16 @@ export function PRDsView() {
     setIsLoading(true);
     try {
       const data = await getPRDs(user.uid);
-      setPrds(currentDocId ? data.filter((prd) => prd.sourceDocId === currentDocId) : []);
+      const filtered = currentDocId ? data.filter((prd) => prd.sourceDocId === currentDocId) : [];
+      setPrds(filtered);
+      setPhaseHasContent({ prds: filtered.length > 0 });
     } catch (error) {
       console.error("Failed to fetch PRDs:", error);
       toast.error("Couldn't load specs", "Check that Firestore rules are deployed and you're signed in.");
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentDocId]);
+  }, [user, currentDocId, setPhaseHasContent]);
 
   useEffect(() => {
     fetchPRDs();
@@ -45,6 +47,14 @@ export function PRDsView() {
   useEffect(() => {
     setSelectedPRD(null);
   }, [currentDocId]);
+
+  // Auto-select PRD when arriving from Tasks "View Spec" link
+  const { pendingPRDId } = useAppStore();
+  useEffect(() => {
+    if (!pendingPRDId || prds.length === 0) return;
+    const target = prds.find((p) => p.id === pendingPRDId);
+    if (target) { setSelectedPRD(target); setPendingPRDId(null); }
+  }, [pendingPRDId, prds, setPendingPRDId]);
 
   const handleExport = () => {
     if (!selectedPRD) return;
@@ -134,37 +144,45 @@ export function PRDsView() {
             </div>
           ) : (
             prds.map(prd => (
-              <button
-                key={prd.id}
-                className={`w-full text-left px-4 py-4 rounded-lg transition-all group relative border ${
-                  selectedPRD?.id === prd.id 
-                    ? "bg-card border-primary/20 shadow-sm" 
-                    : "border-transparent hover:bg-card/40"
-                }`}
-                onClick={() => setSelectedPRD(prd)}
-              >
-                {selectedPRD?.id === prd.id && (
-                  <div className="absolute left-0 top-3 bottom-3 w-[2.5px] bg-primary rounded-r-full" />
-                )}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className={`text-xs font-semibold truncate leading-tight transition-colors ${selectedPRD?.id === prd.id ? "text-primary" : "text-foreground"}`}>
-                      {prd.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Clock className="h-2.5 w-2.5 text-muted-foreground/40" />
-                      <span className="label-system text-[12px]">
-                        {formatDate(prd.updatedAt)}
-                      </span>
+              <div key={prd.id} className="group/prd relative">
+                <button
+                  className={`w-full text-left px-4 py-4 rounded-lg transition-all relative border ${
+                    selectedPRD?.id === prd.id
+                      ? "bg-card border-primary/20 shadow-sm"
+                      : "border-transparent hover:bg-card/40"
+                  }`}
+                  onClick={() => setSelectedPRD(prd)}
+                >
+                  {selectedPRD?.id === prd.id && (
+                    <div className="absolute left-0 top-3 bottom-3 w-[2.5px] bg-primary rounded-r-full" />
+                  )}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className={`text-xs font-semibold truncate leading-tight transition-colors pr-8 ${selectedPRD?.id === prd.id ? "text-primary" : "text-foreground"}`}>
+                        {prd.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Clock className="h-2.5 w-2.5 text-muted-foreground/40" />
+                        <span className="label-system text-[12px]">
+                          {formatDate(prd.updatedAt)}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-1.5 mt-3">
-                  <span className={`label-system text-[12px] px-2 py-0.5 rounded-sm border ${statusConfig[prd.status]?.className || statusConfig.draft.className}`}>
-                    {statusConfig[prd.status]?.label || "Draft"}
-                  </span>
-                </div>
-              </button>
+                  <div className="flex items-center gap-1.5 mt-3">
+                    <span className={`label-system text-[12px] px-2 py-0.5 rounded-sm border ${statusConfig[prd.status]?.className || statusConfig.draft.className}`}>
+                      {statusConfig[prd.status]?.label || "Draft"}
+                    </span>
+                  </div>
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSelectedPRDForTasks({ id: prd.id!, title: prd.title, content: prd.content }); setActiveView("tasks"); }}
+                  title="Generate tasks from this spec"
+                  className="absolute top-3 right-3 hidden group-hover/prd:flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                >
+                  <ListTodo className="h-3 w-3" /> Tasks
+                </button>
+              </div>
             ))
           )}
         </div>
@@ -211,6 +229,9 @@ export function PRDsView() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => { if (selectedPRD) { setSelectedPRDForTasks({ id: selectedPRD.id!, title: selectedPRD.title, content: selectedPRD.content }); setActiveView("tasks"); } }} className="h-10 sm:h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-3 bg-card transition-all">
+                  <ListTodo className="h-3 w-3 mr-1.5" /><span className="hidden xs:inline">Tasks</span>
+                </Button>
                 <Button size="sm" variant="outline" onClick={handleCopy} className="h-10 sm:h-8 label-system text-[12px] border-border hover:border-primary/40 hover:text-primary px-3 bg-card transition-all">
                   <Copy className="h-3 w-3 mr-1.5" /><span className="hidden xs:inline">Copy</span>
                 </Button>

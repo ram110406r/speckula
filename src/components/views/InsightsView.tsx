@@ -23,7 +23,7 @@ const FILTER_PILLS: { id: FilterKey; label: string }[] = [
 
 export function InsightsView() {
   const { user } = useAuth();
-  const { setActiveView, currentDocId } = useAppStore();
+  const { setActiveView, currentDocId, setPendingInsightForDecision, setPhaseHasContent } = useAppStore();
   const [insights, setInsights] = React.useState<Insight[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isExtracting, setIsExtracting] = React.useState(false);
@@ -36,13 +36,15 @@ export function InsightsView() {
     setIsLoading(true);
     try {
       const data = await getInsights(user.uid);
-      setInsights(currentDocId ? data.filter((i) => i.sourceDocId === currentDocId) : []);
+      const filtered = currentDocId ? data.filter((i) => i.sourceDocId === currentDocId) : [];
+      setInsights(filtered);
+      setPhaseHasContent({ insights: filtered.length > 0 });
     } catch (err) {
       console.error("Failed to fetch insights:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentDocId]);
+  }, [user, currentDocId, setPhaseHasContent]);
 
   React.useEffect(() => { fetchInsights(); }, [fetchInsights]);
 
@@ -110,6 +112,12 @@ export function InsightsView() {
         toast.success("Signals exported", `${insights.length} signals saved as .${format}`);
       },
     });
+  };
+
+  // ── convert insight → decision ───────────────────────────────────────────────
+  const handleConvertToDecision = (insight: Insight) => {
+    setPendingInsightForDecision({ title: insight.title, description: insight.description ?? "" });
+    setActiveView("decisions");
   };
 
   // ── extract ──────────────────────────────────────────────────────────────────
@@ -258,6 +266,7 @@ export function InsightsView() {
                   animationDelay={i * 60}
                   onDelete={!selectMode ? handleDelete : undefined}
                   onUpdate={!selectMode ? handleUpdate : undefined}
+                  onConvertToDecision={!selectMode ? handleConvertToDecision : undefined}
                 />
               </div>
             ))}
