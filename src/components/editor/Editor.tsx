@@ -14,6 +14,7 @@ import { URLImportBar } from "./URLImportBar";
 import {
   analyzeResearchAction,
   getBlockSuggestion,
+  extractInsightsAction,
   type ResearchAnalysis,
 } from "@/lib/ai/actions";
 import { toast } from "@/store/useToastStore";
@@ -216,6 +217,7 @@ export function Editor() {
   const {
     currentDocId, documents, setDocuments,
     setActiveContext, pendingImport, setPendingImport,
+    setActiveView,
   } = useAppStore();
   const currentDoc = documents.find((d) => d.id === currentDocId);
 
@@ -223,6 +225,7 @@ export function Editor() {
   const [blocks, setBlocks] = React.useState<ResearchBlocks>(EMPTY_BLOCKS);
   const [isLoading, setIsLoading] = React.useState(false);
   const [showURLImport, setShowURLImport] = React.useState(false);
+  const [isExtractingSignals, setIsExtractingSignals] = React.useState(false);
   const [analysis, setAnalysis] = React.useState<ResearchAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
   const [blockHints, setBlockHints] = React.useState<Partial<Record<keyof ResearchBlocks, string>>>({});
@@ -456,6 +459,22 @@ export function Editor() {
 
   const health = computeHealth(blocks);
 
+  const handleExtractSignals = React.useCallback(async () => {
+    if (!user || !currentDocId || isExtractingSignals || blocksEmpty) return;
+    setIsExtractingSignals(true);
+    try {
+      const rawContent = serializeBlocks(blocks);
+      await extractInsightsAction(user.uid, rawContent, currentDocId);
+      toast.success("Signals extracted", "View them in the Signals tab.");
+      activity.ai("Signals extracted", "Ready to review");
+      setActiveView("insights");
+    } catch {
+      toast.error("Extraction failed", "Check your API key and try again.");
+    } finally {
+      setIsExtractingSignals(false);
+    }
+  }, [user, currentDocId, blocks, blocksEmpty, isExtractingSignals, setActiveView]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -502,6 +521,17 @@ export function Editor() {
             >
               <Link2 className="h-3 w-3" />
               <span className="hidden sm:inline">Import URL</span>
+            </button>
+
+            {/* Extract Signals shortcut */}
+            <button
+              onClick={handleExtractSignals}
+              disabled={blocksEmpty || isExtractingSignals}
+              title="Extract signals from this document and go to Signals view"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-primary/40 bg-primary/[0.07] text-primary hover:bg-primary/15 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              {isExtractingSignals ? <Loader2 className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
+              <span className="hidden sm:inline">{isExtractingSignals ? "Extracting…" : "Extract Signals"}</span>
             </button>
           </div>
         </div>

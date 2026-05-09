@@ -1,5 +1,5 @@
 import React from "react";
-import { Sparkles, Loader2, ArrowRight, AlertTriangle, AlertCircle, Trash2, Pencil } from "lucide-react";
+import { Sparkles, Loader2, ArrowRight, AlertTriangle, AlertCircle, Trash2, Pencil, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AIInsight } from "@/components/ui/AIInsight";
 import type { HealthStatus, Pushback, PushbackAction } from "@/lib/ai/decisionHealth";
@@ -66,6 +66,7 @@ interface DecisionCardV2Props {
   onFocus?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
+  onViewEvidence?: () => void;
   isBriefLoading?: boolean;
   isConverting?: boolean;
   footer?: React.ReactNode;
@@ -88,6 +89,7 @@ export function DecisionCardV2({
   onGenerateBrief,
   onConvert,
   onFocus,
+  onViewEvidence,
   isBriefLoading = false,
   isConverting = false,
   footer,
@@ -255,22 +257,35 @@ export function DecisionCardV2({
           )}
           Generate Case Brief
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="w-full text-xs text-muted-foreground hover:text-foreground"
-          onClick={onConvert}
-          disabled={isConverting}
-        >
-          {isConverting ? (
-            "Generating PRD…"
-          ) : (
-            <>
-              Convert to PRD
-              <ArrowRight className="ml-1 h-3 w-3" />
-            </>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="flex-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={onConvert}
+            disabled={isConverting}
+          >
+            {isConverting ? (
+              "Generating PRD…"
+            ) : (
+              <>
+                Convert to PRD
+                <ArrowRight className="ml-1 h-3 w-3" />
+              </>
+            )}
+          </Button>
+          {onViewEvidence && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs text-muted-foreground hover:text-primary px-2"
+              onClick={(e) => { e.stopPropagation(); onViewEvidence(); }}
+              title="View supporting signals"
+            >
+              <Lightbulb className="h-3 w-3" />
+            </Button>
           )}
-        </Button>
+        </div>
       </div>
 
       {footer}
