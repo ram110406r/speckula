@@ -67,6 +67,7 @@ export function TasksView() {
   const [viewMode, setViewMode] = React.useState<"list" | "board">("list");
   const [dragOverCol, setDragOverCol] = React.useState<TaskStatus | null>(null);
   const draggedTaskIdRef = React.useRef<string | null>(null);
+  const [assigneeInput, setAssigneeInput] = React.useState("");
 
   const fetchTasks = React.useCallback(async () => {
     if (!user) return;
@@ -95,6 +96,10 @@ export function TasksView() {
     fetchTasks();
     fetchPRDs();
   }, [fetchTasks, fetchPRDs]);
+
+  useEffect(() => {
+    setAssigneeInput(selectedTask?.assignee || "");
+  }, [selectedTask?.id]);
 
   const handleGenerateFromPRD = async (prd: PRD) => {
     if (!user) return;
@@ -741,7 +746,7 @@ export function TasksView() {
                     {selectedTask.assignee && (
                       <button
                         type="button"
-                        onClick={() => assignTaskToUser(selectedTask, "")}
+                        onClick={() => { assignTaskToUser(selectedTask, ""); setAssigneeInput(""); }}
                         className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
                       >
                         Clear
@@ -750,7 +755,7 @@ export function TasksView() {
                     {selectedTask.assignee !== user?.email && (
                       <button
                         type="button"
-                        onClick={() => assignTaskToUser(selectedTask, user?.email || "")}
+                        onClick={() => { const email = user?.email || ""; setAssigneeInput(email); assignTaskToUser(selectedTask, email); }}
                         className="text-[11px] text-primary hover:underline"
                       >
                         Assign to me
@@ -758,13 +763,24 @@ export function TasksView() {
                     )}
                   </div>
                 </div>
-                <input
-                  type="text"
-                  value={selectedTask.assignee || ""}
-                  onChange={(e) => assignTaskToUser(selectedTask, e.target.value)}
-                  placeholder="Name or email…"
-                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={assigneeInput}
+                    onChange={(e) => setAssigneeInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && assigneeInput.trim()) assignTaskToUser(selectedTask, assigneeInput.trim()); }}
+                    placeholder="Name or email…"
+                    className="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-background"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!assigneeInput.trim() || assigneeInput.trim() === selectedTask.assignee}
+                    onClick={() => assignTaskToUser(selectedTask, assigneeInput.trim())}
+                  >
+                    Assign
+                  </Button>
+                </div>
               </div>
             </div>
             <DialogFooter className="justify-between sm:justify-between">
