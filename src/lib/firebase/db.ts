@@ -340,6 +340,22 @@ export const getInsights = async (userId: string) => {
   }
 };
 
+export const subscribeToInsights = (
+  userId: string,
+  onUpdate: (insights: Insight[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe => {
+  const q = query(userInsightsCollection(userId), orderBy("createdAt", "desc"));
+  return onSnapshot(
+    q,
+    (snap) => onUpdate(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Insight[]),
+    (err) => {
+      logFirestorePermissionHint("subscribeToInsights", err);
+      onError?.(err);
+    }
+  );
+};
+
 export const deleteInsight = async (userId: string, insightId: string) => {
   try {
     await deleteDoc(doc(userInsightsCollection(userId), insightId));
@@ -1675,4 +1691,71 @@ export const subscribeToSlackMessages = (
   );
 };
 
+// ── Extension user preferences ────────────────────────────────────────────────
+// Stored at users/{userId}/settings/extensionPreferences
+
+export interface ExtensionPreferences {
+  autoSave: boolean;
+  showNotifications: boolean;
+  captureOnShortcut: boolean;
+  defaultTags: string[];
+  theme: "auto" | "light" | "dark";
+  activeWorkspaceId?: string;
+  updatedAt?: Timestamp | null;
+}
+
+const DEFAULT_EXTENSION_PREFERENCES: ExtensionPreferences = {
+  autoSave: true,
+  showNotifications: true,
+  captureOnShortcut: false,
+  defaultTags: [],
+  theme: "auto",
+};
+
+export const getExtensionPreferences = async (userId: string): Promise<ExtensionPreferences> => {
+  try {
+    const snap = await getDoc(userSettingRef(userId, "extensionPreferences"));
+    if (!snap.exists()) return { ...DEFAULT_EXTENSION_PREFERENCES };
+    return { ...DEFAULT_EXTENSION_PREFERENCES, ...snap.data() } as ExtensionPreferences;
+  } catch (error) {
+    logFirestorePermissionHint("getExtensionPreferences", error);
+    return { ...DEFAULT_EXTENSION_PREFERENCES };
+  }
+};
+
+export const updateExtensionPreferences = async (
+  userId: string,
+  patch: Partial<Omit<ExtensionPreferences, "updatedAt">>
+): Promise<void> => {
+  try {
+    await setDoc(
+      userSettingRef(userId, "extensionPreferences"),
+      { ...patch, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  } catch (error) {
+    logFirestorePermissionHint("updateExtensionPreferences", error);
+    throw error;
+  }
+};
+
+export const subscribeToExtensionPreferences = (
+  userId: string,
+  onUpdate: (prefs: ExtensionPreferences) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe => {
+  return onSnapshot(
+    userSettingRef(userId, "extensionPreferences"),
+    (snap) => {
+      onUpdate(snap.exists()
+        ? ({ ...DEFAULT_EXTENSION_PREFERENCES, ...snap.data() } as ExtensionPreferences)
+        : { ...DEFAULT_EXTENSION_PREFERENCES }
+      );
+    },
+    (err) => {
+      logFirestorePermissionHint("subscribeToExtensionPreferences", err);
+      onError?.(err);
+    }
+  );
+};
 
