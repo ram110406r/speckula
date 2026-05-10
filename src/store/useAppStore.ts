@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-export type AppView = 'editor' | 'insights' | 'prds' | 'tasks' | 'decisions' | 'platform' | 'slack' | 'autonomous';
+export type AppView =
+  // Core product views (existing)
+  | 'editor' | 'insights' | 'prds' | 'tasks' | 'decisions' | 'platform' | 'slack' | 'autonomous'
+  // Platform views (new)
+  | 'workspace' | 'settings' | 'notifications' | 'integrations'
+  | 'billing' | 'extension' | 'activity' | 'profile' | 'help';
 
 interface SpeckulaDocument {
   id: string;
