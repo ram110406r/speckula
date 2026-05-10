@@ -4,7 +4,7 @@ import React from "react";
 import { Loader2, Brain, Download, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
-import { getInsights, getDocument, deleteInsight, updateInsight, type Insight } from "@/lib/firebase/db";
+import { subscribeToInsights, getDocument, deleteInsight, updateInsight, type Insight } from "@/lib/firebase/db";
 import { extractInsightsAction } from "@/lib/ai/actions";
 import { generateInsightsMarkdown, downloadMarkdown, downloadInsightsDocx } from "@/lib/export";
 import { toast } from "@/store/useToastStore";
@@ -31,22 +31,21 @@ export function InsightsView() {
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = React.useState(false);
 
-  const fetchInsights = React.useCallback(async () => {
+  React.useEffect(() => {
     if (!user) return;
     setIsLoading(true);
-    try {
-      const data = await getInsights(user.uid);
-      const filtered = currentDocId ? data.filter((i) => i.sourceDocId === currentDocId) : [];
-      setInsights(filtered);
-      setPhaseHasContent({ insights: filtered.length > 0 });
-    } catch (err) {
-      console.error("Failed to fetch insights:", err);
-    } finally {
-      setIsLoading(false);
-    }
+    const unsub = subscribeToInsights(
+      user.uid,
+      (data) => {
+        const filtered = currentDocId ? data.filter((i) => i.sourceDocId === currentDocId) : [];
+        setInsights(filtered);
+        setPhaseHasContent({ insights: filtered.length > 0 });
+        setIsLoading(false);
+      },
+      () => setIsLoading(false)
+    );
+    return unsub;
   }, [user, currentDocId, setPhaseHasContent]);
-
-  React.useEffect(() => { fetchInsights(); }, [fetchInsights]);
 
   const filtered: Insight[] = filter === "all" ? insights : insights.filter((i) => i.category === filter);
 
@@ -128,7 +127,6 @@ export function InsightsView() {
       const doc = await getDocument(user.uid, currentDocId);
       if (!doc?.content) { toast.warning("Document is empty"); return; }
       await extractInsightsAction(user.uid, doc.content, currentDocId);
-      await fetchInsights();
       toast.success("Extraction complete");
     } catch {
       toast.error("AI extraction failed", "Check your Groq API key");
