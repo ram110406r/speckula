@@ -22,6 +22,14 @@ import {
   ChevronRight,
   Menu,
   X,
+  Home,
+  Bell,
+  Puzzle,
+  Settings,
+  HelpCircle,
+  Zap,
+  Activity,
+  CreditCard,
 } from "lucide-react";
 import { ResearchBotIcon } from "@/components/ui/icons/ResearchBotIcon";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -44,18 +52,27 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { icon: Bot,           label: "Autonomous Mode", view: "autonomous", group: "Agent"    },
-  { icon: ResearchBotIcon, label: "Research",         view: "editor",     group: "Evidence" },
-  { icon: Lightbulb,     label: "Signals",          view: "insights",   group: "Evidence" },
-  { icon: Compass,       label: "Decisions",        view: "decisions",  group: "Argument" },
-  { icon: LayoutDashboard, label: "Spec",           view: "prds",       group: "Verdict"  },
-  { icon: CheckSquare,   label: "Tasks",            view: "tasks",      group: "Verdict"  },
-  { icon: Share2,        label: "Cases",            view: "platform",   group: "Publish"  },
-  { icon: MessageSquare, label: "Slack",            view: "slack",      group: "Publish"  },
+  { icon: Home,          label: "Workspace",        view: "workspace",     group: "Home"     },
+  { icon: Bot,           label: "Autonomous Mode",  view: "autonomous",    group: "Agent"    },
+  { icon: ResearchBotIcon, label: "Research",       view: "editor",        group: "Evidence" },
+  { icon: Lightbulb,     label: "Signals",          view: "insights",      group: "Evidence" },
+  { icon: Compass,       label: "Decisions",        view: "decisions",     group: "Argument" },
+  { icon: LayoutDashboard, label: "Spec",           view: "prds",          group: "Verdict"  },
+  { icon: CheckSquare,   label: "Tasks",            view: "tasks",         group: "Verdict"  },
+  { icon: Share2,        label: "Cases",            view: "platform",      group: "Publish"  },
+  { icon: MessageSquare, label: "Slack",            view: "slack",         group: "Publish"  },
+  { icon: Zap,           label: "Integrations",     view: "integrations",  group: "Platform" },
+  { icon: Puzzle,        label: "Extension",        view: "extension",     group: "Platform" },
+  { icon: Activity,      label: "Activity",         view: "activity",      group: "Platform" },
+  { icon: Bell,          label: "Notifications",    view: "notifications", group: "Platform" },
+  { icon: CreditCard,    label: "Billing",          view: "billing",       group: "Platform" },
+  { icon: Settings,      label: "Settings",         view: "settings",      group: "Account"  },
+  { icon: UserIcon,      label: "Profile",          view: "profile",       group: "Account"  },
+  { icon: HelpCircle,    label: "Help",             view: "help",          group: "Account"  },
 ];
 
 // Groups in order so we can render section labels
-const GROUP_ORDER = ["Agent", "Evidence", "Argument", "Verdict", "Publish"];
+const GROUP_ORDER = ["Home", "Agent", "Evidence", "Argument", "Verdict", "Publish", "Platform", "Account"];
 
 interface ModernSidebarProps {
   onCollapsedChange?: (collapsed: boolean) => void;
