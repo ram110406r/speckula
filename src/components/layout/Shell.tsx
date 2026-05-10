@@ -12,6 +12,15 @@ const DecisionView = dynamic(() => import("../views/DecisionView").then(m => ({ 
 const PlatformView = dynamic(() => import("../views/PlatformView").then(m => ({ default: m.PlatformView })), { ssr: false });
 const SlackView = dynamic(() => import("../views/SlackView").then(m => ({ default: m.SlackView })), { ssr: false });
 const AutonomousModeView = dynamic(() => import("../views/AutonomousModeView").then(m => ({ default: m.AutonomousModeView })), { ssr: false });
+const WorkspaceView     = dynamic(() => import("../views/WorkspaceView").then(m => ({ default: m.WorkspaceView })), { ssr: false });
+const NotificationsView = dynamic(() => import("../views/NotificationsView").then(m => ({ default: m.NotificationsView })), { ssr: false });
+const IntegrationsView  = dynamic(() => import("../views/IntegrationsView").then(m => ({ default: m.IntegrationsView })), { ssr: false });
+const BillingView       = dynamic(() => import("../views/BillingView").then(m => ({ default: m.BillingView })), { ssr: false });
+const ExtensionView     = dynamic(() => import("../views/ExtensionView").then(m => ({ default: m.ExtensionView })), { ssr: false });
+const ActivityView      = dynamic(() => import("../views/ActivityView").then(m => ({ default: m.ActivityView })), { ssr: false });
+const ProfileView       = dynamic(() => import("../views/ProfileView").then(m => ({ default: m.ProfileView })), { ssr: false });
+const HelpView          = dynamic(() => import("../views/HelpView").then(m => ({ default: m.HelpView })), { ssr: false });
+const SettingsView      = dynamic(() => import("../views/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
 import { ModernSidebar } from "@/components/ui/modern-side-bar";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { LandingPage } from "./LandingPage";
@@ -145,14 +154,23 @@ export function Shell() {
 
   const renderMainView = () => {
     switch (activeView) {
-      case "insights":   return <InsightsView />;
-      case "prds":       return <PRDsView />;
-      case "tasks":      return <TasksView />;
-      case "decisions":  return <DecisionView />;
-      case "platform":   return <PlatformView />;
-      case "slack":      return <SlackView />;
+      case "insights":      return <InsightsView />;
+      case "prds":          return <PRDsView />;
+      case "tasks":         return <TasksView />;
+      case "decisions":     return <DecisionView />;
+      case "platform":      return <PlatformView />;
+      case "slack":         return <SlackView />;
+      case "workspace":     return <WorkspaceView />;
+      case "notifications": return <NotificationsView />;
+      case "integrations":  return <IntegrationsView />;
+      case "billing":       return <BillingView />;
+      case "extension":     return <ExtensionView />;
+      case "activity":      return <ActivityView />;
+      case "profile":       return <ProfileView />;
+      case "help":          return <HelpView />;
+      case "settings":      return <SettingsView />;
       // "autonomous" is rendered persistently below — not here
-      default:           return <Editor />;
+      default:              return <Editor />;
     }
   };
 
