@@ -27,7 +27,6 @@ import {
   Puzzle,
   Settings,
   HelpCircle,
-  Zap,
   Activity,
   CreditCard,
 } from "lucide-react";
@@ -61,7 +60,6 @@ const NAV_ITEMS: NavItem[] = [
   { icon: CheckSquare,   label: "Tasks",            view: "tasks",         group: "Verdict"  },
   { icon: Share2,        label: "Cases",            view: "platform",      group: "Publish"  },
   { icon: MessageSquare, label: "Slack",            view: "slack",         group: "Publish"  },
-  { icon: Zap,           label: "Integrations",     view: "integrations",  group: "Platform" },
   { icon: Puzzle,        label: "Extension",        view: "extension",     group: "Platform" },
   { icon: Activity,      label: "Activity",         view: "activity",      group: "Platform" },
   { icon: Bell,          label: "Notifications",    view: "notifications", group: "Platform" },

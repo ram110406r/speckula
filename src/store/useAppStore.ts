@@ -5,7 +5,7 @@ export type AppView =
   // Core product views (existing)
   | 'editor' | 'insights' | 'prds' | 'tasks' | 'decisions' | 'platform' | 'slack' | 'autonomous'
   // Platform views (new)
-  | 'workspace' | 'settings' | 'notifications' | 'integrations'
+  | 'workspace' | 'settings' | 'notifications'
   | 'billing' | 'extension' | 'activity' | 'profile' | 'help';
 
 interface SpeckulaDocument {
