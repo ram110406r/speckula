@@ -1997,10 +1997,57 @@ export const setIntegrationStatus = async (
   }
 };
 
+// ── Extension setup steps ─────────────────────────────────────────────────────
+// Stored at users/{userId}/settings/extensionSetup
+
+export interface ExtensionSetupSteps {
+  installed: boolean;
+  tokenCopied: boolean;
+  tokenPasted: boolean;
+  firstCapture: boolean;
+  updatedAt?: Timestamp | null;
+}
+
+const DEFAULT_SETUP: ExtensionSetupSteps = {
+  installed: false,
+  tokenCopied: false,
+  tokenPasted: false,
+  firstCapture: false,
+};
+
+export const getExtensionSetupSteps = async (userId: string): Promise<ExtensionSetupSteps> => {
+  try {
+    const snap = await getDoc(userSettingRef(userId, "extensionSetup"));
+    if (!snap.exists()) return { ...DEFAULT_SETUP };
+    return { ...DEFAULT_SETUP, ...snap.data() } as ExtensionSetupSteps;
+  } catch (error) {
+    logFirestorePermissionHint("getExtensionSetupSteps", error);
+    return { ...DEFAULT_SETUP };
+  }
+};
+
+export const updateExtensionSetupStep = async (
+  userId: string,
+  stepKey: keyof Omit<ExtensionSetupSteps, "updatedAt">,
+  done: boolean
+): Promise<void> => {
+  try {
+    await setDoc(
+      userSettingRef(userId, "extensionSetup"),
+      { [stepKey]: done, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  } catch (error) {
+    logFirestorePermissionHint("updateExtensionSetupStep", error);
+  }
+};
+
 // ── Usage stats ───────────────────────────────────────────────────────────────
 
 export interface UsageStats {
   signals: number;
+  signalsViaExtension: number;
+  signalsThisWeek: number;
   decisions: number;
   documents: number;
   tasks: number;
@@ -2008,21 +2055,29 @@ export interface UsageStats {
 
 export const getUsageStats = async (userId: string): Promise<UsageStats> => {
   try {
-    const [sigSnap, decSnap, docSnap, taskSnap] = await Promise.all([
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const [sigSnap, decSnap, docSnap, taskSnap, extSnap, weekSnap] = await Promise.all([
       getCountFromServer(userInsightsCollection(userId)),
       getCountFromServer(userDecisionsCollection(userId)),
       getCountFromServer(userDocsCollection(userId)),
       getCountFromServer(userTasksCollection(userId)),
+      getCountFromServer(query(userInsightsCollection(userId), where("capturedVia", "==", "extension"))),
+      getCountFromServer(query(userInsightsCollection(userId), where("createdAt", ">=", FsTimestamp.fromDate(weekStart)))),
     ]);
     return {
-      signals:   sigSnap.data().count,
-      decisions: decSnap.data().count,
-      documents: docSnap.data().count,
-      tasks:     taskSnap.data().count,
+      signals:             sigSnap.data().count,
+      signalsViaExtension: extSnap.data().count,
+      signalsThisWeek:     weekSnap.data().count,
+      decisions:           decSnap.data().count,
+      documents:           docSnap.data().count,
+      tasks:               taskSnap.data().count,
     };
   } catch (error) {
     logFirestorePermissionHint("getUsageStats", error);
-    return { signals: 0, decisions: 0, documents: 0, tasks: 0 };
+    return { signals: 0, signalsViaExtension: 0, signalsThisWeek: 0, decisions: 0, documents: 0, tasks: 0 };
   }
 };
 

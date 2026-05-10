@@ -1,22 +1,36 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Puzzle, Download, Copy, Check, RefreshCw, ExternalLink,
   Shield, Zap, Globe, CheckCircle2, AlertCircle,
   BarChart3, Brain, ChevronRight, Loader2
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
-import { getUsageStats, subscribeToExtensionPreferences } from "@/lib/firebase/db";
+import {
+  getUsageStats,
+  subscribeToExtensionPreferences,
+  getExtensionSetupSteps,
+  updateExtensionSetupStep,
+  type ExtensionSetupSteps,
+} from "@/lib/firebase/db";
 
-const DASHBOARD_URL = "https://speckula.eddgeportal.com";
+// Update this when the extension is published to the Chrome Web Store
+const CHROME_STORE_URL = "https://chrome.google.com/webstore/search/speckula";
 
-const STEPS = [
-  { n: 1, title: "Install extension",   sub: "Add from Chrome Web Store",          key: "installed"    },
-  { n: 2, title: "Copy your token",     sub: "Use the token below to authenticate", key: "tokenCopied"  },
-  { n: 3, title: "Paste in extension",  sub: "Open extension → Settings → Token",  key: "tokenPasted"  },
-  { n: 4, title: "Start analysing",     sub: "Browse any page and click Analyse",   key: "firstCapture" },
+const STEP_KEYS: Array<keyof Omit<ExtensionSetupSteps, "updatedAt">> = [
+  "installed",
+  "tokenCopied",
+  "tokenPasted",
+  "firstCapture",
 ];
+
+const STEP_META = [
+  { title: "Install extension",  sub: "Add from Chrome Web Store",          key: "installed"    },
+  { title: "Copy your token",    sub: "Use the token below to authenticate", key: "tokenCopied"  },
+  { title: "Paste in extension", sub: "Open extension → Settings → Token",  key: "tokenPasted"  },
+  { title: "Start analysing",    sub: "Browse any page and click Analyse",   key: "firstCapture" },
+] as const;
 
 function CopyButton({ value, onCopied }: { value: string; onCopied?: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -39,11 +53,15 @@ function CopyButton({ value, onCopied }: { value: string; onCopied?: () => void 
 
 export function ExtensionView() {
   const { user } = useAuth();
-  const [idToken,    setIdToken]    = useState<string | null>(null);
-  const [tokenLoading, setTokenLoading] = useState(true);
-  const [steps, setSteps]           = useState(STEPS.map((s) => ({ ...s, done: false })));
-  const [signalCount, setSignalCount] = useState(0);
-  const [statsLoading, setStatsLoading] = useState(true);
+  const [idToken,        setIdToken]        = useState<string | null>(null);
+  const [tokenLoading,   setTokenLoading]   = useState(true);
+  const [stepsDone,      setStepsDone]      = useState<Record<string, boolean>>({});
+  const [stepsLoading,   setStepsLoading]   = useState(true);
+  const [signalCount,    setSignalCount]    = useState(0);
+  const [extCount,       setExtCount]       = useState(0);
+  const [weekCount,      setWeekCount]      = useState(0);
+  const [statsLoading,   setStatsLoading]   = useState(true);
+  const [connected,      setConnected]      = useState(false);
 
   // Load the real Firebase ID token
   useEffect(() => {
@@ -60,38 +78,60 @@ export function ExtensionView() {
     return () => clearInterval(interval);
   }, [user]);
 
+  // Load setup steps from Firestore
+  useEffect(() => {
+    if (!user) { setStepsLoading(false); return; }
+    getExtensionSetupSteps(user.uid).then((s) => {
+      setStepsDone({
+        installed:    s.installed,
+        tokenCopied:  s.tokenCopied,
+        tokenPasted:  s.tokenPasted,
+        firstCapture: s.firstCapture,
+      });
+      setStepsLoading(false);
+    }).catch(() => setStepsLoading(false));
+  }, [user]);
+
   // Load usage stats from Firestore
   useEffect(() => {
     if (!user) { setStatsLoading(false); return; }
     getUsageStats(user.uid).then((stats) => {
       setSignalCount(stats.signals);
+      setExtCount(stats.signalsViaExtension);
+      setWeekCount(stats.signalsThisWeek);
       setStatsLoading(false);
     }).catch(() => setStatsLoading(false));
   }, [user]);
 
+  // Auto-complete step 4 once signals exist
+  useEffect(() => {
+    if (!user || signalCount === 0 || stepsDone.firstCapture) return;
+    const next = { ...stepsDone, firstCapture: true };
+    setStepsDone(next);
+    updateExtensionSetupStep(user.uid, "firstCapture", true);
+  }, [signalCount, stepsDone, user]);
+
   // Check extension preferences to derive connection state
-  const [connected, setConnected] = useState(false);
   useEffect(() => {
     if (!user) return;
-    // Extension is considered "connected" if it has written its activeWorkspaceId to Firestore
     const unsub = subscribeToExtensionPreferences(user.uid, (prefs) => {
       setConnected(!!prefs.activeWorkspaceId);
     });
     return unsub;
   }, [user]);
 
-  const markStep = (n: number) =>
-    setSteps((prev) => prev.map((s) => s.n === n ? { ...s, done: !s.done } : s));
+  const toggleStep = useCallback((key: string) => {
+    if (!user) return;
+    const next = !stepsDone[key];
+    setStepsDone((prev) => ({ ...prev, [key]: next }));
+    updateExtensionSetupStep(user.uid, key as keyof Omit<ExtensionSetupSteps, "updatedAt">, next);
+  }, [user, stepsDone]);
 
-  const completedCount = steps.filter((s) => s.done).length;
-
-  const displayToken = tokenLoading
-    ? "Loading…"
-    : (idToken ?? "Sign in to generate your token");
+  const completedCount = STEP_KEYS.filter((k) => stepsDone[k]).length;
 
   const maskedToken = idToken
-    ? `${idToken.slice(0, 20)}${"•".repeat(20)}…`
-    : displayToken;
+    ? `${"•".repeat(32)}${idToken.slice(-8)}`
+    : tokenLoading ? "Loading…" : "Sign in to generate your token";
 
   return (
     <div className="h-full overflow-y-auto bg-background custom-scrollbar">
@@ -139,43 +179,50 @@ export function ExtensionView() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-foreground">Setup guide</h2>
-            <span className="text-xs text-muted-foreground">{completedCount}/{steps.length} done</span>
+            <span className="text-xs text-muted-foreground">{completedCount}/{STEP_META.length} done</span>
           </div>
           <div className="rounded-xl border border-border/60 bg-card overflow-hidden divide-y divide-border/40">
-            {steps.map((step) => (
-              <div
-                key={step.n}
-                className={`flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/30 transition-colors ${step.done ? "opacity-60" : ""}`}
-                onClick={() => markStep(step.n)}
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2 transition-colors ${
-                  step.done ? "border-green-500 bg-green-500" : "border-border/60 bg-transparent"
-                }`}>
-                  {step.done
-                    ? <Check className="h-3 w-3 text-white" />
-                    : <span className="text-[10px] font-bold text-muted-foreground">{step.n}</span>
-                  }
-                </div>
-                <div className="flex-1">
-                  <p className={`text-xs font-medium ${step.done ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                    {step.title}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{step.sub}</p>
-                </div>
-                {step.n === 1 && (
-                  <a
-                    href={`${DASHBOARD_URL}/extension`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 text-[11px] text-primary hover:underline"
-                  >
-                    Install <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-                {step.n !== 1 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40" />}
+            {stepsLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
-            ))}
+            ) : STEP_META.map((step, i) => {
+              const done = !!stepsDone[step.key];
+              return (
+                <div
+                  key={step.key}
+                  className={`flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/30 transition-colors ${done ? "opacity-60" : ""}`}
+                  onClick={() => toggleStep(step.key)}
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2 transition-colors ${
+                    done ? "border-green-500 bg-green-500" : "border-border/60 bg-transparent"
+                  }`}>
+                    {done
+                      ? <Check className="h-3 w-3 text-white" />
+                      : <span className="text-[10px] font-bold text-muted-foreground">{i + 1}</span>
+                    }
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-xs font-medium ${done ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                      {step.title}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{step.sub}</p>
+                  </div>
+                  {step.key === "installed" && (
+                    <a
+                      href={CHROME_STORE_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+                    >
+                      Install <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                  {step.key !== "installed" && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -195,7 +242,14 @@ export function ExtensionView() {
             ) : (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 font-mono text-xs border border-border/40">
                 <span className="flex-1 truncate text-foreground select-all">{maskedToken}</span>
-                {idToken && <CopyButton value={idToken} onCopied={() => markStep(2)} />}
+                {idToken && (
+                  <CopyButton
+                    value={idToken}
+                    onCopied={() => {
+                      if (!stepsDone.tokenCopied) toggleStep("tokenCopied");
+                    }}
+                  />
+                )}
               </div>
             )}
             <div className="flex items-center gap-3">
@@ -226,9 +280,9 @@ export function ExtensionView() {
                 </div>
               ) : (
                 [
-                  { label: "Total signals",    value: signalCount, icon: Globe    },
-                  { label: "Via extension",    value: "—",         icon: Brain    },
-                  { label: "This week",        value: "—",         icon: BarChart3 },
+                  { label: "Total signals",  value: signalCount, icon: Globe     },
+                  { label: "Via extension",  value: extCount,    icon: Brain     },
+                  { label: "This week",      value: weekCount,   icon: BarChart3 },
                 ].map((s) => (
                   <div key={s.label} className="p-4 rounded-xl border border-border/60 bg-card text-center">
                     <s.icon className="h-4 w-4 text-muted-foreground mx-auto mb-2" />
@@ -249,7 +303,7 @@ export function ExtensionView() {
               <p className="text-xs text-muted-foreground mt-1">Follow the setup guide above to start capturing intelligence</p>
             </div>
             <a
-              href={`${DASHBOARD_URL}/extension`}
+              href={CHROME_STORE_URL}
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity"
