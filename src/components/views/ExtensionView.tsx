@@ -1,39 +1,29 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Puzzle, Download, Copy, Check, RefreshCw, ExternalLink,
-  Shield, Zap, Globe, CheckCircle2, AlertCircle, Clock,
-  BarChart3, Brain, ChevronRight
+  Shield, Zap, Globe, CheckCircle2, AlertCircle,
+  BarChart3, Brain, ChevronRight, Loader2
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
+import { getUsageStats, subscribeToExtensionPreferences } from "@/lib/firebase/db";
 
 const DASHBOARD_URL = "https://speckula.eddgeportal.com";
 
 const STEPS = [
-  { n: 1, title: "Install extension",   sub: "Add from Chrome Web Store",         done: false },
-  { n: 2, title: "Copy your token",     sub: "Use the token below to authenticate", done: false },
-  { n: 3, title: "Paste in extension",  sub: "Open extension → Settings → Token",  done: false },
-  { n: 4, title: "Start analysing",     sub: "Browse any page and click Analyse",   done: false },
+  { n: 1, title: "Install extension",   sub: "Add from Chrome Web Store",          key: "installed"    },
+  { n: 2, title: "Copy your token",     sub: "Use the token below to authenticate", key: "tokenCopied"  },
+  { n: 3, title: "Paste in extension",  sub: "Open extension → Settings → Token",  key: "tokenPasted"  },
+  { n: 4, title: "Start analysing",     sub: "Browse any page and click Analyse",   key: "firstCapture" },
 ];
 
-const RECENT_PAGES = [
-  { url: "figma.com/pricing",            type: "Pricing page",   insights: 3, time: "10m ago"  },
-  { url: "producthunt.com/posts/notion", type: "Product Hunt",   insights: 5, time: "2h ago"   },
-  { url: "notion.so",                    type: "Landing page",   insights: 2, time: "1d ago"   },
-];
-
-const STATS = [
-  { label: "Pages analysed",  value: "47",  icon: Globe   },
-  { label: "Insights saved",  value: "12",  icon: Brain   },
-  { label: "This week",       value: "8",   icon: BarChart3 },
-];
-
-function CopyButton({ value }: { value: string }) {
+function CopyButton({ value, onCopied }: { value: string; onCopied?: () => void }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     await navigator.clipboard.writeText(value).catch(() => {});
     setCopied(true);
+    onCopied?.();
     setTimeout(() => setCopied(false), 2000);
   };
   return (
@@ -49,17 +39,59 @@ function CopyButton({ value }: { value: string }) {
 
 export function ExtensionView() {
   const { user } = useAuth();
-  const [connected] = useState(false);
-  const [steps, setSteps] = useState(STEPS);
+  const [idToken,    setIdToken]    = useState<string | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(true);
+  const [steps, setSteps]           = useState(STEPS.map((s) => ({ ...s, done: false })));
+  const [signalCount, setSignalCount] = useState(0);
+  const [statsLoading, setStatsLoading] = useState(true);
 
-  const mockToken = user?.uid
-    ? `spk_ext_${user.uid.slice(0, 8)}_${"x".repeat(24)}`
-    : "spk_ext_sign_in_to_generate";
+  // Load the real Firebase ID token
+  useEffect(() => {
+    if (!user) { setTokenLoading(false); return; }
+    user.getIdToken().then((t) => { setIdToken(t); setTokenLoading(false); }).catch(() => setTokenLoading(false));
+  }, [user]);
+
+  // Refresh token every 50 minutes (Firebase tokens expire after 60 min)
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      user.getIdToken(true).then(setIdToken).catch(() => {});
+    }, 50 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  // Load usage stats from Firestore
+  useEffect(() => {
+    if (!user) { setStatsLoading(false); return; }
+    getUsageStats(user.uid).then((stats) => {
+      setSignalCount(stats.signals);
+      setStatsLoading(false);
+    }).catch(() => setStatsLoading(false));
+  }, [user]);
+
+  // Check extension preferences to derive connection state
+  const [connected, setConnected] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    // Extension is considered "connected" if it has written its activeWorkspaceId to Firestore
+    const unsub = subscribeToExtensionPreferences(user.uid, (prefs) => {
+      setConnected(!!prefs.activeWorkspaceId);
+    });
+    return unsub;
+  }, [user]);
 
   const markStep = (n: number) =>
     setSteps((prev) => prev.map((s) => s.n === n ? { ...s, done: !s.done } : s));
 
   const completedCount = steps.filter((s) => s.done).length;
+
+  const displayToken = tokenLoading
+    ? "Loading…"
+    : (idToken ?? "Sign in to generate your token");
+
+  const maskedToken = idToken
+    ? `${idToken.slice(0, 20)}${"•".repeat(20)}…`
+    : displayToken;
 
   return (
     <div className="h-full overflow-y-auto bg-background custom-scrollbar">
@@ -89,8 +121,8 @@ export function ExtensionView() {
         {/* ── Feature highlights ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { icon: Zap,    title: "One-click capture",  desc: "Analyse any page with a single click while browsing"         },
-            { icon: Brain,  title: "AI classification",  desc: "Automatically detects pricing, landing, and product pages"    },
+            { icon: Zap,    title: "One-click capture",  desc: "Analyse any page with a single click while browsing"               },
+            { icon: Brain,  title: "AI classification",  desc: "Automatically detects pricing, landing, and product pages"          },
             { icon: Shield, title: "Secure sync",        desc: "Your token is stored locally — data goes directly to your workspace" },
           ].map((f) => (
             <div key={f.title} className="p-4 rounded-xl border border-border/60 bg-card">
@@ -117,9 +149,7 @@ export function ExtensionView() {
                 onClick={() => markStep(step.n)}
               >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2 transition-colors ${
-                  step.done
-                    ? "border-green-500 bg-green-500"
-                    : "border-border/60 bg-transparent"
+                  step.done ? "border-green-500 bg-green-500" : "border-border/60 bg-transparent"
                 }`}>
                   {step.done
                     ? <Check className="h-3 w-3 text-white" />
@@ -157,52 +187,56 @@ export function ExtensionView() {
               Paste this token in the extension settings to link it to your workspace.
               Keep it private — it grants access to your account.
             </p>
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 font-mono text-xs border border-border/40">
-              <span className="flex-1 truncate text-foreground select-all">{mockToken}</span>
-              <CopyButton value={mockToken} />
-            </div>
+            {tokenLoading ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border/40">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Generating token…</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 font-mono text-xs border border-border/40">
+                <span className="flex-1 truncate text-foreground select-all">{maskedToken}</span>
+                {idToken && <CopyButton value={idToken} onCopied={() => markStep(2)} />}
+              </div>
+            )}
             <div className="flex items-center gap-3">
-              <button className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-destructive transition-colors">
-                <RefreshCw className="h-3 w-3" /> Regenerate token
+              <button
+                onClick={() => {
+                  if (!user) return;
+                  setTokenLoading(true);
+                  user.getIdToken(true).then((t) => { setIdToken(t); setTokenLoading(false); }).catch(() => setTokenLoading(false));
+                }}
+                className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <RefreshCw className="h-3 w-3" /> Refresh token
               </button>
               <span className="text-muted-foreground/40">·</span>
-              <p className="text-[11px] text-muted-foreground">Regenerating invalidates the previous token</p>
+              <p className="text-[11px] text-muted-foreground">Token expires every 60 minutes</p>
             </div>
           </div>
         </div>
 
-        {/* ── Stats or connect prompt ── */}
+        {/* ── Stats ── */}
         {connected ? (
           <div>
             <h2 className="text-sm font-semibold text-foreground mb-3">Extension activity</h2>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              {STATS.map((s) => (
-                <div key={s.label} className="p-4 rounded-xl border border-border/60 bg-card text-center">
-                  <s.icon className="h-4 w-4 text-muted-foreground mx-auto mb-2" />
-                  <div className="text-xl font-bold text-foreground">{s.value}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">{s.label}</div>
+            <div className="grid grid-cols-3 gap-3">
+              {statsLoading ? (
+                <div className="col-span-3 flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
-              ))}
-            </div>
-
-            <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-border/40">
-                <p className="text-xs font-semibold text-foreground">Recent pages</p>
-              </div>
-              {RECENT_PAGES.map((page, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-border/40 last:border-0">
-                  <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-medium text-foreground truncate">{page.url}</p>
-                    <p className="text-[10px] text-muted-foreground">{page.type}</p>
+              ) : (
+                [
+                  { label: "Total signals",    value: signalCount, icon: Globe    },
+                  { label: "Via extension",    value: "—",         icon: Brain    },
+                  { label: "This week",        value: "—",         icon: BarChart3 },
+                ].map((s) => (
+                  <div key={s.label} className="p-4 rounded-xl border border-border/60 bg-card text-center">
+                    <s.icon className="h-4 w-4 text-muted-foreground mx-auto mb-2" />
+                    <div className="text-xl font-bold text-foreground">{s.value}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">{s.label}</div>
                   </div>
-                  <span className="text-[10px] text-primary">{page.insights} insights</span>
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
-                    <Clock className="h-2.5 w-2.5" />
-                    {page.time}
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         ) : (
