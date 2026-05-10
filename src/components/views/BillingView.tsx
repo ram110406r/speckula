@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  CreditCard, Zap, Check, ArrowRight, Download,
-  AlertCircle, TrendingUp, Users, FileText, Brain
+  CreditCard, Zap, Check, Download,
+  AlertCircle, TrendingUp, Users, FileText, Brain, Loader2
 } from "lucide-react";
+import { useAuth } from "@/lib/firebase/AuthProvider";
+import { getUsageStats, type UsageStats } from "@/lib/firebase/db";
 
 type Plan = "starter" | "pro" | "team" | "enterprise";
 
@@ -44,22 +46,31 @@ const PLANS = [
   },
 ];
 
-const USAGE = [
-  { label: "Analyses",      used: 2,   limit: 3,   icon: FileText,  color: "bg-primary"      },
-  { label: "Signals",       used: 38,  limit: 50,  icon: Brain,     color: "bg-amber-500"    },
-  { label: "Team members",  used: 1,   limit: 1,   icon: Users,     color: "bg-blue-500"     },
-];
-
 const INVOICES = [
-  { date: "May 1, 2026",   amount: "$0.00", plan: "Starter", status: "paid" },
-  { date: "Apr 1, 2026",   amount: "$0.00", plan: "Starter", status: "paid" },
-  { date: "Mar 1, 2026",   amount: "$0.00", plan: "Starter", status: "paid" },
+  { date: "May 1, 2026",  amount: "$0.00", plan: "Starter", status: "paid" },
+  { date: "Apr 1, 2026",  amount: "$0.00", plan: "Starter", status: "paid" },
+  { date: "Mar 1, 2026",  amount: "$0.00", plan: "Starter", status: "paid" },
 ];
 
 export function BillingView() {
-  const [currentPlan]   = useState<Plan>("starter");
-  const [billing]       = useState<"monthly" | "yearly">("monthly");
-  const [showUpgrade, setShowUpgrade] = useState(false);
+  const { user } = useAuth();
+  const [currentPlan] = useState<Plan>("starter");
+  const [billing]     = useState<"monthly" | "yearly">("monthly");
+  const [stats,    setStats]   = useState<UsageStats | null>(null);
+  const [loading,  setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    getUsageStats(user.uid).then((s) => { setStats(s); setLoading(false); }).catch(() => setLoading(false));
+  }, [user]);
+
+  const planLimits = PLANS.find((p) => p.id === currentPlan)?.limits ?? { analyses: 3, signals: 50, users: 1 };
+
+  const usageItems = [
+    { label: "Documents",  used: stats?.documents ?? 0, limit: planLimits.analyses, icon: FileText, color: "bg-primary"   },
+    { label: "Signals",    used: stats?.signals   ?? 0, limit: planLimits.signals,  icon: Brain,    color: "bg-amber-500" },
+    { label: "Decisions",  used: stats?.decisions ?? 0, limit: -1,                  icon: Users,    color: "bg-blue-500"  },
+  ];
 
   return (
     <div className="h-full overflow-y-auto bg-background custom-scrollbar">
@@ -79,13 +90,10 @@ export function BillingView() {
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">Starter plan</p>
-              <p className="text-xs text-muted-foreground">Free forever · Renews automatically</p>
+              <p className="text-xs text-muted-foreground">Free forever · No credit card required</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowUpgrade(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity"
-          >
+          <button className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity">
             <TrendingUp className="h-3.5 w-3.5" /> Upgrade plan
           </button>
         </div>
@@ -93,35 +101,53 @@ export function BillingView() {
         {/* ── Usage ── */}
         <div>
           <h2 className="text-sm font-semibold text-foreground mb-3">Current usage</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {USAGE.map((u) => {
-              const pct     = u.limit > 0 ? (u.used / u.limit) * 100 : 0;
-              const isHigh  = pct >= 80;
-              return (
-                <div key={u.label} className="p-4 rounded-xl border border-border/60 bg-card">
-                  <div className="flex items-center gap-2 mb-3">
-                    <u.icon className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs font-medium text-foreground">{u.label}</span>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {usageItems.map((u) => {
+                const pct    = u.limit > 0 ? Math.min((u.used / u.limit) * 100, 100) : 0;
+                const isHigh = u.limit > 0 && pct >= 80;
+                return (
+                  <div key={u.label} className="p-4 rounded-xl border border-border/60 bg-card">
+                    <div className="flex items-center gap-2 mb-3">
+                      <u.icon className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs font-medium text-foreground">{u.label}</span>
+                    </div>
+                    <div className="text-lg font-bold text-foreground">
+                      {u.used}
+                      {u.limit > 0 && (
+                        <span className="text-sm text-muted-foreground font-normal"> / {u.limit}</span>
+                      )}
+                    </div>
+                    {u.limit > 0 && (
+                      <>
+                        <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${isHigh ? "bg-amber-500" : u.color}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        {isHigh && (
+                          <p className="text-[10px] text-amber-600 mt-1.5 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" /> Approaching limit
+                          </p>
+                        )}
+                      </>
+                    )}
+                    {u.limit === -1 && (
+                      <p className="text-[10px] text-muted-foreground mt-1">Unlimited</p>
+                    )}
                   </div>
-                  <div className="text-lg font-bold text-foreground">{u.used} <span className="text-sm text-muted-foreground font-normal">/ {u.limit}</span></div>
-                  <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${isHigh ? "bg-amber-500" : u.color}`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-                  {isHigh && (
-                    <p className="text-[10px] text-amber-600 mt-1.5 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" /> Approaching limit
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* ── Plan comparison (shown on upgrade) ── */}
+        {/* ── Plan comparison ── */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-foreground">Plans</h2>
@@ -147,9 +173,7 @@ export function BillingView() {
                 <div
                   key={plan.id}
                   className={`relative flex flex-col gap-4 p-4 rounded-xl border transition-all ${
-                    plan.popular
-                      ? "border-primary/40 bg-primary/5"
-                      : "border-border/60 bg-card"
+                    plan.popular ? "border-primary/40 bg-primary/5" : "border-border/60 bg-card"
                   }`}
                 >
                   {plan.popular && (
@@ -186,8 +210,6 @@ export function BillingView() {
                         ? "bg-muted text-muted-foreground cursor-default"
                         : plan.popular
                         ? "bg-primary text-primary-foreground hover:opacity-90"
-                        : plan.price === null
-                        ? "border border-border/60 text-foreground hover:bg-muted"
                         : "border border-border/60 text-foreground hover:bg-muted"
                     }`}
                   >

@@ -1,54 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  Activity, Filter, Download, Lightbulb, Compass,
+  Activity, Download, Lightbulb, Compass,
   LayoutDashboard, CheckSquare, Sparkles, Users,
-  FileText, Clock, Search, ChevronDown
+  Clock, Search, ChevronDown, Loader2
 } from "lucide-react";
+import { useAuth } from "@/lib/firebase/AuthProvider";
+import { subscribeToActivity, type ActivityEvent, type ActivityEventType } from "@/lib/firebase/db";
 
-type EventType = "all" | "signal" | "decision" | "spec" | "task" | "ai" | "auth";
+type FilterKey = "all" | ActivityEventType;
 
-interface ActivityEvent {
-  id: string;
-  type: Exclude<EventType, "all">;
-  actor: string;
-  avatar: string;
-  avatarColor: string;
-  action: string;
-  subject: string;
-  meta?: string;
-  timestamp: string;
-  date: string;
-}
-
-const EVENTS: ActivityEvent[] = [
-  { id: "e1",  type: "ai",       actor: "Speckula AI",  avatar: "AI", avatarColor: "bg-primary",    action: "completed analysis of",    subject: "figma.com/pricing",                   meta: "3 signals extracted",    timestamp: "09:41",       date: "Today"      },
-  { id: "e2",  type: "signal",   actor: "You",          avatar: "Y",  avatarColor: "bg-slate-500",  action: "added signal",             subject: "Users drop off at checkout step 3",   meta: "Conversion",             timestamp: "09:30",       date: "Today"      },
-  { id: "e3",  type: "task",     actor: "James R.",     avatar: "JR", avatarColor: "bg-blue-500",   action: "completed task",           subject: "Add form validation",                  meta: "Checkout Redesign",      timestamp: "08:55",       date: "Today"      },
-  { id: "e4",  type: "decision", actor: "Sarah K.",     avatar: "SK", avatarColor: "bg-pink-500",   action: "commented on",             subject: "Prioritize mobile checkout",           meta: "2 votes",                timestamp: "08:20",       date: "Today"      },
-  { id: "e5",  type: "spec",     actor: "You",          avatar: "Y",  avatarColor: "bg-slate-500",  action: "published spec",           subject: "Mobile Checkout v2",                   meta: "Shared with engineering",timestamp: "Yesterday",   date: "Yesterday"  },
-  { id: "e6",  type: "signal",   actor: "Priya M.",     avatar: "PM", avatarColor: "bg-emerald-500",action: "captured signal from",     subject: "ProductHunt: Competitor A checkout",   meta: "Extension",              timestamp: "14:30",       date: "Yesterday"  },
-  { id: "e7",  type: "decision", actor: "You",          avatar: "Y",  avatarColor: "bg-slate-500",  action: "created decision",         subject: "Choose payment provider",              meta: "High priority",          timestamp: "11:00",       date: "Yesterday"  },
-  { id: "e8",  type: "task",     actor: "Alex T.",      avatar: "AT", avatarColor: "bg-amber-500",  action: "assigned task to you",     subject: "Implement address autofill",           meta: "Checkout Redesign",      timestamp: "10:15",       date: "Yesterday"  },
-  { id: "e9",  type: "auth",     actor: "You",          avatar: "Y",  avatarColor: "bg-slate-500",  action: "signed in from",           subject: "Chrome on macOS",                      meta: "London, UK",             timestamp: "09:00",       date: "Yesterday"  },
-  { id: "e10", type: "ai",       actor: "Speckula AI",  avatar: "AI", avatarColor: "bg-primary",    action: "generated weekly summary", subject: "12 signals · 4 decisions · 1 spec",   meta: "Week 19",                timestamp: "Mon",         date: "This week"  },
-  { id: "e11", type: "signal",   actor: "You",          avatar: "Y",  avatarColor: "bg-slate-500",  action: "imported signals from",    subject: "PostHog funnel analysis",              meta: "7 signals",              timestamp: "Mon",         date: "This week"  },
-  { id: "e12", type: "auth",     actor: "Maria S.",     avatar: "MS", avatarColor: "bg-violet-500", action: "joined workspace as",      subject: "Contributor",                          meta: "",                       timestamp: "Sun",         date: "This week"  },
-];
-
-const FILTER_TABS: { key: EventType; label: string; icon: React.ElementType }[] = [
-  { key: "all",      label: "All",       icon: Activity      },
-  { key: "ai",       label: "AI",        icon: Sparkles      },
-  { key: "signal",   label: "Signals",   icon: Lightbulb     },
-  { key: "decision", label: "Decisions", icon: Compass       },
+const FILTER_TABS: { key: FilterKey; label: string; icon: React.ElementType }[] = [
+  { key: "all",      label: "All",       icon: Activity        },
+  { key: "ai",       label: "AI",        icon: Sparkles        },
+  { key: "signal",   label: "Signals",   icon: Lightbulb       },
+  { key: "decision", label: "Decisions", icon: Compass         },
   { key: "spec",     label: "Specs",     icon: LayoutDashboard },
-  { key: "task",     label: "Tasks",     icon: CheckSquare   },
-  { key: "auth",     label: "Auth",      icon: Users         },
+  { key: "task",     label: "Tasks",     icon: CheckSquare     },
+  { key: "auth",     label: "Auth",      icon: Users           },
 ];
 
-const TYPE_CONFIG: Record<Exclude<EventType, "all">, { icon: React.ElementType; color: string; bg: string }> = {
-  ai:       { icon: Sparkles,        color: "text-primary",    bg: "bg-primary/10"    },
+const TYPE_CONFIG: Record<ActivityEventType, { icon: React.ElementType; color: string; bg: string }> = {
+  ai:       { icon: Sparkles,        color: "text-primary",    bg: "bg-primary/10"   },
   signal:   { icon: Lightbulb,       color: "text-amber-500",  bg: "bg-amber-500/10"  },
   decision: { icon: Compass,         color: "text-blue-500",   bg: "bg-blue-500/10"   },
   spec:     { icon: LayoutDashboard, color: "text-green-500",  bg: "bg-green-500/10"  },
@@ -56,20 +30,63 @@ const TYPE_CONFIG: Record<Exclude<EventType, "all">, { icon: React.ElementType; 
   auth:     { icon: Users,           color: "text-slate-500",  bg: "bg-slate-500/10"  },
 };
 
-export function ActivityView() {
-  const [filter, setFilter]   = useState<EventType>("all");
-  const [search, setSearch]   = useState("");
-  const [limit,  setLimit]    = useState(10);
+function dateLabel(ts: ActivityEvent["createdAt"]): string {
+  if (!ts) return "Unknown";
+  const d = ts.toDate();
+  const now = new Date();
+  const diff = Math.floor((now.getTime() - d.getTime()) / 86_400_000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  if (diff < 7) return "This week";
+  return d.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
+}
 
-  const filtered = EVENTS.filter((e) => {
+function timeLabel(ts: ActivityEvent["createdAt"]): string {
+  if (!ts) return "";
+  return ts.toDate().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function actorInitials(actor: string): string {
+  return actor === "You" ? "Y" : actor.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+}
+
+const AVATAR_COLORS = ["bg-slate-500", "bg-blue-500", "bg-pink-500", "bg-emerald-500", "bg-amber-500", "bg-violet-500"];
+const colorFor = (s: string) => AVATAR_COLORS[s.charCodeAt(0) % AVATAR_COLORS.length];
+
+export function ActivityView() {
+  const { user } = useAuth();
+  const [events,  setEvents]  = useState<ActivityEvent[]>([]);
+  const [filter,  setFilter]  = useState<FilterKey>("all");
+  const [search,  setSearch]  = useState("");
+  const [limit,   setLimit]   = useState(20);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    const unsub = subscribeToActivity(
+      user.uid,
+      (data) => { setEvents(data); setLoading(false); },
+      () => setLoading(false)
+    );
+    return unsub;
+  }, [user]);
+
+  const filtered = events.filter((e) => {
     const matchType   = filter === "all" || e.type === filter;
-    const matchSearch = !search || e.subject.toLowerCase().includes(search.toLowerCase()) || e.actor.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search ||
+      e.subject.toLowerCase().includes(search.toLowerCase()) ||
+      e.actor.toLowerCase().includes(search.toLowerCase()) ||
+      e.action.toLowerCase().includes(search.toLowerCase());
     return matchType && matchSearch;
   });
 
-  const grouped = filtered.slice(0, limit).reduce<Record<string, ActivityEvent[]>>((acc, ev) => {
-    if (!acc[ev.date]) acc[ev.date] = [];
-    acc[ev.date].push(ev);
+  const paged = filtered.slice(0, limit);
+
+  // Group by date label
+  const grouped = paged.reduce<Record<string, ActivityEvent[]>>((acc, ev) => {
+    const label = dateLabel(ev.createdAt);
+    if (!acc[label]) acc[label] = [];
+    acc[label].push(ev);
     return acc;
   }, {});
 
@@ -119,41 +136,46 @@ export function ActivityView() {
         </div>
 
         {/* ── Timeline ── */}
-        {Object.keys(grouped).length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : Object.keys(grouped).length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <Activity className="h-8 w-8 text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">No activity found</p>
-            <p className="text-xs text-muted-foreground">Try a different filter or search term</p>
+            <p className="text-sm font-medium text-foreground">No activity yet</p>
+            <p className="text-xs text-muted-foreground">
+              {search || filter !== "all"
+                ? "Try a different filter or search term"
+                : "Activity will appear here as you use SPECKULA"}
+            </p>
           </div>
         ) : (
           <div className="space-y-6">
-            {Object.entries(grouped).map(([date, events]) => (
+            {Object.entries(grouped).map(([date, evs]) => (
               <div key={date}>
-                {/* Date group header */}
                 <div className="flex items-center gap-3 mb-3">
                   <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em]">{date}</span>
                   <div className="flex-1 h-px bg-border/40" />
                 </div>
 
-                {/* Events */}
                 <div className="relative">
                   <div className="absolute left-5 top-0 bottom-0 w-px bg-border/40" />
                   <div className="space-y-1">
-                    {events.map((ev) => {
+                    {evs.map((ev) => {
                       const cfg = TYPE_CONFIG[ev.type];
+                      const initials = actorInitials(ev.actor);
+                      const avatarColor = ev.actor === "You" ? "bg-slate-500" : colorFor(ev.actor);
                       return (
                         <div key={ev.id} className="relative flex items-start gap-4 pl-3 py-2 group rounded-lg hover:bg-muted/30 transition-colors">
-                          {/* Type icon (on timeline) */}
                           <div className={`relative z-10 flex items-center justify-center w-5 h-5 rounded-full shrink-0 mt-0.5 ${cfg.bg}`}>
                             <cfg.icon className={`h-2.5 w-2.5 ${cfg.color}`} />
                           </div>
 
-                          {/* Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline gap-1.5 flex-wrap">
-                              {/* Actor avatar inline */}
-                              <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white ${ev.avatarColor} shrink-0`}>
-                                {ev.avatar.slice(0,2)}
+                              <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white ${avatarColor} shrink-0`}>
+                                {initials}
                               </span>
                               <span className="text-xs font-semibold text-foreground">{ev.actor}</span>
                               <span className="text-[11px] text-muted-foreground">{ev.action}</span>
@@ -164,10 +186,9 @@ export function ActivityView() {
                             )}
                           </div>
 
-                          {/* Timestamp */}
                           <div className="flex items-center gap-1 shrink-0 text-[10px] text-muted-foreground/60">
                             <Clock className="h-2.5 w-2.5" />
-                            {ev.timestamp}
+                            {timeLabel(ev.createdAt)}
                           </div>
                         </div>
                       );
@@ -183,7 +204,7 @@ export function ActivityView() {
         {filtered.length > limit && (
           <div className="mt-6 text-center">
             <button
-              onClick={() => setLimit((l) => l + 10)}
+              onClick={() => setLimit((l) => l + 20)}
               className="flex items-center gap-1.5 mx-auto px-4 py-2 rounded-lg border border-border/60 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <ChevronDown className="h-3.5 w-3.5" /> Load more
