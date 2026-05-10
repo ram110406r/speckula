@@ -412,6 +412,24 @@ export const updateDecision = async (
   }
 };
 
+export const recordDecisionOutcome = async (
+  userId: string,
+  decisionId: string,
+  outcomeNote: string,
+  success: boolean
+) => {
+  try {
+    await setDoc(
+      doc(userDecisionsCollection(userId), decisionId),
+      { outcomeNote, success, outcomeRecordedAt: serverTimestamp(), updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  } catch (error) {
+    logFirestorePermissionHint("recordDecisionOutcome", error);
+    throw error;
+  }
+};
+
 export const publishCase = async (
   userId: string,
   decisionId: string,
