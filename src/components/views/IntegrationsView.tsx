@@ -1,99 +1,68 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search, CheckCircle2, ExternalLink, Settings,
-  Zap, AlertCircle, Plus, ChevronRight
+  Zap, AlertCircle, Plus, Loader2
 } from "lucide-react";
+import { useAuth } from "@/lib/firebase/AuthProvider";
+import {
+  subscribeToIntegrations,
+  setIntegrationStatus,
+  type IntegrationRecord,
+} from "@/lib/firebase/db";
 
 type IntegStatus = "connected" | "disconnected" | "error" | "coming_soon";
 
-interface Integration {
+interface IntegMeta {
   id: string;
   name: string;
   description: string;
   category: string;
-  status: IntegStatus;
   logo: string;
-  connectedAs?: string;
-  lastSync?: string;
   docsUrl?: string;
+  comingSoon?: boolean;
 }
 
-const INTEGRATIONS: Integration[] = [
-  {
-    id: "slack",       name: "Slack",        category: "Communication",
-    description: "Push signals and decisions to Slack channels. Get notified on important updates.",
-    logo: "SL", status: "connected", connectedAs: "#product-intelligence", lastSync: "2m ago",
-  },
-  {
-    id: "github",      name: "GitHub",       category: "Engineering",
-    description: "Link tasks to GitHub issues and PRs. Track development progress automatically.",
-    logo: "GH", status: "connected", connectedAs: "acme-org/product", lastSync: "5m ago",
-  },
-  {
-    id: "jira",        name: "Jira",         category: "Project Management",
-    description: "Sync tasks with Jira tickets. Keep your backlog in sync with your specs.",
-    logo: "JI", status: "disconnected",
-  },
-  {
-    id: "notion",      name: "Notion",       category: "Documentation",
-    description: "Export specs and decisions to Notion pages. Keep your wiki up to date.",
-    logo: "NO", status: "disconnected",
-  },
-  {
-    id: "posthog",     name: "PostHog",      category: "Analytics",
-    description: "Import user behavior data as signals. Correlate product decisions with metrics.",
-    logo: "PH", status: "connected", connectedAs: "acme-prod", lastSync: "10m ago",
-  },
-  {
-    id: "figma",       name: "Figma",        category: "Design",
-    description: "Attach Figma prototypes to specs. Keep design and product in sync.",
-    logo: "FI", status: "disconnected",
-  },
-  {
-    id: "mixpanel",    name: "Mixpanel",     category: "Analytics",
-    description: "Pull funnel analytics and retention data as evidence for your decisions.",
-    logo: "MI", status: "error", connectedAs: "acme-analytics",
-  },
-  {
-    id: "linear",      name: "Linear",       category: "Project Management",
-    description: "Sync Speckula tasks with Linear issues. Automate your engineering workflow.",
-    logo: "LI", status: "coming_soon",
-  },
-  {
-    id: "hubspot",     name: "HubSpot",      category: "CRM",
-    description: "Import customer feedback and sales signals directly into your product brain.",
-    logo: "HS", status: "coming_soon",
-  },
+const INTEG_META: IntegMeta[] = [
+  { id: "slack",    name: "Slack",    category: "Communication",      logo: "SL", description: "Push signals and decisions to Slack channels. Get notified on important updates." },
+  { id: "github",   name: "GitHub",   category: "Engineering",        logo: "GH", description: "Link tasks to GitHub issues and PRs. Track development progress automatically." },
+  { id: "jira",     name: "Jira",     category: "Project Management", logo: "JI", description: "Sync tasks with Jira tickets. Keep your backlog in sync with your specs." },
+  { id: "notion",   name: "Notion",   category: "Documentation",      logo: "NO", description: "Export specs and decisions to Notion pages. Keep your wiki up to date." },
+  { id: "posthog",  name: "PostHog",  category: "Analytics",          logo: "PH", description: "Import user behavior data as signals. Correlate product decisions with metrics." },
+  { id: "figma",    name: "Figma",    category: "Design",             logo: "FI", description: "Attach Figma prototypes to specs. Keep design and product in sync." },
+  { id: "mixpanel", name: "Mixpanel", category: "Analytics",          logo: "MI", description: "Pull funnel analytics and retention data as evidence for your decisions." },
+  { id: "linear",   name: "Linear",   category: "Project Management", logo: "LI", description: "Sync Speckula tasks with Linear issues. Automate your engineering workflow.", comingSoon: true },
+  { id: "hubspot",  name: "HubSpot",  category: "CRM",               logo: "HS", description: "Import customer feedback and sales signals directly into your product brain.", comingSoon: true },
 ];
 
-const CATEGORIES = ["All", ...Array.from(new Set(INTEGRATIONS.map((i) => i.category)))];
+const CATEGORIES = ["All", ...Array.from(new Set(INTEG_META.map((i) => i.category)))];
 
 const LOGO_COLORS: Record<string, string> = {
-  SL: "bg-[#4A154B] text-white",
-  GH: "bg-[#24292E] text-white",
-  JI: "bg-[#0052CC] text-white",
-  NO: "bg-[#000000] text-white",
-  PH: "bg-[#F54E00] text-white",
-  FI: "bg-[#F24E1E] text-white",
-  MI: "bg-[#7856FF] text-white",
-  LI: "bg-[#5E6AD2] text-white",
+  SL: "bg-[#4A154B] text-white", GH: "bg-[#24292E] text-white",
+  JI: "bg-[#0052CC] text-white", NO: "bg-[#000000] text-white",
+  PH: "bg-[#F54E00] text-white", FI: "bg-[#F24E1E] text-white",
+  MI: "bg-[#7856FF] text-white", LI: "bg-[#5E6AD2] text-white",
   HS: "bg-[#FF7A59] text-white",
 };
 
-const STATUS_CONFIG = {
-  connected:    { label: "Connected",    color: "text-green-600",   bg: "bg-green-500/10",  icon: CheckCircle2 },
-  disconnected: { label: "Disconnected", color: "text-muted-foreground", bg: "bg-muted", icon: Plus          },
-  error:        { label: "Error",        color: "text-red-500",     bg: "bg-red-500/10",    icon: AlertCircle  },
-  coming_soon:  { label: "Coming soon",  color: "text-muted-foreground", bg: "bg-muted", icon: Zap           },
+const STATUS_CONFIG: Record<IntegStatus, { label: string; color: string; bg: string; icon: React.ElementType }> = {
+  connected:    { label: "Connected",    color: "text-green-600",        bg: "bg-green-500/10", icon: CheckCircle2 },
+  disconnected: { label: "Disconnected", color: "text-muted-foreground", bg: "bg-muted",        icon: Plus         },
+  error:        { label: "Error",        color: "text-red-500",          bg: "bg-red-500/10",   icon: AlertCircle  },
+  coming_soon:  { label: "Coming soon",  color: "text-muted-foreground", bg: "bg-muted",        icon: Zap          },
 };
 
-function IntegrationCard({ integ, onConnect, onDisconnect, onSettings }: {
-  integ: Integration;
+interface MergedInteg extends IntegMeta {
+  status: IntegStatus;
+  connectedAs?: string;
+  lastSync?: string;
+}
+
+function IntegrationCard({ integ, onConnect, onDisconnect }: {
+  integ: MergedInteg;
   onConnect: (id: string) => void;
   onDisconnect: (id: string) => void;
-  onSettings: (id: string) => void;
 }) {
   const st = STATUS_CONFIG[integ.status];
   const isConnected = integ.status === "connected";
@@ -106,7 +75,6 @@ function IntegrationCard({ integ, onConnect, onDisconnect, onSettings }: {
       isError     ? "border-red-500/20 bg-red-500/5" :
       "border-border/60 bg-card hover:border-border hover:bg-muted/20"
     }`}>
-      {/* Header */}
       <div className="flex items-start gap-3">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${LOGO_COLORS[integ.logo] || "bg-muted text-foreground"}`}>
           {integ.logo}
@@ -124,7 +92,6 @@ function IntegrationCard({ integ, onConnect, onDisconnect, onSettings }: {
 
       <p className="text-[11px] text-muted-foreground leading-relaxed">{integ.description}</p>
 
-      {/* Connected metadata */}
       {(isConnected || isError) && (
         <div className="text-[10px] text-muted-foreground space-y-0.5">
           {integ.connectedAs && <div>Connected as: <span className="text-foreground font-medium">{integ.connectedAs}</span></div>}
@@ -133,7 +100,6 @@ function IntegrationCard({ integ, onConnect, onDisconnect, onSettings }: {
         </div>
       )}
 
-      {/* Actions */}
       <div className="flex items-center gap-2 mt-auto">
         {isSoon ? (
           <button disabled className="flex-1 py-1.5 rounded-lg bg-muted text-muted-foreground text-xs font-medium opacity-60 cursor-not-allowed">
@@ -141,10 +107,7 @@ function IntegrationCard({ integ, onConnect, onDisconnect, onSettings }: {
           </button>
         ) : isConnected ? (
           <>
-            <button
-              onClick={() => onSettings(integ.id)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border/60 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            >
+            <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border/60 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
               <Settings className="h-3 w-3" />
             </button>
             <button
@@ -175,21 +138,53 @@ function IntegrationCard({ integ, onConnect, onDisconnect, onSettings }: {
 }
 
 export function IntegrationsView() {
-  const [integrations, setIntegrations] = useState<Integration[]>(INTEGRATIONS);
-  const [search, setSearch]             = useState("");
-  const [category, setCategory]         = useState("All");
+  const { user } = useAuth();
+  const [fsRecords, setFsRecords] = useState<IntegrationRecord[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState("");
+  const [category, setCategory]   = useState("All");
 
-  const connect    = (id: string) => setIntegrations((p) => p.map((i) => i.id === id ? { ...i, status: "connected" as const, lastSync: "just now" } : i));
-  const disconnect = (id: string) => setIntegrations((p) => p.map((i) => i.id === id ? { ...i, status: "disconnected" as const, connectedAs: undefined, lastSync: undefined } : i));
-  const openSettings = (_id: string) => { /* TODO: open settings drawer */ };
+  useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    const unsub = subscribeToIntegrations(
+      user.uid,
+      (records) => { setFsRecords(records); setLoading(false); },
+      () => setLoading(false)
+    );
+    return unsub;
+  }, [user]);
 
-  const filtered = integrations.filter((i) => {
+  // Merge static metadata with live Firestore status
+  const merged: MergedInteg[] = INTEG_META.map((meta) => {
+    if (meta.comingSoon) return { ...meta, status: "coming_soon" };
+    const record = fsRecords.find((r) => r.id === meta.id);
+    if (!record) return { ...meta, status: "disconnected" };
+    const status: IntegStatus = record.error ? "error" : record.connected ? "connected" : "disconnected";
+    return {
+      ...meta,
+      status,
+      connectedAs: record.connectedAs,
+      lastSync:    record.lastSync,
+    };
+  });
+
+  const connect = async (id: string) => {
+    if (!user) return;
+    await setIntegrationStatus(user.uid, id, { connected: true, lastSync: new Date().toLocaleTimeString() }).catch(() => {});
+  };
+
+  const disconnect = async (id: string) => {
+    if (!user) return;
+    await setIntegrationStatus(user.uid, id, { connected: false, connectedAs: undefined, lastSync: undefined, error: undefined }).catch(() => {});
+  };
+
+  const filtered = merged.filter((i) => {
     const matchesCat    = category === "All" || i.category === category;
     const matchesSearch = !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.description.toLowerCase().includes(search.toLowerCase());
     return matchesCat && matchesSearch;
   });
 
-  const connectedCount = integrations.filter((i) => i.status === "connected").length;
+  const connectedCount = merged.filter((i) => i.status === "connected").length;
 
   return (
     <div className="h-full overflow-y-auto bg-background custom-scrollbar">
@@ -205,13 +200,15 @@ export function IntegrationsView() {
           </div>
           <div className="flex items-center gap-2 text-sm">
             <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <span className="text-muted-foreground"><span className="text-foreground font-medium">{connectedCount}</span> connected</span>
+            <span className="text-muted-foreground">
+              <span className="text-foreground font-medium">{connectedCount}</span> connected
+            </span>
           </div>
         </div>
 
         {/* ── Search + filter ── */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative flex-1">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <input
               type="text"
@@ -239,7 +236,11 @@ export function IntegrationsView() {
         </div>
 
         {/* ── Grid ── */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <Search className="h-8 w-8 text-muted-foreground" />
             <p className="text-sm font-medium text-foreground">No integrations found</p>
@@ -253,7 +254,6 @@ export function IntegrationsView() {
                 integ={integ}
                 onConnect={connect}
                 onDisconnect={disconnect}
-                onSettings={openSettings}
               />
             ))}
           </div>
@@ -261,7 +261,7 @@ export function IntegrationsView() {
 
         {/* ── Request integration ── */}
         <div className="mt-8 p-4 rounded-xl border border-dashed border-border/60 text-center">
-          <p className="text-xs text-muted-foreground">Don't see the tool you need?</p>
+          <p className="text-xs text-muted-foreground">Don&apos;t see the tool you need?</p>
           <button className="mt-1.5 text-xs text-primary font-medium hover:underline flex items-center gap-1 mx-auto">
             Request an integration <ExternalLink className="h-3 w-3" />
           </button>

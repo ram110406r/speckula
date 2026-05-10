@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import {
   User, Globe, Camera,
-  Check, Shield, LogOut, Trash2, Clock,
+  Check, Shield, LogOut, Trash2, Clock, Loader2,
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
+import { subscribeToProfileSettings, updateProfileSettings } from "@/lib/firebase/db";
 
 function SavedBadge({ visible }: { visible: boolean }) {
   return (
@@ -38,37 +39,63 @@ function FieldRow({ label, hint, children, savedKey, savedStates }: {
 
 const INPUT_CLS = "w-full h-8 px-3 rounded-lg border border-border/60 bg-card text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/40 transition-colors";
 
-const SESSIONS = [
-  { device: "Chrome on macOS", location: "London, UK",     ip: "82.x.x.x",  time: "Now (current)",  current: true  },
-  { device: "Safari on iPhone", location: "London, UK",    ip: "82.x.x.x",  time: "2h ago",          current: false },
-  { device: "Chrome on Windows", location: "New York, US", ip: "174.x.x.x", time: "3 days ago",      current: false },
-];
-
 export function ProfileView() {
   const { user, logout } = useAuth();
 
   const [form, setForm] = useState({
     displayName: user?.displayName ?? "",
-    email:       user?.email ?? "",
-    role:        "Product Manager",
-    company:     "Acme Corp",
-    location:    "London, UK",
+    role:        "",
+    company:     "",
+    location:    "",
     website:     "",
     twitter:     "",
     linkedin:    "",
-    bio:         "Building the future of product intelligence.",
+    bio:         "",
   });
 
-  const [saved,  setSaved]  = useState<Record<string, boolean>>({});
-  const [section, setSection] = useState<"profile" | "security" | "danger">("profile");
+  const [saved,    setSaved]    = useState<Record<string, boolean>>({});
+  const [section,  setSection]  = useState<"profile" | "security" | "danger">("profile");
+  const [loading,  setLoading]  = useState(true);
 
-  const save = (key: string) => {
-    setSaved((s) => ({ ...s, [key]: true }));
-    setTimeout(() => setSaved((s) => ({ ...s, [key]: false })), 2000);
+  // Load profile from Firestore
+  useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    const unsub = subscribeToProfileSettings(user.uid, (settings) => {
+      setForm((f) => ({
+        ...f,
+        displayName: settings.displayName ?? user.displayName ?? f.displayName,
+        role:        settings.role        ?? f.role,
+        company:     settings.company     ?? f.company,
+        location:    settings.location    ?? f.location,
+        website:     settings.website     ?? f.website,
+        twitter:     settings.twitter     ?? f.twitter,
+        linkedin:    settings.linkedin    ?? f.linkedin,
+        bio:         settings.bio         ?? f.bio,
+      }));
+      setLoading(false);
+    });
+    return unsub;
+  }, [user]);
+
+  const saveField = async (key: keyof typeof form) => {
+    if (!user) return;
+    try {
+      await updateProfileSettings(user.uid, { [key]: form[key] });
+      setSaved((s) => ({ ...s, [key]: true }));
+      setTimeout(() => setSaved((s) => ({ ...s, [key]: false })), 2000);
+    } catch { /* noop */ }
   };
 
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto bg-background custom-scrollbar">
@@ -114,7 +141,7 @@ export function ProfileView() {
                 </button>
               </div>
               <div>
-                <p className="text-sm font-semibold text-foreground">{user?.displayName || "Your name"}</p>
+                <p className="text-sm font-semibold text-foreground">{form.displayName || user?.displayName || "Your name"}</p>
                 <p className="text-xs text-muted-foreground">{user?.email}</p>
                 <p className="text-[11px] text-primary mt-1">Google account</p>
               </div>
@@ -127,14 +154,14 @@ export function ProfileView() {
                   className={INPUT_CLS}
                   value={form.displayName}
                   onChange={set("displayName")}
-                  onBlur={() => save("displayName")}
+                  onBlur={() => saveField("displayName")}
                   placeholder="Your full name"
                 />
               </FieldRow>
-              <FieldRow label="Email" hint="Managed by Google sign-in" savedKey="email" savedStates={saved}>
+              <FieldRow label="Email" hint="Managed by Google sign-in">
                 <input
                   className={`${INPUT_CLS} opacity-60 cursor-not-allowed`}
-                  value={form.email}
+                  value={user?.email ?? ""}
                   disabled
                   placeholder="your@email.com"
                 />
@@ -144,7 +171,7 @@ export function ProfileView() {
                   className={INPUT_CLS}
                   value={form.role}
                   onChange={set("role")}
-                  onBlur={() => save("role")}
+                  onBlur={() => saveField("role")}
                   placeholder="e.g. Senior Product Manager"
                 />
               </FieldRow>
@@ -153,7 +180,7 @@ export function ProfileView() {
                   className={INPUT_CLS}
                   value={form.company}
                   onChange={set("company")}
-                  onBlur={() => save("company")}
+                  onBlur={() => saveField("company")}
                   placeholder="e.g. Acme Corp"
                 />
               </FieldRow>
@@ -162,7 +189,7 @@ export function ProfileView() {
                   className={INPUT_CLS}
                   value={form.location}
                   onChange={set("location")}
-                  onBlur={() => save("location")}
+                  onBlur={() => saveField("location")}
                   placeholder="e.g. London, UK"
                 />
               </FieldRow>
@@ -172,7 +199,7 @@ export function ProfileView() {
                   rows={2}
                   value={form.bio}
                   onChange={set("bio")}
-                  onBlur={() => save("bio")}
+                  onBlur={() => saveField("bio")}
                   placeholder="Tell your team about yourself…"
                 />
               </FieldRow>
@@ -186,19 +213,19 @@ export function ProfileView() {
               <FieldRow label="Website" savedKey="website" savedStates={saved}>
                 <div className="relative">
                   <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                  <input className={`${INPUT_CLS} pl-7`} value={form.website} onChange={set("website")} onBlur={() => save("website")} placeholder="https://yoursite.com" />
+                  <input className={`${INPUT_CLS} pl-7`} value={form.website} onChange={set("website")} onBlur={() => saveField("website")} placeholder="https://yoursite.com" />
                 </div>
               </FieldRow>
               <FieldRow label="Twitter / X" savedKey="twitter" savedStates={saved}>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">@</span>
-                  <input className={`${INPUT_CLS} pl-6`} value={form.twitter} onChange={set("twitter")} onBlur={() => save("twitter")} placeholder="username" />
+                  <input className={`${INPUT_CLS} pl-6`} value={form.twitter} onChange={set("twitter")} onBlur={() => saveField("twitter")} placeholder="username" />
                 </div>
               </FieldRow>
               <FieldRow label="LinkedIn" savedKey="linkedin" savedStates={saved}>
                 <div className="relative">
                   <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                  <input className={`${INPUT_CLS} pl-7`} value={form.linkedin} onChange={set("linkedin")} onBlur={() => save("linkedin")} placeholder="https://linkedin.com/in/you" />
+                  <input className={`${INPUT_CLS} pl-7`} value={form.linkedin} onChange={set("linkedin")} onBlur={() => saveField("linkedin")} placeholder="https://linkedin.com/in/you" />
                 </div>
               </FieldRow>
             </div>
@@ -225,31 +252,26 @@ export function ProfileView() {
               </div>
             </div>
 
-            {/* Active sessions */}
+            {/* Active sessions — shows current session from Firebase Auth metadata */}
             <div className="rounded-xl border border-border/60 bg-card p-5">
-              <h2 className="text-xs font-semibold text-foreground mb-4">Active sessions</h2>
-              <div className="space-y-3">
-                {SESSIONS.map((sess, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-muted shrink-0">
-                      <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground">{sess.device}</p>
-                      <p className="text-[10px] text-muted-foreground">{sess.location} · {sess.ip}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-[10px] text-muted-foreground flex items-center gap-1 justify-end">
-                        <Clock className="h-2.5 w-2.5" /> {sess.time}
-                      </p>
-                      {sess.current ? (
-                        <span className="text-[9px] text-green-600">Current</span>
-                      ) : (
-                        <button className="text-[9px] text-destructive hover:underline">Revoke</button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <h2 className="text-xs font-semibold text-foreground mb-4">Active session</h2>
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-muted shrink-0">
+                  <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground">Current browser session</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Signed in as {user?.email}
+                  </p>
+                  {user?.metadata?.lastSignInTime && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <Clock className="h-2.5 w-2.5" />
+                      Last sign-in: {new Date(user.metadata.lastSignInTime).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+                <span className="text-[9px] text-green-600">Current</span>
               </div>
             </div>
 
@@ -259,7 +281,7 @@ export function ProfileView() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border/60 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-full"
             >
               <LogOut className="h-3.5 w-3.5" />
-              Sign out of all devices
+              Sign out
             </button>
           </div>
         )}

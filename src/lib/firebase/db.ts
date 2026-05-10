@@ -14,6 +14,8 @@ import {
   limit as firestoreLimit,
   onSnapshot,
   Timestamp as FsTimestamp,
+  getCountFromServer,
+  updateDoc,
   type Timestamp,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -1757,5 +1759,270 @@ export const subscribeToExtensionPreferences = (
       onError?.(err);
     }
   );
+};
+
+// ── Profile settings ──────────────────────────────────────────────────────────
+// Stored at users/{userId}/settings/profile
+
+export interface ProfileSettings {
+  displayName?: string;
+  role?: string;
+  company?: string;
+  location?: string;
+  bio?: string;
+  website?: string;
+  twitter?: string;
+  linkedin?: string;
+  updatedAt?: Timestamp | null;
+}
+
+export const getProfileSettings = async (userId: string): Promise<ProfileSettings> => {
+  try {
+    const snap = await getDoc(userSettingRef(userId, "profile"));
+    return snap.exists() ? (snap.data() as ProfileSettings) : {};
+  } catch (error) {
+    logFirestorePermissionHint("getProfileSettings", error);
+    return {};
+  }
+};
+
+export const updateProfileSettings = async (
+  userId: string,
+  patch: Partial<Omit<ProfileSettings, "updatedAt">>
+): Promise<void> => {
+  try {
+    await setDoc(
+      userSettingRef(userId, "profile"),
+      { ...patch, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  } catch (error) {
+    logFirestorePermissionHint("updateProfileSettings", error);
+    throw error;
+  }
+};
+
+export const subscribeToProfileSettings = (
+  userId: string,
+  onUpdate: (settings: ProfileSettings) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe =>
+  onSnapshot(
+    userSettingRef(userId, "profile"),
+    (snap) => onUpdate(snap.exists() ? (snap.data() as ProfileSettings) : {}),
+    (err) => { logFirestorePermissionHint("subscribeToProfileSettings", err); onError?.(err); }
+  );
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+// Stored at users/{userId}/notifications/{notifId}
+
+export type NotifType = "ai" | "team" | "signal" | "decision" | "spec" | "task";
+
+export interface SpNotification {
+  id?: string;
+  type: NotifType;
+  title: string;
+  body: string;
+  actor?: string;
+  read: boolean;
+  dismissed: boolean;
+  createdAt: Timestamp | null;
+}
+
+const userNotificationsCollection = (userId: string) =>
+  collection(db, "users", userId, "notifications");
+
+export const subscribeToNotifications = (
+  userId: string,
+  onUpdate: (notifs: SpNotification[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe => {
+  const q = query(
+    userNotificationsCollection(userId),
+    where("dismissed", "==", false),
+    orderBy("createdAt", "desc"),
+    firestoreLimit(50)
+  );
+  return onSnapshot(
+    q,
+    (snap) => onUpdate(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as SpNotification[]),
+    (err) => { logFirestorePermissionHint("subscribeToNotifications", err); onError?.(err); }
+  );
+};
+
+export const markNotificationRead = async (userId: string, notifId: string): Promise<void> => {
+  try {
+    await updateDoc(doc(userNotificationsCollection(userId), notifId), { read: true });
+  } catch (error) {
+    logFirestorePermissionHint("markNotificationRead", error);
+  }
+};
+
+export const markAllNotificationsRead = async (userId: string): Promise<void> => {
+  try {
+    const q = query(userNotificationsCollection(userId), where("read", "==", false));
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+    await batch.commit();
+  } catch (error) {
+    logFirestorePermissionHint("markAllNotificationsRead", error);
+  }
+};
+
+export const dismissNotification = async (userId: string, notifId: string): Promise<void> => {
+  try {
+    await updateDoc(doc(userNotificationsCollection(userId), notifId), { dismissed: true });
+  } catch (error) {
+    logFirestorePermissionHint("dismissNotification", error);
+  }
+};
+
+export const clearAllNotifications = async (userId: string): Promise<void> => {
+  try {
+    const snap = await getDocs(userNotificationsCollection(userId));
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.update(d.ref, { dismissed: true }));
+    await batch.commit();
+  } catch (error) {
+    logFirestorePermissionHint("clearAllNotifications", error);
+  }
+};
+
+export const addNotification = async (
+  userId: string,
+  notif: Omit<SpNotification, "id" | "createdAt" | "read" | "dismissed">
+): Promise<void> => {
+  try {
+    await addDoc(userNotificationsCollection(userId), {
+      ...notif,
+      read: false,
+      dismissed: false,
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    logFirestorePermissionHint("addNotification", error);
+  }
+};
+
+// ── Activity log ──────────────────────────────────────────────────────────────
+// Stored at users/{userId}/activity/{eventId}
+
+export type ActivityEventType = "signal" | "decision" | "spec" | "task" | "ai" | "auth";
+
+export interface ActivityEvent {
+  id?: string;
+  type: ActivityEventType;
+  actor: string;
+  action: string;
+  subject: string;
+  meta?: string;
+  createdAt: Timestamp | null;
+}
+
+const userActivityCollection = (userId: string) =>
+  collection(db, "users", userId, "activity");
+
+export const subscribeToActivity = (
+  userId: string,
+  onUpdate: (events: ActivityEvent[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe => {
+  const q = query(
+    userActivityCollection(userId),
+    orderBy("createdAt", "desc"),
+    firestoreLimit(100)
+  );
+  return onSnapshot(
+    q,
+    (snap) => onUpdate(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as ActivityEvent[]),
+    (err) => { logFirestorePermissionHint("subscribeToActivity", err); onError?.(err); }
+  );
+};
+
+export const logActivity = async (
+  userId: string,
+  event: Omit<ActivityEvent, "id" | "createdAt">
+): Promise<void> => {
+  try {
+    await addDoc(userActivityCollection(userId), {
+      ...event,
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    logFirestorePermissionHint("logActivity", error);
+  }
+};
+
+// ── Integrations ──────────────────────────────────────────────────────────────
+// Stored at users/{userId}/integrations/{integrationId}
+
+export interface IntegrationRecord {
+  id: string;
+  connected: boolean;
+  connectedAs?: string;
+  lastSync?: string;
+  error?: string;
+  updatedAt: Timestamp | null;
+}
+
+const userIntegrationsCollection = (userId: string) =>
+  collection(db, "users", userId, "integrations");
+
+export const subscribeToIntegrations = (
+  userId: string,
+  onUpdate: (integrations: IntegrationRecord[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe =>
+  onSnapshot(
+    userIntegrationsCollection(userId),
+    (snap) => onUpdate(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as IntegrationRecord[]),
+    (err) => { logFirestorePermissionHint("subscribeToIntegrations", err); onError?.(err); }
+  );
+
+export const setIntegrationStatus = async (
+  userId: string,
+  integrationId: string,
+  data: Partial<Omit<IntegrationRecord, "id">>
+): Promise<void> => {
+  try {
+    await setDoc(
+      doc(userIntegrationsCollection(userId), integrationId),
+      { ...data, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  } catch (error) {
+    logFirestorePermissionHint("setIntegrationStatus", error);
+    throw error;
+  }
+};
+
+// ── Usage stats ───────────────────────────────────────────────────────────────
+
+export interface UsageStats {
+  signals: number;
+  decisions: number;
+  documents: number;
+  tasks: number;
+}
+
+export const getUsageStats = async (userId: string): Promise<UsageStats> => {
+  try {
+    const [sigSnap, decSnap, docSnap, taskSnap] = await Promise.all([
+      getCountFromServer(userInsightsCollection(userId)),
+      getCountFromServer(userDecisionsCollection(userId)),
+      getCountFromServer(userDocsCollection(userId)),
+      getCountFromServer(userTasksCollection(userId)),
+    ]);
+    return {
+      signals:   sigSnap.data().count,
+      decisions: decSnap.data().count,
+      documents: docSnap.data().count,
+      tasks:     taskSnap.data().count,
+    };
+  } catch (error) {
+    logFirestorePermissionHint("getUsageStats", error);
+    return { signals: 0, decisions: 0, documents: 0, tasks: 0 };
+  }
 };
 
