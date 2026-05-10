@@ -3,9 +3,8 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import {
-  User, Mail, Building, Globe, Camera,
+  User, Globe, Camera,
   Check, Shield, LogOut, Trash2, Clock,
-  Briefcase, MapPin, Twitter, Linkedin
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 
