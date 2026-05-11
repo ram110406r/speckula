@@ -576,7 +576,7 @@ export async function runAutonomousAgent({
             : "Re-evaluating approach due to uncertainty…",
         });
         try {
-          const refined = await suggestDirectionAction("", context, {
+          const refined = await suggestDirectionAction(userId ?? "", context, {
             pastIdeas,
             refinement: reflection,
             calibrationBias,

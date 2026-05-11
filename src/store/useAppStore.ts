@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { Timestamp } from 'firebase/firestore';
 
 export type AppView =
   // Core product views (existing)
@@ -11,7 +12,7 @@ export type AppView =
 interface SpeckulaDocument {
   id: string;
   title: string;
-  updatedAt: unknown;
+  updatedAt: Timestamp | null;
 }
 
 interface StrategicContext {
