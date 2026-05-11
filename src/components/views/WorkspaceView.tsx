@@ -13,9 +13,9 @@ import { useAppStore } from "@/store/useAppStore";
 // ─── mock data ────────────────────────────────────────────────────────────────
 
 const QUICK_ACTIONS = [
-  { icon: Lightbulb,      label: "Add Signal",       view: "insights"  as const, color: "text-amber-500",  bg: "bg-amber-500/10"  },
-  { icon: Compass,        label: "Make Decision",    view: "decisions" as const, color: "text-blue-500",   bg: "bg-blue-500/10"   },
-  { icon: LayoutDashboard, label: "Write Spec",      view: "prds"      as const, color: "text-green-500",  bg: "bg-green-500/10"  },
+  { icon: Lightbulb,      label: "Add Signal",       view: "market-intelligence" as const, color: "text-amber-500",  bg: "bg-amber-500/10"  },
+  { icon: Compass,        label: "Make Decision",    view: "decisions"           as const, color: "text-blue-500",   bg: "bg-blue-500/10"   },
+  { icon: LayoutDashboard, label: "Write Spec",      view: "specifications"      as const, color: "text-green-500",  bg: "bg-green-500/10"  },
   { icon: CheckSquare,    label: "Create Task",      view: "tasks"     as const, color: "text-purple-500", bg: "bg-purple-500/10" },
 ];
 
@@ -159,7 +159,7 @@ export function WorkspaceView() {
 
             {/* Recent intelligence */}
             <div>
-              <SectionHeader title="Recent Intelligence" action="View all" onAction={() => setActiveView("insights")} />
+              <SectionHeader title="Recent Intelligence" action="View all" onAction={() => setActiveView("market-intelligence")} />
               <div className="space-y-1.5">
                 {RECENT_INTELLIGENCE.map((item, i) => (
                   <div

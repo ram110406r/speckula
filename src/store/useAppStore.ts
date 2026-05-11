@@ -3,11 +3,18 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Timestamp } from 'firebase/firestore';
 
 export type AppView =
-  // Core product views (existing)
-  | 'editor' | 'insights' | 'prds' | 'tasks' | 'decisions' | 'platform' | 'slack' | 'autonomous'
-  // Platform views (new)
-  | 'workspace' | 'settings' | 'notifications'
-  | 'extension' | 'activity' | 'profile' | 'help';
+  // HOME
+  | 'workspace' | 'dashboard'
+  // INTELLIGENCE
+  | 'editor' | 'market-intelligence' | 'competitors' | 'product-brain'
+  // DECISION ENGINE
+  | 'decisions' | 'specifications' | 'roadmaps' | 'experiments'
+  // EXECUTION
+  | 'tasks' | 'projects' | 'integrations'
+  // AI SYSTEMS
+  | 'agents' | 'autonomous' | 'activity'
+  // PLATFORM
+  | 'extension' | 'notifications' | 'settings' | 'profile' | 'help';
 
 interface SpeckulaDocument {
   id: string;
