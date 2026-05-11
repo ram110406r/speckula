@@ -467,7 +467,7 @@ export function Editor() {
       await extractInsightsAction(user.uid, rawContent, currentDocId);
       toast.success("Signals extracted", "View them in the Signals tab.");
       activity.ai("Signals extracted", "Ready to review");
-      setActiveView("insights");
+      setActiveView("market-intelligence");
     } catch {
       toast.error("Extraction failed", "Check your API key and try again.");
     } finally {

@@ -604,7 +604,7 @@ export function AutonomousModeView() {
         (runDocIdRef.current ?? currentDocId) ?? undefined,
       );
       toast.success("Spec created", `PRD: ${topDecision.title}`);
-      setActiveView("prds");
+      setActiveView("specifications");
     } catch {
       toast.error("Failed to create spec", "Check your API config and try again.");
     } finally {
