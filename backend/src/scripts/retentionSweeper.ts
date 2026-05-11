@@ -11,6 +11,10 @@
 //   - AIInsight rows whose expiresAt has passed (or older than RETENTION_DAYS).
 //   - AIPRD rows older than RETENTION_DAYS.
 //   - AISuggestedTask rows older than RETENTION_DAYS that have been dismissed.
+//   - ExtensionHeartbeat rows older than 7 days (telemetry only; not needed long-term).
+//   - WebSocketConnection rows not updated in the past 24 hours (stale DB tombstones).
+//   - ActivityLog rows older than RETENTION_DAYS.
+//   - AnalysisJob rows older than RETENTION_DAYS that are terminal (completed/failed).
 //
 // All per-row deletes use bulk `deleteMany`. Safe to run repeatedly — the
 // queries are idempotent.
@@ -25,8 +29,10 @@ const readPositiveInt = (raw: string | undefined, fallback: number): number => {
 
 export async function sweepExpiredRecords(): Promise<void> {
   const retentionDays = readPositiveInt(process.env.RETENTION_DAYS, 60);
-  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
-  const patternCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const cutoff          = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  const patternCutoff   = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000);
+  const heartbeatCutoff = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000);
+  const wsstaleCutoff   = new Date(Date.now() -      24 * 60 * 60 * 1000);
   const now = new Date();
 
   const [
@@ -37,6 +43,10 @@ export async function sweepExpiredRecords(): Promise<void> {
     expiredInsights,
     oldPRDs,
     dismissedTasks,
+    oldHeartbeats,
+    staleWsRows,
+    oldActivityLogs,
+    oldTerminalJobs,
   ] = await Promise.all([
     db.promptLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
     db.decisionReasoning.deleteMany({ where: { generatedAt: { lt: cutoff } } }),
@@ -66,6 +76,21 @@ export async function sweepExpiredRecords(): Promise<void> {
     db.aISuggestedTask.deleteMany({
       where: { dismissed: true, generatedAt: { lt: cutoff } },
     }),
+    // ExtensionHeartbeat: telemetry only — 7 days is plenty for trend analysis.
+    db.extensionHeartbeat.deleteMany({ where: { receivedAt: { lt: heartbeatCutoff } } }),
+    // WebSocketConnection: stale tombstone rows left by crashed connections.
+    // wsManager.sweepStale() handles in-memory state; this covers the DB.
+    db.webSocketConnection.deleteMany({ where: { updatedAt: { lt: wsstaleCutoff } } }),
+    // ActivityLog: bounded by the same retention window as other PII-adjacent logs.
+    db.activityLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+    // AnalysisJob: keep terminal jobs for RETENTION_DAYS for audit/debugging,
+    // then purge. Queued/running jobs are never deleted by the sweeper.
+    db.analysisJob.deleteMany({
+      where: {
+        status: { in: ['completed', 'failed'] },
+        createdAt: { lt: cutoff },
+      },
+    }),
   ]);
 
   console.log(
@@ -76,7 +101,11 @@ export async function sweepExpiredRecords(): Promise<void> {
     ` patternAnalysis=${expiredPatterns.count}` +
     ` aiInsight=${expiredInsights.count}` +
     ` aiPRD=${oldPRDs.count}` +
-    ` aiSuggestedTask=${dismissedTasks.count}`
+    ` aiSuggestedTask=${dismissedTasks.count}` +
+    ` extensionHeartbeat=${oldHeartbeats.count}` +
+    ` webSocketConnection=${staleWsRows.count}` +
+    ` activityLog=${oldActivityLogs.count}` +
+    ` analysisJob=${oldTerminalJobs.count}`
   );
 }
 
