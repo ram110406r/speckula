@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector/pgvector includes the pgvector extension for vector similarity search.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: speckula
@@ -14,6 +15,18 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
   backend:
     build:
       context: ./backend
@@ -24,7 +37,9 @@ services:
       PORT: 3001
       DATABASE_URL: postgresql://speckula:${DB_PASSWORD}@db:5432/speckula
       DIRECT_DATABASE_URL: postgresql://speckula:${DB_PASSWORD}@db:5432/speckula
+      REDIS_URL: redis://redis:6379
       GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
       FIREBASE_PRIVATE_KEY_B64: ${FIREBASE_PRIVATE_KEY_B64}
@@ -35,13 +50,43 @@ services:
       SLACK_TOKEN_ENCRYPTION_KEY: ${SLACK_TOKEN_ENCRYPTION_KEY}
       FRONTEND_URL: ${FRONTEND_URL}
       FRONTEND_URLS: ${FRONTEND_URLS}
+      METRICS_TOKEN: ${METRICS_TOKEN}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
       AI_CACHE_TTL_MINUTES: 60
       DAILY_TOKEN_QUOTA: 200000
+      ANALYSIS_WORKER_CONCURRENCY: 5
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     command: >
       sh -c "npx prisma migrate deploy && node dist/index.js"
+
+  # Dedicated analysis worker process — same image, different entry point.
+  # Scale this independently: docker-compose up --scale worker=3
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://speckula:${DB_PASSWORD}@db:5432/speckula
+      REDIS_URL: redis://redis:6379
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY_B64: ${FIREBASE_PRIVATE_KEY_B64}
+      ANALYSIS_WORKER_CONCURRENCY: 5
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: node dist/workers/analysisWorker.js
 
   frontend:
     build:
@@ -69,3 +114,4 @@ networks:
 
 volumes:
   pg_data_v2:
+  redis_data:
