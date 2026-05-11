@@ -3,22 +3,34 @@
 import React from "react";
 import { useAppStore } from "@/store/useAppStore";
 import dynamic from "next/dynamic";
-const Editor = dynamic(() => import("@/components/editor/Editor").then(m => ({ default: m.Editor })), { ssr: false });
-const AIPanel = dynamic(() => import("@/components/ai/AIPanel").then(m => ({ default: m.AIPanel })), { ssr: false });
-const InsightsView = dynamic(() => import("../views/InsightsView").then(m => ({ default: m.InsightsView })), { ssr: false });
-const PRDsView = dynamic(() => import("../views/PRDsView").then(m => ({ default: m.PRDsView })), { ssr: false });
-const TasksView = dynamic(() => import("../views/TasksView").then(m => ({ default: m.TasksView })), { ssr: false });
-const DecisionView = dynamic(() => import("../views/DecisionView").then(m => ({ default: m.DecisionView })), { ssr: false });
-const PlatformView = dynamic(() => import("../views/PlatformView").then(m => ({ default: m.PlatformView })), { ssr: false });
-const SlackView = dynamic(() => import("../views/SlackView").then(m => ({ default: m.SlackView })), { ssr: false });
-const AutonomousModeView = dynamic(() => import("../views/AutonomousModeView").then(m => ({ default: m.AutonomousModeView })), { ssr: false });
-const WorkspaceView     = dynamic(() => import("../views/WorkspaceView").then(m => ({ default: m.WorkspaceView })), { ssr: false });
-const NotificationsView = dynamic(() => import("../views/NotificationsView").then(m => ({ default: m.NotificationsView })), { ssr: false });
-const ExtensionView     = dynamic(() => import("../views/ExtensionView").then(m => ({ default: m.ExtensionView })), { ssr: false });
-const ActivityView      = dynamic(() => import("../views/ActivityView").then(m => ({ default: m.ActivityView })), { ssr: false });
-const ProfileView       = dynamic(() => import("../views/ProfileView").then(m => ({ default: m.ProfileView })), { ssr: false });
-const HelpView          = dynamic(() => import("../views/HelpView").then(m => ({ default: m.HelpView })), { ssr: false });
-const SettingsView      = dynamic(() => import("../views/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
+const Editor              = dynamic(() => import("@/components/editor/Editor").then(m => ({ default: m.Editor })), { ssr: false });
+const AIPanel             = dynamic(() => import("@/components/ai/AIPanel").then(m => ({ default: m.AIPanel })), { ssr: false });
+// INTELLIGENCE
+const InsightsView        = dynamic(() => import("../views/InsightsView").then(m => ({ default: m.InsightsView })), { ssr: false });
+const CompetitorsView     = dynamic(() => import("../views/CompetitorsView").then(m => ({ default: m.CompetitorsView })), { ssr: false });
+const ProductBrainView    = dynamic(() => import("../views/ProductBrainView").then(m => ({ default: m.ProductBrainView })), { ssr: false });
+// DECISION ENGINE
+const PRDsView            = dynamic(() => import("../views/PRDsView").then(m => ({ default: m.PRDsView })), { ssr: false });
+const DecisionView        = dynamic(() => import("../views/DecisionView").then(m => ({ default: m.DecisionView })), { ssr: false });
+const RoadmapsView        = dynamic(() => import("../views/RoadmapsView").then(m => ({ default: m.RoadmapsView })), { ssr: false });
+const ExperimentsView     = dynamic(() => import("../views/ExperimentsView").then(m => ({ default: m.ExperimentsView })), { ssr: false });
+// EXECUTION
+const TasksView           = dynamic(() => import("../views/TasksView").then(m => ({ default: m.TasksView })), { ssr: false });
+const PlatformView        = dynamic(() => import("../views/PlatformView").then(m => ({ default: m.PlatformView })), { ssr: false });
+const SlackView           = dynamic(() => import("../views/SlackView").then(m => ({ default: m.SlackView })), { ssr: false });
+// AI SYSTEMS
+const AutonomousModeView  = dynamic(() => import("../views/AutonomousModeView").then(m => ({ default: m.AutonomousModeView })), { ssr: false });
+const AgentsView          = dynamic(() => import("../views/AgentsView").then(m => ({ default: m.AgentsView })), { ssr: false });
+const ActivityView        = dynamic(() => import("../views/ActivityView").then(m => ({ default: m.ActivityView })), { ssr: false });
+// HOME
+const WorkspaceView       = dynamic(() => import("../views/WorkspaceView").then(m => ({ default: m.WorkspaceView })), { ssr: false });
+const DashboardView       = dynamic(() => import("../views/DashboardView").then(m => ({ default: m.DashboardView })), { ssr: false });
+// PLATFORM
+const NotificationsView   = dynamic(() => import("../views/NotificationsView").then(m => ({ default: m.NotificationsView })), { ssr: false });
+const ExtensionView       = dynamic(() => import("../views/ExtensionView").then(m => ({ default: m.ExtensionView })), { ssr: false });
+const ProfileView         = dynamic(() => import("../views/ProfileView").then(m => ({ default: m.ProfileView })), { ssr: false });
+const HelpView            = dynamic(() => import("../views/HelpView").then(m => ({ default: m.HelpView })), { ssr: false });
+const SettingsView        = dynamic(() => import("../views/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
 import { ModernSidebar } from "@/components/ui/modern-side-bar";
 import { ViewErrorBoundary } from "@/components/ui/ViewErrorBoundary";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -54,9 +66,9 @@ interface PhaseWithContent extends Phase {
 }
 
 const PHASES: PhaseWithContent[] = [
-  { label: "Evidence", entry: "editor", views: ["editor", "insights"], contentKey: "insights" },
+  { label: "Evidence", entry: "editor", views: ["editor", "market-intelligence"], contentKey: "insights" },
   { label: "Argument", entry: "decisions", views: ["decisions"], contentKey: "decisions" },
-  { label: "Verdict", entry: "prds", views: ["prds", "tasks"], contentKey: "prds" },
+  { label: "Verdict", entry: "specifications", views: ["specifications", "tasks"], contentKey: "prds" },
 ];
 
 function PhaseBreadcrumb({
@@ -170,21 +182,33 @@ export function Shell() {
       <ViewErrorBoundary viewName={name}>{node}</ViewErrorBoundary>
     );
     switch (activeView) {
-      case "insights":      return wrap("Insights", <InsightsView />);
-      case "prds":          return wrap("PRDs", <PRDsView />);
-      case "tasks":         return wrap("Tasks", <TasksView />);
-      case "decisions":     return wrap("Decisions", <DecisionView />);
-      case "platform":      return wrap("Platform", <PlatformView />);
-      case "slack":         return wrap("Slack", <SlackView />);
-      case "workspace":     return wrap("Workspace", <WorkspaceView />);
-      case "notifications": return wrap("Notifications", <NotificationsView />);
-      case "extension":     return wrap("Extension", <ExtensionView />);
-      case "activity":      return wrap("Activity", <ActivityView />);
-      case "profile":       return wrap("Profile", <ProfileView />);
-      case "help":          return wrap("Help", <HelpView />);
-      case "settings":      return wrap("Settings", <SettingsView />);
+      // HOME
+      case "workspace":          return wrap("Workspace",         <WorkspaceView />);
+      case "dashboard":          return wrap("Dashboard",         <DashboardView />);
+      // INTELLIGENCE
+      case "market-intelligence":return wrap("Market Intelligence",<InsightsView />);
+      case "competitors":        return wrap("Competitors",        <CompetitorsView />);
+      case "product-brain":      return wrap("Product Brain",      <ProductBrainView />);
+      // DECISION ENGINE
+      case "decisions":          return wrap("Decisions",         <DecisionView />);
+      case "specifications":     return wrap("Specifications",    <PRDsView />);
+      case "roadmaps":           return wrap("Roadmaps",          <RoadmapsView />);
+      case "experiments":        return wrap("Experiments",       <ExperimentsView />);
+      // EXECUTION
+      case "tasks":              return wrap("Tasks",             <TasksView />);
+      case "projects":           return wrap("Projects",          <PlatformView />);
+      case "integrations":       return wrap("Integrations",      <SlackView />);
+      // AI SYSTEMS
+      case "agents":             return wrap("Agents",            <AgentsView />);
+      case "activity":           return wrap("Activity",          <ActivityView />);
+      // PLATFORM
+      case "notifications":      return wrap("Notifications",     <NotificationsView />);
+      case "extension":          return wrap("Extension",         <ExtensionView />);
+      case "settings":           return wrap("Settings",          <SettingsView />);
+      case "profile":            return wrap("Profile",           <ProfileView />);
+      case "help":               return wrap("Help",              <HelpView />);
       // "autonomous" is rendered persistently below — not here
-      default:              return wrap("Editor", <Editor />);
+      default:                   return wrap("Editor",            <Editor />);
     }
   };
 
