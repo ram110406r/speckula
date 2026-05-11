@@ -10,6 +10,7 @@ import { getFirebaseApp } from '../lib/firebaseAdmin.js';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { db } from '../lib/db.js';
+import type { Resend } from 'resend';
 
 interface WeeklyStats {
   userId: string;
@@ -138,7 +139,7 @@ function buildEmailHtml(stats: WeeklyStats & { documents: number; decisions: num
 }
 
 async function sendDigestEmail(
-  resend: { emails: { send: (opts: Record<string, unknown>) => Promise<{ error: unknown }> } },
+  resend: Resend,
   fromEmail: string,
   stats: WeeklyStats & { documents: number; decisions: number }
 ): Promise<void> {
@@ -201,7 +202,7 @@ export async function sendWeeklyDigest(): Promise<void> {
             return;
           }
 
-          await sendDigestEmail(resend as Parameters<typeof sendDigestEmail>[0], fromEmail, {
+          await sendDigestEmail(resend, fromEmail, {
             userId: user.uid,
             email: user.email!,
             displayName: user.displayName || '',

@@ -14,7 +14,7 @@ const heartbeatSchema = z.object({
   extensionVersion: z.string().min(1).max(20),
   browserType:      z.string().min(1).max(30),
   workspaceId:      z.string().optional(),
-  metadata:         z.record(z.unknown()).optional(),
+  metadata:         z.record(z.string(), z.unknown()).optional(),
 }).strict();
 
 const analyzeSchema = z.object({

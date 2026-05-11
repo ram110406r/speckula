@@ -901,9 +901,10 @@ ${content}`;
           fullContent += delta;
           yield delta;
         }
-        if (chunk.usage) {
-          inputTokens = chunk.usage.prompt_tokens ?? 0;
-          outputTokens = chunk.usage.completion_tokens ?? 0;
+        const usage = (chunk as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
+        if (usage) {
+          inputTokens = usage.prompt_tokens ?? 0;
+          outputTokens = usage.completion_tokens ?? 0;
         }
       }
       breakerOnSuccess();

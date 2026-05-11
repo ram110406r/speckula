@@ -77,10 +77,10 @@ export async function sweepExpiredRecords(): Promise<void> {
       where: { dismissed: true, generatedAt: { lt: cutoff } },
     }),
     // ExtensionHeartbeat: telemetry only — 7 days is plenty for trend analysis.
-    db.extensionHeartbeat.deleteMany({ where: { receivedAt: { lt: heartbeatCutoff } } }),
+    db.extensionHeartbeat.deleteMany({ where: { createdAt: { lt: heartbeatCutoff } } }),
     // WebSocketConnection: stale tombstone rows left by crashed connections.
     // wsManager.sweepStale() handles in-memory state; this covers the DB.
-    db.webSocketConnection.deleteMany({ where: { updatedAt: { lt: wsstaleCutoff } } }),
+    db.webSocketConnection.deleteMany({ where: { lastPingAt: { lt: wsstaleCutoff } } }),
     // ActivityLog: bounded by the same retention window as other PII-adjacent logs.
     db.activityLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
     // AnalysisJob: keep terminal jobs for RETENTION_DAYS for audit/debugging,

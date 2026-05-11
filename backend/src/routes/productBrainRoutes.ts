@@ -18,7 +18,7 @@ const createEntrySchema = z.object({
   entryType:   z.enum(ENTRY_TYPES as [EntryType, ...EntryType[]]),
   title:       z.string().min(1).max(300),
   content:     z.string().min(1).max(50_000),
-  metadata:    z.record(z.unknown()).optional(),
+  metadata:    z.record(z.string(), z.unknown()).optional(),
   sourceUrl:   z.string().url().optional(),
   confidence:  z.number().min(0).max(1).optional(),
   tags:        z.array(z.string()).max(20).optional(),

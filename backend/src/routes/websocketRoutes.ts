@@ -64,7 +64,7 @@ export default async function websocketRoutes(fastify: FastifyInstance) {
       }));
 
       // ── Message handler ────────────────────────────────────────────────────
-      socket.on('message', (raw) => {
+      socket.on('message', (raw: Buffer | string) => {
         let msg: { type?: string; channel?: string } = {};
         try { msg = JSON.parse(raw.toString()); } catch { return; }
 
@@ -82,7 +82,7 @@ export default async function websocketRoutes(fastify: FastifyInstance) {
       });
 
       // ── Error handler ──────────────────────────────────────────────────────
-      socket.on('error', async (err) => {
+      socket.on('error', async (err: Error) => {
         fastify.log.warn({ err, connectionId, userId }, 'WebSocket error');
         await wsManager.unregister(connectionId);
       });
