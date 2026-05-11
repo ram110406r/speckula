@@ -503,7 +503,7 @@ export function DecisionView() {
       await savePRD(user.uid, { title: `PRD: ${prdPreview.title}`, content: prdPreview.content, status: "draft", sourceDocId: currentDocId ?? undefined });
       setPrdPreview(null);
       setPendingDecisionForPRD(null);
-      setActiveView("prds");
+      setActiveView("specifications");
       toast.success("PRD saved", "Saved to your PRD library.");
       activity.success("PRD saved", `PRD: ${prdPreview.title}`);
     } catch {
@@ -860,7 +860,7 @@ export function DecisionView() {
             onFocusDecision={setFocusPanelData}
             onDeleteDecision={handleDeleteDecision}
             onEditDecision={openEditDecision}
-            onViewEvidence={() => setActiveView("insights")}
+            onViewEvidence={() => setActiveView("market-intelligence")}
           />
         )}
 
