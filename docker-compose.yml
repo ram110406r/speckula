@@ -158,8 +158,6 @@ services:
       context: ./nginx
       dockerfile: Dockerfile
     restart: unless-stopped
-    ports:
-      - "80:80"  # Dokploy maps its domain/SSL termination to this port
     depends_on:
       - frontend
       - backend
