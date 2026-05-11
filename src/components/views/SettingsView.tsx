@@ -664,9 +664,70 @@ function APIKeysSection() {
 }
 
 function PrivacySection() {
+  const { user } = useAuth();
   const [dataRetention, setDataRetention] = useState("90");
   const [analytics, setAnalytics] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [exportState, setExportState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "loading" | "done" | "error">("idle");
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleExport = async () => {
+    if (!user) return;
+    setExportState("loading");
+    setActionError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/user/me/export", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `Export failed (${res.status})`);
+      }
+      // Trigger browser download.
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `speckula-export-${user.uid}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportState("done");
+      setTimeout(() => setExportState("idle"), 3000);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Export failed");
+      setExportState("error");
+      setTimeout(() => setExportState("idle"), 4000);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!user) return;
+    if (deleteState === "idle") { setDeleteState("confirm"); return; }
+    if (deleteState !== "confirm") return;
+    setDeleteState("loading");
+    setActionError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/user/me", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `Deletion failed (${res.status})`);
+      }
+      setDeleteState("done");
+      // Sign the user out — their account no longer exists.
+      const { getAuth, signOut } = await import("firebase/auth");
+      await signOut(getAuth()).catch(() => undefined);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Deletion failed");
+      setDeleteState("error");
+      setTimeout(() => setDeleteState("idle"), 4000);
+    }
+  };
 
   return (
     <div>
@@ -698,13 +759,64 @@ function PrivacySection() {
         <div className="text-xs text-muted-foreground">1 session (this device)</div>
       </SettingRow>
 
+      {actionError && (
+        <div className="mt-4 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {actionError}
+        </div>
+      )}
+
       <div className="mt-8 pt-6 border-t border-border space-y-3">
-        <button className="flex items-center gap-2 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-          <RefreshCw className="h-3.5 w-3.5" /> Export my data
+        {/* ── Data export ── */}
+        <button
+          onClick={handleExport}
+          disabled={exportState === "loading"}
+          className="flex items-center gap-2 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+        >
+          {exportState === "loading" ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : exportState === "done" ? (
+            <Check className="h-3.5 w-3.5 text-green-500" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+          {exportState === "loading" ? "Preparing export…" : exportState === "done" ? "Downloaded" : "Export my data"}
         </button>
-        <button className="flex items-center gap-2 px-3 py-2 rounded-md border border-destructive/30 text-xs text-destructive hover:bg-destructive/10 transition-colors">
-          <Trash2 className="h-3.5 w-3.5" /> Delete account
-        </button>
+
+        {/* ── Account deletion ── */}
+        {deleteState === "confirm" ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+            <p className="text-xs text-destructive font-medium">
+              This will permanently delete your account and ALL data. This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleDelete}
+                className="px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground text-xs font-semibold hover:opacity-90 transition-opacity"
+              >
+                Yes, delete everything
+              </button>
+              <button
+                onClick={() => setDeleteState("idle")}
+                className="px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={handleDelete}
+            disabled={deleteState === "loading" || deleteState === "done"}
+            className="flex items-center gap-2 px-3 py-2 rounded-md border border-destructive/30 text-xs text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+          >
+            {deleteState === "loading" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+            {deleteState === "loading" ? "Deleting account…" : deleteState === "done" ? "Account deleted" : "Delete account"}
+          </button>
+        )}
       </div>
     </div>
   );

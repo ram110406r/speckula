@@ -12,6 +12,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
     "retention:sweep": "tsx src/scripts/retentionSweeper.ts",
+    "digest:send": "tsx src/scripts/weeklyDigest.ts",
     "test": "vitest",
     "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint --config .eslintrc.cjs --no-eslintrc --ext .ts src",
     "type-check": "tsc --noEmit"
@@ -33,6 +34,7 @@
     "pg": "^8.11.5",
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",
+    "resend": "^4.0.0",
     "striptags": "^3.2.0",
     "zod": "^4.0.0"
   },

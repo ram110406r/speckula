@@ -27,6 +27,75 @@ const groq = new Proxy({} as Groq, {
   },
 });
 
+// ── Groq circuit breaker ─────────────────────────────────────────────────────
+// Protects against cascading failures when Groq is fully unavailable.
+// States: closed (normal) → open (failing fast) → half-open (probing).
+type BreakerState = 'closed' | 'open' | 'half-open';
+
+const BREAKER = {
+  state: 'closed' as BreakerState,
+  failures: 0,
+  lastFailureAt: 0,
+  // Open after this many consecutive non-retriable failures.
+  OPEN_THRESHOLD: 5,
+  // Attempt a single probe call this many ms after opening.
+  HALF_OPEN_DELAY_MS: 60_000,
+};
+
+const breakerOnSuccess = () => {
+  if (BREAKER.state !== 'closed') {
+    console.log('[groqService] circuit breaker closed — Groq is responding normally.');
+  }
+  BREAKER.state = 'closed';
+  BREAKER.failures = 0;
+};
+
+const breakerOnFailure = (err: unknown) => {
+  // Only count non-retriable errors (not 429 rate-limits or transient 5xx).
+  const status = (err as { status?: number; statusCode?: number })?.status
+    ?? (err as { status?: number; statusCode?: number })?.statusCode;
+  if (typeof status === 'number' && status === 429) return;  // quota, not outage
+  if (typeof status === 'number' && status >= 500) {
+    // Transient 5xx — still count toward breaker since repeated 5xx = outage.
+  }
+
+  BREAKER.failures += 1;
+  BREAKER.lastFailureAt = Date.now();
+  if (BREAKER.state === 'closed' && BREAKER.failures >= BREAKER.OPEN_THRESHOLD) {
+    BREAKER.state = 'open';
+    console.error(
+      `[groqService] circuit breaker OPEN after ${BREAKER.failures} consecutive failures. ` +
+      `Groq calls will fast-fail for ${BREAKER.HALF_OPEN_DELAY_MS / 1000}s.`
+    );
+  } else if (BREAKER.state === 'half-open') {
+    // Probe failed — re-open.
+    BREAKER.state = 'open';
+    BREAKER.lastFailureAt = Date.now();
+  }
+};
+
+const breakerCheck = () => {
+  if (BREAKER.state === 'closed') return;
+  if (BREAKER.state === 'open') {
+    const elapsed = Date.now() - BREAKER.lastFailureAt;
+    if (elapsed >= BREAKER.HALF_OPEN_DELAY_MS) {
+      BREAKER.state = 'half-open';
+      console.log('[groqService] circuit breaker half-open — allowing one probe call.');
+      return; // allow the probe through
+    }
+    const err = new Error(
+      `Groq AI service is temporarily unavailable (circuit open). ` +
+      `Retry in ${Math.ceil((BREAKER.HALF_OPEN_DELAY_MS - elapsed) / 1000)}s.`
+    );
+    (err as NodeJS.ErrnoException & { status?: number }).status = 503;
+    throw err;
+  }
+  // half-open: allow through (the next success/failure will transition state)
+};
+
+// Exposed for tests and health checks.
+export const getCircuitBreakerState = () => ({ ...BREAKER });
+
 let dbWarnLastAt = 0;
 const DB_WARN_INTERVAL_MS = 60 * 60 * 1000; // re-log at most once per hour
 const warnDbDegraded = (op: string, error: unknown) => {
@@ -114,17 +183,25 @@ function getHeader(headers: unknown, name: string): string | null {
 // Retry transient 5xx only. 429 propagates immediately — the rate-limit
 // window is typically 60 seconds, which short exponential retries can't outlast.
 async function callGroqWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+  // Fail fast if the breaker is open.
+  breakerCheck();
+
   const maxAttempts = 3;
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      return await fn();
+      const result = await fn();
+      breakerOnSuccess();
+      return result;
     } catch (err) {
       lastErr = err;
       const errObj = err as { status?: number; statusCode?: number; headers?: unknown };
       const status = errObj?.status ?? errObj?.statusCode;
       const retriable = typeof status === 'number' && status >= 500;
-      if (!retriable || attempt === maxAttempts - 1) throw err;
+      if (!retriable || attempt === maxAttempts - 1) {
+        breakerOnFailure(err);
+        throw err;
+      }
       const retryAfterSec = getHeader(errObj?.headers, 'retry-after');
       const backoffMs = retryAfterSec
         ? Math.min(parseInt(retryAfterSec, 10) * 1000, 30_000)
@@ -776,6 +853,92 @@ ${content}`;
       decisions: safeHints(parsed.decisions).slice(0, 2),
       tokensUsed: result.tokensUsed,
     };
+  },
+
+  // Streaming PRD generation — yields SSE chunks directly to the caller.
+  // The caller is responsible for setting the response headers and flushing.
+  async *streamPRD(
+    title: string,
+    projectNotes: string,
+    decisions: string,
+    projectId: string,
+    userId: string
+  ): AsyncGenerator<string> {
+    // Quota check (same as callGroq).
+    const quota = readPositiveInt(process.env.DAILY_TOKEN_QUOTA, 200_000);
+    const todayUsage = await db.aPIUsage
+      .findUnique({ where: { userId_date: { userId, date: todayUtcStart() } } })
+      .catch(() => null);
+    if (todayUsage && todayUsage.totalTokens >= quota) {
+      const err = new Error(`Daily token quota of ${quota.toLocaleString()} tokens reached.`);
+      (err as NodeJS.ErrnoException & { status?: number }).status = 429;
+      throw err;
+    }
+
+    breakerCheck();
+
+    const prompt = `You are a staff PM writing a PRD. Project: ${title}\n\nResearch:\n${projectNotes}\n\nDecisions:\n${decisions}\n\nWrite a comprehensive PRD with sections: Problem Statement, Who This Is For, What We Are Building, User Stories, What We Are Not Building, How We Know It Is Working. Be specific and grounded in the research.`;
+
+    const modelName = MODELS.reasoning;
+    const startTime = Date.now();
+
+    const stream = await getGroqClient().chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: modelName,
+      temperature: 0.6,
+      max_tokens: 4000,
+      stream: true,
+    });
+
+    let fullContent = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    try {
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content ?? '';
+        if (delta) {
+          fullContent += delta;
+          yield delta;
+        }
+        if (chunk.usage) {
+          inputTokens = chunk.usage.prompt_tokens ?? 0;
+          outputTokens = chunk.usage.completion_tokens ?? 0;
+        }
+      }
+      breakerOnSuccess();
+    } catch (err) {
+      breakerOnFailure(err);
+      throw err;
+    }
+
+    const executionMs = Date.now() - startTime;
+    const totalTokens = inputTokens + outputTokens;
+    const cost = this.estimateCost(modelName, inputTokens, outputTokens);
+
+    // Fire-and-forget persistence after the stream completes.
+    db.aIPRD.create({
+      data: { projectId, userId, title, content: fullContent, modelUsed: modelName, tokensUsed: totalTokens },
+    }).catch(() => undefined);
+
+    db.promptLog.create({
+      data: {
+        userId, projectId,
+        promptHash: this.hashPrompt(userId, prompt, modelName, false, 0.6),
+        prompt: prompt.slice(0, 8000),
+        modelUsed: modelName, inputTokens, outputTokens, totalTokens, executionMs, cost, cachedResult: false,
+      },
+    }).catch((error: unknown) => warnDbDegraded('promptLog.create (stream)', error));
+
+    const date = todayUtcStart();
+    db.$executeRaw`
+      INSERT INTO "APIUsage" ("id","userId","date","totalRequests","totalTokens","totalCost","modelMix")
+      VALUES (gen_random_uuid(),${userId},${date},1,${totalTokens},${cost},${modelName})
+      ON CONFLICT ("userId","date") DO UPDATE SET
+        "totalRequests"="APIUsage"."totalRequests"+1,
+        "totalTokens"="APIUsage"."totalTokens"+${totalTokens},
+        "totalCost"="APIUsage"."totalCost"+${cost}
+    `.catch((error: unknown) => warnDbDegraded('aPIUsage.upsert (stream)', error));
   },
 
   // Cache key MUST include userId and model — otherwise user A's cached

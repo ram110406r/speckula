@@ -67,6 +67,11 @@ const envSchema = z.object({
 
   // How many days to keep PromptLog / DecisionReasoning rows (default 60).
   RETENTION_DAYS: z.coerce.number().int().min(1).default(60),
+
+  // Resend — transactional email (weekly digest). Get key at resend.com.
+  RESEND_API_KEY: z.string().startsWith('re_', 'RESEND_API_KEY must start with "re_". Get one at resend.com').optional(),
+  // From-address for outbound email (e.g. "SPECKULA <digest@speckula.io>").
+  RESEND_FROM_EMAIL: z.string().email().optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -92,6 +97,23 @@ export const validateEnv = (): AppEnv => {
     throw new Error(
       '\n[env] Invalid environment configuration — fix these before starting:\n' +
       '  • FIREBASE_PRIVATE_KEY or FIREBASE_PRIVATE_KEY_B64: one must be set\n'
+    );
+  }
+
+  // Warn when DATABASE_URL looks like a PgBouncer/Supabase pooler URL but
+  // DIRECT_DATABASE_URL is not set. Prisma migrate deploy and some Prisma
+  // operations require a direct (non-pooled) connection.
+  const isPooledUrl = (url: string) =>
+    url.includes('pgbouncer=true') ||
+    url.includes(':6543') ||               // Supabase transaction pooler port
+    url.includes('pooler.supabase.com');
+
+  if (isPooledUrl(env.DATABASE_URL) && !env.DIRECT_DATABASE_URL) {
+    console.warn(
+      '\n[env] Warning: DATABASE_URL appears to be a connection-pooler URL ' +
+      '(PgBouncer / Supabase pooler) but DIRECT_DATABASE_URL is not set.\n' +
+      '  • Set DIRECT_DATABASE_URL to a non-pooled postgresql:// connection.\n' +
+      '  • Prisma migrate deploy and some queries require a direct connection.\n'
     );
   }
 

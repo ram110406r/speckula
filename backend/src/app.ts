@@ -8,6 +8,7 @@ import importRoutes from './routes/importRoutes.js';
 import slackRoutes from './routes/slackRoutes.js';
 import slackOAuthRoutes from './routes/slackOAuthRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 import { verifyFirebaseAuth } from './lib/firebaseAuth.js';
 import { validateEnv } from './lib/env.js';
 
@@ -99,6 +100,17 @@ export const createServer = async () => {
       .send({ ok: false, error: message, requestId: request.id });
   });
 
+  // X-Response-Time: added to every response for SLO monitoring.
+  fastify.addHook('onSend', async (request, reply) => {
+    const start = (request as FastifyRequest & { startTime?: number }).startTime;
+    if (typeof start === 'number') {
+      reply.header('X-Response-Time', `${Date.now() - start}ms`);
+    }
+  });
+  fastify.addHook('onRequest', async (request) => {
+    (request as FastifyRequest & { startTime?: number }).startTime = Date.now();
+  });
+
   // Health check — no auth, no rate limit, used by load balancers + UptimeRobot.
   await fastify.register(healthRoutes);
 
@@ -129,6 +141,18 @@ export const createServer = async () => {
       await instance.register(importRoutes);
     },
     { prefix: '/import' }
+  );
+
+  // User routes: auth required; light rate limit (deletion is expensive to undo).
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 10, timeWindow: '1 hour' } };
+      });
+      await instance.register(userRoutes);
+    },
+    { prefix: '/user' }
   );
 
   await fastify.register(slackRoutes, { prefix: '/slack' });

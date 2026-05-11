@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { groqService } from '../services/groqService.js';
+import { groqService, getCircuitBreakerState } from '../services/groqService.js';
 import { z } from 'zod';
 import { utcDayStart } from '../lib/dateUtils.js';
 import { classifyPrismaError } from '../lib/prismaErrors.js';
@@ -261,6 +261,182 @@ export default async function aiRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  // ── SSE streaming PRD generation ────────────────────────────────────────────
+  // Streams the PRD as Server-Sent Events so the frontend can show incremental
+  // output without waiting for the full 4 000-token response.
+  //
+  // Event types:
+  //   data: { chunk: "<text>" }     — incremental content
+  //   data: { done: true }          — stream complete
+  //   data: { error: "<message>" }  — terminal error
+  fastify.post<{ Body: z.infer<typeof generatePRDSchema> }>(
+    '/prd/stream',
+    async (request, reply) => {
+      const body = generatePRDSchema.safeParse(request.body);
+      if (!body.success) {
+        reply.code(400).send({ ok: false, error: 'Invalid request payload' });
+        return;
+      }
+      const userId = requireUserId(request, reply);
+      if (!userId) return;
+
+      // Hijack the raw response to write SSE without buffering.
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',  // disable nginx buffering
+        'Connection': 'keep-alive',
+      });
+
+      const write = (payload: Record<string, unknown>) => {
+        reply.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
+      };
+
+      try {
+        const gen = groqService.streamPRD(
+          body.data.title,
+          body.data.notes,
+          body.data.decisions,
+          body.data.projectId ?? DEFAULT_PROJECT_ID,
+          userId
+        );
+        for await (const chunk of gen) {
+          write({ chunk });
+        }
+        write({ done: true });
+      } catch (err) {
+        const { message } = classify(err);
+        write({ error: message });
+      } finally {
+        reply.raw.end();
+      }
+    }
+  );
+
+  // ── Founder metrics ──────────────────────────────────────────────────────────
+  // Production-safe endpoint for the founder dashboard. Unlike /internal/prompt-health
+  // this is accessible in all environments — but only to authenticated users.
+  // Returns aggregate API usage across ALL users (not just the caller).
+  // In production only Firebase-admin-role users should call this; gating by
+  // a header secret is the minimal guard until RBAC is implemented.
+  fastify.get('/internal/metrics', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = requireUserId(request, reply);
+    if (!userId) return;
+
+    // Guard: require a shared metrics token so arbitrary authed users can't
+    // harvest aggregate usage. Set METRICS_TOKEN in env; omit to allow any
+    // authenticated user (fine for private/internal deploys).
+    const metricsToken = process.env.METRICS_TOKEN;
+    if (metricsToken) {
+      const provided = (request.headers['x-metrics-token'] as string | undefined) ?? '';
+      if (provided !== metricsToken) {
+        reply.code(403).send({ ok: false, error: 'Forbidden' });
+        return;
+      }
+    }
+
+    try {
+      const db = groqService.getDb();
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      const [
+        totalUsage,
+        dailyTotals,
+        modelBreakdown,
+        topUsers,
+        promptLogSummary,
+        breaker,
+      ] = await Promise.all([
+        // Aggregate totals over the last 30 days.
+        db.aPIUsage.aggregate({
+          where: { date: { gte: since } },
+          _sum: { totalRequests: true, totalTokens: true, totalCost: true },
+          _count: { userId: true },
+        }),
+
+        // Daily trend — last 30 days, one row per day.
+        db.aPIUsage.groupBy({
+          by: ['date'],
+          where: { date: { gte: since } },
+          _sum: { totalRequests: true, totalTokens: true, totalCost: true },
+          orderBy: { date: 'asc' },
+        }),
+
+        // Token usage by model over last 30 days.
+        db.promptLog.groupBy({
+          by: ['modelUsed'],
+          where: { createdAt: { gte: since } },
+          _sum: { totalTokens: true, cost: true },
+          _count: { _all: true },
+          orderBy: { _sum: { totalTokens: 'desc' } },
+        }),
+
+        // Top 10 users by token spend (anonymous — only userId exposed).
+        db.aPIUsage.groupBy({
+          by: ['userId'],
+          where: { date: { gte: since } },
+          _sum: { totalTokens: true, totalCost: true, totalRequests: true },
+          orderBy: { _sum: { totalTokens: 'desc' } },
+          take: 10,
+        }),
+
+        // Cache hit rate over last 30 days.
+        db.promptLog.groupBy({
+          by: ['cachedResult'],
+          where: { createdAt: { gte: since } },
+          _count: { _all: true },
+        }),
+
+        // Circuit breaker state.
+        Promise.resolve(getCircuitBreakerState()),
+      ]);
+
+      const cacheHits = promptLogSummary.find((r) => r.cachedResult)?._count._all ?? 0;
+      const cacheMisses = promptLogSummary.find((r) => !r.cachedResult)?._count._all ?? 0;
+      const totalLogs = cacheHits + cacheMisses;
+
+      reply.code(200).send({
+        ok: true,
+        data: {
+          period: { since: since.toISOString(), until: new Date().toISOString() },
+          totals: {
+            requests: totalUsage._sum.totalRequests ?? 0,
+            tokens: totalUsage._sum.totalTokens ?? 0,
+            costUsd: Number((totalUsage._sum.totalCost ?? 0).toFixed(4)),
+            activeUsers: totalUsage._count.userId,
+          },
+          cacheRate: totalLogs > 0 ? Number((cacheHits / totalLogs).toFixed(3)) : 0,
+          dailyTrend: dailyTotals.map((r) => ({
+            date: r.date.toISOString().slice(0, 10),
+            requests: r._sum.totalRequests ?? 0,
+            tokens: r._sum.totalTokens ?? 0,
+            costUsd: Number((r._sum.totalCost ?? 0).toFixed(4)),
+          })),
+          modelBreakdown: modelBreakdown.map((r) => ({
+            model: r.modelUsed,
+            calls: r._count._all,
+            tokens: r._sum.totalTokens ?? 0,
+            costUsd: Number((r._sum.cost ?? 0).toFixed(4)),
+          })),
+          topUsers: topUsers.map((r) => ({
+            userId: r.userId,
+            tokens: r._sum.totalTokens ?? 0,
+            requests: r._sum.totalRequests ?? 0,
+            costUsd: Number((r._sum.totalCost ?? 0).toFixed(4)),
+          })),
+          circuitBreaker: {
+            state: breaker.state,
+            failures: breaker.failures,
+            lastFailureAt: breaker.lastFailureAt > 0 ? new Date(breaker.lastFailureAt).toISOString() : null,
+          },
+        },
+      });
+    } catch (err) {
+      fastify.log.error(err);
+      replyError(reply, err, 'Failed to fetch metrics');
+    }
+  });
 
   // v2.3 internal prompt-health aggregation. Dev-only — gated by NODE_ENV so
   // production users can never see another user's prompt usage telemetry.
