@@ -95,8 +95,6 @@ The sidebar organizes all pages into six sections:
 - AI synthesis panel — ask a question, get a synthesized answer from the memory store
 - SVG sparkline showing confidence evolution over time
 
----
-
 ### Decisions
 **Scored product decisions with health evaluation and outcome tracking.**
 
