@@ -2,6 +2,7 @@ import Fastify, { FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
 import aiRoutes from './routes/aiRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import importRoutes from './routes/importRoutes.js';
@@ -9,8 +10,15 @@ import slackRoutes from './routes/slackRoutes.js';
 import slackOAuthRoutes from './routes/slackOAuthRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import extensionRoutes from './routes/extensionRoutes.js';
+import websocketRoutes from './routes/websocketRoutes.js';
+import productBrainRoutes from './routes/productBrainRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
 import { verifyFirebaseAuth } from './lib/firebaseAuth.js';
 import { validateEnv } from './lib/env.js';
+import { startAnalysisWorker } from './workers/analysisWorker.js';
+import { wsManager } from './services/websocketManager.js';
 
 const parseOriginList = (raw: string | undefined): string[] | null => {
   if (!raw) return null;
@@ -24,35 +32,27 @@ export const createServer = async () => {
 
   const fastify = Fastify({
     logger: isProd
-      // Production: raw JSON to stdout, consumed by log aggregator.
       ? { level: 'info' }
-      // Development: human-readable coloured output.
-      : {
-          level: 'debug',
-          transport: { target: 'pino-pretty', options: { colorize: true } },
-        },
-    bodyLimit: 2 * 1024 * 1024, // 2 MB; multipart routes set their own limit.
-    // Return the request ID in error responses so clients can quote it in
-    // support tickets and we can correlate to log entries.
+      : { level: 'debug', transport: { target: 'pino-pretty', options: { colorize: true } } },
+    bodyLimit: 2 * 1024 * 1024,
     genReqId: () => crypto.randomUUID(),
   });
 
-  // Security headers — CSP is disabled because this is a JSON API server,
-  // not a page server. Helmet still sets HSTS, nosniff, X-Frame-Options, etc.
+  // ── Security headers ───────────────────────────────────────────────────────
   await fastify.register(helmet, {
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
   });
 
-  // CORS allow-list. FRONTEND_URLS (comma-separated) wins; FRONTEND_URL is
-  // kept for backwards compatibility with single-origin deployments.
+  // ── CORS ───────────────────────────────────────────────────────────────────
   const originList =
     parseOriginList(process.env.FRONTEND_URLS) ??
     parseOriginList(process.env.FRONTEND_URL) ??
     ['http://localhost:3000'];
+
   await fastify.register(cors, {
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // same-origin / curl / server-to-server
+      if (!origin) return cb(null, true);
       if (originList.includes(origin)) return cb(null, true);
       cb(new Error('CORS: origin not allowed'), false);
     },
@@ -60,16 +60,12 @@ export const createServer = async () => {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   });
 
-  // Rate limit fires at preHandler so that any onRequest auth hook has a
-  // chance to populate request.userId first. Without this, the keyGenerator
-  // would fall back to req.ip and the per-user 100/hr cap would not apply.
+  // ── Rate limiting ──────────────────────────────────────────────────────────
   await fastify.register(rateLimit, {
     global: false,
     hook: 'preHandler',
     keyGenerator: (req: FastifyRequest) => {
       const uid = (req as FastifyRequest & { userId?: string }).userId;
-      // userId-keyed when authed; IP-keyed for unauthenticated paths so
-      // that a single client cannot overrun the limit by rotating tokens.
       return uid ? `u:${uid}` : `ip:${req.ip}`;
     },
     errorResponseBuilder: (_req, ctx) => ({
@@ -78,6 +74,22 @@ export const createServer = async () => {
     }),
   });
 
+  // ── WebSocket plugin ───────────────────────────────────────────────────────
+  await fastify.register(websocket);
+
+  // ── Global hooks ──────────────────────────────────────────────────────────
+  fastify.addHook('onRequest', async (request) => {
+    (request as FastifyRequest & { startTime?: number }).startTime = Date.now();
+  });
+
+  fastify.addHook('onSend', async (request, reply) => {
+    const start = (request as FastifyRequest & { startTime?: number }).startTime;
+    if (typeof start === 'number') {
+      reply.header('X-Response-Time', `${Date.now() - start}ms`);
+    }
+  });
+
+  // ── Error handler ──────────────────────────────────────────────────────────
   fastify.setErrorHandler((error, request, reply) => {
     fastify.log.error({ err: error, requestId: request.id }, 'Request error');
     const status = (() => {
@@ -93,29 +105,21 @@ export const createServer = async () => {
         : error instanceof Error
           ? error.message
           : 'Unknown error';
-    // Return the requestId so clients can quote it in support tickets.
     reply
       .code(status)
       .header('X-Request-ID', request.id)
       .send({ ok: false, error: message, requestId: request.id });
   });
 
-  // X-Response-Time: added to every response for SLO monitoring.
-  fastify.addHook('onSend', async (request, reply) => {
-    const start = (request as FastifyRequest & { startTime?: number }).startTime;
-    if (typeof start === 'number') {
-      reply.header('X-Response-Time', `${Date.now() - start}ms`);
-    }
-  });
-  fastify.addHook('onRequest', async (request) => {
-    (request as FastifyRequest & { startTime?: number }).startTime = Date.now();
-  });
-
-  // Health check — no auth, no rate limit, used by load balancers + UptimeRobot.
+  // ── Health check — no auth ─────────────────────────────────────────────────
   await fastify.register(healthRoutes);
 
-  // AI routes: auth on onRequest (so rate-limit can key by userId), and
-  // rate-limit at preHandler (configured globally above) capped at 100/hr/user.
+  // ── WebSocket gateway — token auth on connection ───────────────────────────
+  await fastify.register(websocketRoutes);
+
+  // ── Authenticated route groups ─────────────────────────────────────────────
+
+  // AI routes: 100 req/hr per user.
   await fastify.register(
     async (instance) => {
       instance.addHook('onRequest', verifyFirebaseAuth);
@@ -130,8 +134,7 @@ export const createServer = async () => {
     { prefix: '/ai' }
   );
 
-  // Import routes: same pattern — auth first, then a tighter rate-limit,
-  // because /import/* makes outbound HTTP requests on the user's behalf.
+  // Import routes: tighter limit (outbound HTTP on user's behalf).
   await fastify.register(
     async (instance) => {
       instance.addHook('onRequest', verifyFirebaseAuth);
@@ -143,7 +146,61 @@ export const createServer = async () => {
     { prefix: '/import' }
   );
 
-  // User routes: auth required; light rate limit (deletion is expensive to undo).
+  // Extension routes: higher rate limit for heartbeats (frequent calls).
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        const isHeartbeat = (route.url ?? '').includes('/heartbeat');
+        route.config = {
+          ...(route.config || {}),
+          rateLimit: isHeartbeat
+            ? { max: 200, timeWindow: '1 hour' }   // heartbeat: generous
+            : { max: 60,  timeWindow: '1 hour' },  // analysis: 1/min
+        };
+      });
+      await instance.register(extensionRoutes);
+    },
+    { prefix: '/extension' }
+  );
+
+  // Product Brain routes: 200 req/hr.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 200, timeWindow: '1 hour' } };
+      });
+      await instance.register(productBrainRoutes);
+    },
+    { prefix: '/product-brain' }
+  );
+
+  // Notification routes.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 200, timeWindow: '1 hour' } };
+      });
+      await instance.register(notificationRoutes);
+    },
+    { prefix: '/notifications' }
+  );
+
+  // Analytics routes.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+      });
+      await instance.register(analyticsRoutes);
+    },
+    { prefix: '/analytics' }
+  );
+
+  // User routes: low limit (destructive operations).
   await fastify.register(
     async (instance) => {
       instance.addHook('onRequest', verifyFirebaseAuth);
@@ -155,8 +212,21 @@ export const createServer = async () => {
     { prefix: '/user' }
   );
 
-  await fastify.register(slackRoutes, { prefix: '/slack' });
+  await fastify.register(slackRoutes,      { prefix: '/slack' });
   await fastify.register(slackOAuthRoutes, { prefix: '/auth/slack' });
+
+  // ── Embedded analysis worker (development / small deployments) ─────────────
+  // In production the worker container runs as a separate process.
+  // To embed: set EMBEDDED_WORKER=true in the backend env.
+  if (process.env.EMBEDDED_WORKER === 'true') {
+    startAnalysisWorker();
+    fastify.log.info('[app] Embedded analysis worker started');
+  }
+
+  // Sweep stale WebSocket connection DB rows every 5 minutes.
+  setInterval(() => {
+    wsManager.sweepStale().catch(() => undefined);
+  }, 5 * 60 * 1000);
 
   return fastify;
 };

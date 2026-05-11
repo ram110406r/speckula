@@ -72,6 +72,21 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().startsWith('re_', 'RESEND_API_KEY must start with "re_". Get one at resend.com').optional(),
   // From-address for outbound email (e.g. "SPECKULA <digest@speckula.io>").
   RESEND_FROM_EMAIL: z.string().email().optional(),
+
+  // Redis — required for BullMQ job queue, event bus, and WebSocket pub/sub.
+  // Falls back to localhost in development; in production must be set.
+  REDIS_URL: z.string().url('REDIS_URL must be a valid redis:// URL').default('redis://localhost:6379'),
+
+  // OpenAI — optional, used for text embeddings (semantic Product Brain search).
+  // If unset, embedding generation is skipped and semantic search is unavailable.
+  OPENAI_API_KEY: z.string().startsWith('sk-', 'OPENAI_API_KEY must start with "sk-"').optional(),
+  OPENAI_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
+
+  // Analysis worker concurrency — number of parallel AI jobs per worker process.
+  ANALYSIS_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(5),
+
+  // Metrics token — optional, gates the /ai/internal/metrics endpoint.
+  METRICS_TOKEN: z.string().min(16).optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

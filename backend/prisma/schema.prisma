@@ -152,6 +152,217 @@ model AISuggestedTask {
   @@index([userId])
 }
 
+// =========================
+// EXTENSION TRACKING
+// =========================
+
+/// Last-known state per user's extension installation.
+/// Upserted on every heartbeat — one row per (userId, browserFingerprint).
+model ExtensionSession {
+  id               String   @id @default(uuid())
+  userId           String
+  extensionVersion String
+  browserType      String
+  workspaceId      String?
+  lastSeenAt       DateTime @default(now())
+  metadata         String?  // JSON: platform, os, etc.
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, browserType])
+  @@index([userId])
+  @@index([lastSeenAt])
+}
+
+/// Raw heartbeat log — kept for 7 days, swept by retention sweeper.
+model ExtensionHeartbeat {
+  id               String   @id @default(uuid())
+  userId           String
+  extensionVersion String
+  browserType      String
+  workspaceId      String?
+  createdAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// =========================
+// JOB QUEUE
+// =========================
+
+/// Persistent job record for extension page analysis.
+/// Mirrors the BullMQ job state so the frontend can poll progress.
+model AnalysisJob {
+  id           String    @id @default(uuid())
+  userId       String
+  projectId    String?
+  bullJobId    String?   // BullMQ job.id (same as our id by default)
+  status       String    @default("queued")
+  // queued | extracting | classifying | generating_insights | embedding | saving | completed | failed
+  progress     Int       @default(0)    // 0–100
+  pageType     String?
+  sourceUrl    String?
+  inputContent String?   // stored for re-processing; cleared after embedding
+  result       String?   // JSON: structured analysis output
+  error        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  completedAt  DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// =========================
+// PRODUCT BRAIN
+// =========================
+
+/// Persistent intelligence entry — the core of the startup memory graph.
+model ProductBrainEntry {
+  id           String   @id @default(uuid())
+  userId       String
+  workspaceId  String?
+  entryType    String
+  // competitor_insight | market_signal | pm_insight | pricing_observation
+  // | onboarding_pattern | feature_comparison | strategic_decision | ux_friction
+  title        String
+  content      String
+  metadata     String?  // JSON: arbitrary structured context
+  sourceUrl    String?
+  sourceJobId  String?  // AnalysisJob.id that generated this entry
+  confidence   Float    @default(0.7)
+  tags         String?  // JSON: string[]
+  // Vector embedding stored in Postgres via raw SQL (pgvector).
+  // Prisma cannot manage vector columns directly — added via migration.
+  embeddingId  String?  @unique  // FK to SemanticEmbedding.id
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([entryType])
+  @@index([createdAt])
+}
+
+/// pgvector embedding store — one row per ProductBrainEntry with an embedding.
+/// The `embedding` column is added via raw SQL migration (see prisma/migrations).
+model SemanticEmbedding {
+  id        String   @id @default(uuid())
+  entryId   String   @unique
+  model     String   // e.g. "text-embedding-3-small"
+  dims      Int      // embedding dimensions
+  // embedding vector(1536) — managed by pgvector, not by Prisma ORM.
+  // Use db.$queryRaw for similarity queries.
+  createdAt DateTime @default(now())
+
+  @@index([entryId])
+}
+
+/// Competitor intelligence — structured output from competitor page analysis.
+model CompetitorInsight {
+  id             String   @id @default(uuid())
+  userId         String
+  workspaceId    String?
+  domain         String
+  competitorName String?
+  insightType    String
+  // pricing | positioning | onboarding | ux | gtm | monetization | features | icp
+  title          String
+  content        String
+  evidence       String?  // JSON: string[] — specific quotes / observations
+  sourceUrl      String?
+  confidence     Float    @default(0.7)
+  sourceJobId    String?
+  capturedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([domain])
+  @@index([insightType])
+  @@index([capturedAt])
+}
+
+/// Market signal — trend, competitor move, or customer feedback worth tracking.
+model MarketSignal {
+  id          String   @id @default(uuid())
+  userId      String
+  workspaceId String?
+  signalType  String
+  // trend | competitor_move | market_shift | customer_feedback | pricing_change | feature_launch
+  title       String
+  content     String
+  sourceUrl   String?
+  strength    Float    @default(0.5)  // 0–1
+  tags        String?  // JSON: string[]
+  sourceJobId String?
+  detectedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([signalType])
+  @@index([detectedAt])
+}
+
+// =========================
+// NOTIFICATIONS
+// =========================
+
+/// In-app notification — delivered via WebSocket on creation, persisted for inbox.
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  // analysis_completed | competitor_updated | pricing_changed | market_signal
+  // | extension_disconnected | auth_expired | job_failed
+  title     String
+  body      String
+  metadata  String?   // JSON: link, jobId, etc.
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+// =========================
+// OBSERVABILITY
+// =========================
+
+/// Audit log — records user-initiated actions for compliance and debugging.
+model ActivityLog {
+  id           String   @id @default(uuid())
+  userId       String
+  action       String   // e.g. "job.enqueue", "account.delete", "export.download"
+  resourceType String?
+  resourceId   String?
+  metadata     String?  // JSON
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+/// Live WebSocket connection registry — rows are inserted on connect, deleted
+/// on disconnect. Stale rows (lastPingAt older than 2 min) cleaned by a sweeper.
+model WebSocketConnection {
+  id           String   @id @default(uuid())
+  userId       String
+  workspaceId  String?
+  connectionId String   @unique
+  metadata     String?  // JSON: browser, version, etc.
+  connectedAt  DateTime @default(now())
+  lastPingAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([lastPingAt])
+}
+
 /// Daily API usage aggregated per user for cost/quota monitoring.
 model APIUsage {
   id            String   @id @default(uuid())
