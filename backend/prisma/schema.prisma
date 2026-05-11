@@ -3,13 +3,7 @@
 // The source of truth for user data remains in Firestore.
 
 datasource db {
-  provider  = "postgresql"
-  // url is used by `prisma migrate` and `prisma introspect` CLI tools.
-  // Runtime queries use the PrismaPg driver adapter (see src/lib/db.ts) which
-  // reads DATABASE_URL directly from the pg Pool, so the runtime path never
-  // re-reads this field. directUrl skips the connection pooler for migrations.
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_DATABASE_URL")
+  provider = "postgresql"
 }
 
 generator client {
