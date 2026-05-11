@@ -189,4 +189,136 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
       },
     });
   });
+
+  // GET /analytics/dashboard — comprehensive dashboard snapshot.
+  // All queries run concurrently via Promise.all for a single round-trip cost.
+  fastify.get('/dashboard', async (request, reply) => {
+    const userId = requireUserId(request, reply);
+    if (!userId) return;
+
+    const since7d   = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000);
+    const since30d  = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const since90s  = new Date(Date.now() - 90_000);
+
+    const runningStatuses = ['queued', 'extracting', 'classifying', 'generating_insights', 'embedding', 'saving'];
+
+    const [
+      totalSignals,
+      weeklyCaptures,
+      competitorInsights,
+      marketSignals,
+      aiJobsCompleted,
+      aiJobsFailed,
+      aiJobsRunning,
+      productBrainTotal,
+      extensionStatus,
+      topDomains,
+      recentActivity,
+      unreadNotifications,
+      brainByTypeRaw,
+      signalsByTypeRaw,
+      realtimeConnections,
+    ] = await Promise.all([
+      // Metrics cards
+      db.productBrainEntry.count({ where: { userId } }),
+      db.extensionHeartbeat.count({ where: { userId, createdAt: { gte: since7d } } }),
+      db.competitorInsight.count({ where: { userId } }),
+      db.marketSignal.count({ where: { userId } }),
+      db.analysisJob.count({ where: { userId, status: 'completed' } }),
+      db.analysisJob.count({ where: { userId, status: 'failed' } }),
+      db.analysisJob.count({ where: { userId, status: { in: runningStatuses } } }),
+      db.productBrainEntry.count({ where: { userId } }),
+
+      // Extension connection status — most recent session row.
+      db.extensionSession.findFirst({
+        where: { userId },
+        orderBy: { lastSeenAt: 'desc' },
+        select: { lastSeenAt: true, extensionVersion: true, browserType: true },
+      }),
+
+      // Top 5 competitor domains (last 30 days).
+      db.competitorInsight.groupBy({
+        by: ['domain'],
+        where: { userId, capturedAt: { gte: since30d } },
+        _count: { _all: true },
+        orderBy: { _count: { domain: 'desc' } },
+        take: 5,
+      }),
+
+      // Recent activity (last 10 entries).
+      db.activityLog.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { action: true, resourceType: true, createdAt: true },
+      }),
+
+      // Unread notifications.
+      db.notification.count({ where: { userId, read: false } }),
+
+      // Product Brain entries grouped by type.
+      db.productBrainEntry.groupBy({
+        by: ['entryType'],
+        where: { userId },
+        _count: { _all: true },
+      }),
+
+      // Market signals grouped by type.
+      db.marketSignal.groupBy({
+        by: ['signalType'],
+        where: { userId },
+        _count: { _all: true },
+      }),
+
+      // Active WebSocket connections (global, not user-scoped).
+      db.webSocketConnection.count(),
+    ]);
+
+    // Determine extension connected state from lastSeenAt vs 90-second window.
+    const msSinceHeartbeat = extensionStatus
+      ? Date.now() - extensionStatus.lastSeenAt.getTime()
+      : null;
+    const extensionConnected = msSinceHeartbeat !== null && msSinceHeartbeat < 90_000;
+
+    // Convert groupBy results to plain Record<string, number>.
+    const brainByType: Record<string, number> = {};
+    for (const row of brainByTypeRaw) {
+      brainByType[row.entryType] = row._count._all;
+    }
+
+    const signalsByType: Record<string, number> = {};
+    for (const row of signalsByTypeRaw) {
+      signalsByType[row.signalType] = row._count._all;
+    }
+
+    reply.code(200).send({
+      ok: true,
+      data: {
+        totalSignals,
+        weeklyCaptures,
+        competitorInsights,
+        marketSignals,
+        aiJobsCompleted,
+        aiJobsFailed,
+        aiJobsRunning,
+        productBrainTotal,
+        extension: {
+          connected:        extensionConnected,
+          lastSeenAt:       extensionStatus?.lastSeenAt?.toISOString() ?? null,
+          extensionVersion: extensionStatus?.extensionVersion ?? null,
+          browserType:      extensionStatus?.browserType ?? null,
+        },
+        topDomains: topDomains.map((d) => ({ domain: d.domain, count: d._count._all })),
+        recentActivity: recentActivity.map((a) => ({
+          action:       a.action,
+          resourceType: a.resourceType,
+          at:           a.createdAt.toISOString(),
+        })),
+        unreadNotifications,
+        brainByType,
+        signalsByType,
+        realtimeConnections,
+      },
+    });
+  });
 }

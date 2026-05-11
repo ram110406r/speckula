@@ -1,5 +1,5 @@
 // Competitor intelligence routes — grouped insights, recent changes, monitored domains.
-// All endpoints are user-scoped (returns data for the authenticated user only).
+// All endpoints are user-scoped and optionally workspace-scoped.
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../lib/db.js';
@@ -17,8 +17,11 @@ export default async function competitorRoutes(fastify: FastifyInstance) {
     const userId = requireUserId(request, reply);
     if (!userId) return;
 
+    const params          = request.query as { workspaceId?: string };
+    const workspaceFilter = params.workspaceId ? { workspaceId: params.workspaceId } : {};
+
     const all = await db.competitorInsight.findMany({
-      where:   { userId },
+      where:   { userId, ...workspaceFilter },
       orderBy: { capturedAt: 'desc' },
       select: {
         id:             true,
@@ -85,24 +88,26 @@ export default async function competitorRoutes(fastify: FastifyInstance) {
     const userId = requireUserId(request, reply);
     if (!userId) return;
 
-    const query = request.query as { type?: string; limit?: string };
+    const query = request.query as { type?: string; limit?: string; workspaceId?: string };
 
     const VALID_TYPES = new Set([
       'pricing', 'positioning', 'onboarding', 'ux',
       'gtm', 'monetization', 'features', 'icp',
     ]);
 
-    const rawLimit = parseInt(query.limit ?? '20', 10);
-    const limit    = Math.min(isNaN(rawLimit) ? 20 : rawLimit, 50);
-    const type     = query.type && VALID_TYPES.has(query.type) ? query.type : undefined;
+    const rawLimit        = parseInt(query.limit ?? '20', 10);
+    const limit           = Math.min(isNaN(rawLimit) ? 20 : rawLimit, 50);
+    const type            = query.type && VALID_TYPES.has(query.type) ? query.type : undefined;
+    const workspaceFilter = query.workspaceId ? { workspaceId: query.workspaceId } : {};
 
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     const where: {
       userId: string;
+      workspaceId?: string;
       capturedAt: { gte: Date };
       insightType?: string;
-    } = { userId, capturedAt: { gte: since30d } };
+    } = { userId, ...workspaceFilter, capturedAt: { gte: since30d } };
     if (type) where.insightType = type;
 
     const [changes, total] = await Promise.all([
@@ -138,9 +143,12 @@ export default async function competitorRoutes(fastify: FastifyInstance) {
     const userId = requireUserId(request, reply);
     if (!userId) return;
 
+    const params          = request.query as { workspaceId?: string };
+    const workspaceFilter = params.workspaceId ? { workspaceId: params.workspaceId } : {};
+
     const grouped = await db.competitorInsight.groupBy({
       by:     ['domain'],
-      where:  { userId },
+      where:  { userId, ...workspaceFilter },
       _count: { _all: true },
       _max:   { capturedAt: true },
       orderBy: { _count: { domain: 'desc' } },

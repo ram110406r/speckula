@@ -11,7 +11,7 @@
 
 import { Worker, type Job } from 'bullmq';
 import { getRedis } from '../lib/redis.js';
-import { QUEUES, type AnalysisJobData, type AnalysisJobResult } from '../lib/queue.js';
+import { QUEUES, moveToDeadLetter, type AnalysisJobData, type AnalysisJobResult } from '../lib/queue.js';
 import { db } from '../lib/db.js';
 import { groqService } from '../services/groqService.js';
 import { productBrainService } from '../services/productBrainService.js';
@@ -237,11 +237,31 @@ export const startAnalysisWorker = (): Worker => {
     {
       connection: getRedis(),
       concurrency: CONCURRENCY,
+      // Stalled job detection — if a job doesn't report progress in 5 minutes, mark stalled.
+      stalledInterval: 30_000,   // check every 30 s
+      maxStalledCount: 2,        // after 2 stalls, mark as failed
+      // Lock settings — prevents two workers from processing the same job.
+      lockDuration:    60_000,   // job lock expires after 60 s
+      lockRenewTime:   15_000,   // renew lock every 15 s during processing
+      // Drain delay — wait 5 s after the last job before shutting down.
+      drainDelay: 5,
     }
   );
 
   _worker.on('completed', (job) => {
     console.log(`[worker] job ${job.id} completed`);
+  });
+
+  _worker.on('stalled', (jobId) => {
+    console.warn(`[worker] job ${jobId} stalled`);
+  });
+
+  _worker.on('error', (err) => {
+    console.error('[worker] worker error:', err);
+  });
+
+  _worker.on('active', (job) => {
+    console.log(`[worker] job ${job.id} started (attempt ${job.attemptsMade + 1})`);
   });
 
   _worker.on('failed', async (job, err) => {
@@ -261,6 +281,13 @@ export const startAnalysisWorker = (): Worker => {
       `Page analysis could not complete: ${err.message}`,
       { jobId: data.jobId }
     ).catch(() => undefined);
+    // On the last retry attempt, move the job to the dead-letter queue for manual inspection.
+    const maxAttempts = job.opts.attempts ?? 3;
+    if (job.attemptsMade >= maxAttempts - 1) {
+      moveToDeadLetter(data, err.message).catch((dlqErr) =>
+        console.error('[worker] failed to move job to DLQ:', dlqErr)
+      );
+    }
   });
 
   console.log(`[worker] analysis worker started (concurrency=${CONCURRENCY})`);

@@ -1,5 +1,5 @@
 // Market signal routes — trend data, opportunity signals, and aggregations.
-// All endpoints are user-scoped (returns data for the authenticated user only).
+// All endpoints are user-scoped and optionally workspace-scoped.
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../lib/db.js';
@@ -21,6 +21,7 @@ export default async function marketRoutes(fastify: FastifyInstance) {
       type?: string;
       limit?: string;
       cursor?: string;
+      workspaceId?: string;
     };
 
     const VALID_TYPES = new Set([
@@ -28,16 +29,18 @@ export default async function marketRoutes(fastify: FastifyInstance) {
       'customer_feedback', 'pricing_change', 'feature_launch',
     ]);
 
-    const rawLimit = parseInt(query.limit ?? '20', 10);
-    const limit    = Math.min(isNaN(rawLimit) ? 20 : rawLimit, 50);
-    const type     = query.type && VALID_TYPES.has(query.type) ? query.type : undefined;
-    const cursor   = query.cursor ? new Date(query.cursor) : undefined;
+    const rawLimit      = parseInt(query.limit ?? '20', 10);
+    const limit         = Math.min(isNaN(rawLimit) ? 20 : rawLimit, 50);
+    const type          = query.type && VALID_TYPES.has(query.type) ? query.type : undefined;
+    const cursor        = query.cursor ? new Date(query.cursor) : undefined;
+    const workspaceFilter = query.workspaceId ? { workspaceId: query.workspaceId } : {};
 
     const where: {
       userId: string;
+      workspaceId?: string;
       signalType?: string;
       detectedAt?: { lt: Date };
-    } = { userId };
+    } = { userId, ...workspaceFilter };
     if (type)   where.signalType  = type;
     if (cursor) where.detectedAt  = { lt: cursor };
 
@@ -58,7 +61,7 @@ export default async function marketRoutes(fastify: FastifyInstance) {
           createdAt:  true,
         },
       }),
-      db.marketSignal.count({ where: { userId, ...(type ? { signalType: type } : {}) } }),
+      db.marketSignal.count({ where: { userId, ...workspaceFilter, ...(type ? { signalType: type } : {}) } }),
     ]);
 
     let nextCursor: string | null = null;
@@ -129,9 +132,13 @@ export default async function marketRoutes(fastify: FastifyInstance) {
     const userId = requireUserId(request, reply);
     if (!userId) return;
 
+    const params         = request.query as { workspaceId?: string };
+    const workspaceFilter = params.workspaceId ? { workspaceId: params.workspaceId } : {};
+
     const opportunities = await db.productBrainEntry.findMany({
       where: {
         userId,
+        ...workspaceFilter,
         entryType:  { in: ['pm_insight', 'strategic_decision'] },
         confidence: { gt: 0.7 },
       },
