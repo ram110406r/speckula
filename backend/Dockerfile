@@ -24,7 +24,7 @@ COPY --from=builder --chown=fastify:nodejs /app/prisma.config.ts ./prisma.config
 USER fastify
 EXPOSE 3001
 
-HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=12 \
-  CMD node -e "fetch('http://127.0.0.1:3001/live').then((res) => { if (!res.ok) process.exit(1); }).catch(() => process.exit(1))"
+HEALTHCHECK --interval=10s --timeout=10s --start-period=180s --retries=30 \
+  CMD node --input-type=module -e "try { const res = await fetch('http://127.0.0.1:3001/live'); await res.text(); process.exit(res.ok ? 0 : 1); } catch { process.exit(1); }"
 
 CMD ["node", "dist/index.js"]
