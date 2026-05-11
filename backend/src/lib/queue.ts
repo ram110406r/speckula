@@ -4,6 +4,8 @@ import { getRedis } from './redis.js';
 export const QUEUES = {
   ANALYSIS:    'analysis',
   DEAD_LETTER: 'analysis:dead-letter',
+  LEARNING:    'learning',
+  ROADMAP:     'roadmap',
 } as const;
 
 type QueueName = typeof QUEUES[keyof typeof QUEUES];
@@ -77,6 +79,38 @@ export const moveToDeadLetter = async (data: AnalysisJobData, error: string): Pr
     failedAt: new Date().toISOString(),
     error,
   });
+};
+
+export interface LearningJobData {
+  outcomeId: string;
+  userId: string;
+  decisionId: string;
+  decisionTitle: string;
+  expectedMetric: string;
+  expectedValue: number;
+  actualValue: number;
+  deviationPct: number;
+  verdict: string;
+}
+
+export interface RoadmapJobData {
+  userId: string;
+  workspaceId: string | null;
+  quarter: string;
+  decisionIds: string[];  // Firestore decision IDs to base roadmap on
+  context: string;        // raw strategic context string
+}
+
+export const enqueueLearning = async (data: LearningJobData): Promise<string> => {
+  const queue = getQueue(QUEUES.LEARNING);
+  const job   = await queue.add('generate-insight', data, { attempts: 2, backoff: { type: 'fixed', delay: 5000 } });
+  return job.id!;
+};
+
+export const enqueueRoadmap = async (data: RoadmapJobData): Promise<string> => {
+  const queue = getQueue(QUEUES.ROADMAP);
+  const job   = await queue.add('generate-roadmap', data, { attempts: 2, backoff: { type: 'fixed', delay: 5000 } });
+  return job.id!;
 };
 
 // Close all queues gracefully.

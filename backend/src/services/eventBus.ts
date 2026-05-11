@@ -5,15 +5,36 @@
 import { getRedis, getRedisSubscriber } from '../lib/redis.js';
 
 export type SpeckulaEvent =
+  // Extension lifecycle
   | { type: 'extension.connected';    userId: string; data: Record<string, unknown> }
   | { type: 'extension.disconnected'; userId: string; data: Record<string, unknown> }
+  // Analysis job
   | { type: 'analysis.started';       userId: string; data: { jobId: string } }
   | { type: 'analysis.progress';      userId: string; data: { jobId: string; progress: number; status: string } }
   | { type: 'analysis.completed';     userId: string; data: { jobId: string; result: unknown } }
   | { type: 'analysis.failed';        userId: string; data: { jobId: string; error: string } }
+  // Intelligence
   | { type: 'insight.created';        userId: string; data: { entryId: string; entryType: string; title: string } }
   | { type: 'market_signal.detected'; userId: string; data: { signalId: string; signalType: string; title: string } }
   | { type: 'competitor.updated';     userId: string; data: { domain: string; insightType: string } }
+  // Decisions & outcomes
+  | { type: 'decision.created';       userId: string; data: { decisionId: string; title: string; score: number } }
+  | { type: 'outcome.recorded';       userId: string; data: { outcomeId: string; decisionId: string; verdict: string } }
+  | { type: 'learning.generated';     userId: string; data: { insightId: string; decisionId: string; confidenceShift: number } }
+  // Execution
+  | { type: 'specification.generated'; userId: string; data: { specId: string; decisionId?: string } }
+  | { type: 'roadmap.generated';      userId: string; data: { itemCount: number; quarter: string } }
+  | { type: 'experiment.started';     userId: string; data: { experimentId: string; title: string } }
+  | { type: 'experiment.completed';   userId: string; data: { experimentId: string; verdict: string } }
+  | { type: 'task.created';           userId: string; data: { taskId: string; title: string } }
+  // Autonomous agent
+  | { type: 'agent.started';          userId: string; data: { runId: string; depth: string } }
+  | { type: 'agent.step';             userId: string; data: { runId: string; step: string; payload?: unknown } }
+  | { type: 'agent.completed';        userId: string; data: { runId: string; verdict: string; tokensUsed: number } }
+  | { type: 'agent.stopped';          userId: string; data: { runId: string } }
+  // Product Brain
+  | { type: 'product_brain.updated';  userId: string; data: { entryId: string; entryType: string; confidence: number } }
+  // Platform
   | { type: 'notification.created';   userId: string; data: { notificationId: string; type: string; title: string } }
   | { type: 'auth.expired';           userId: string; data: Record<string, unknown> };
 

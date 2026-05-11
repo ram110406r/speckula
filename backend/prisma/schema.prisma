@@ -377,3 +377,212 @@ model APIUsage {
   @@index([userId])
   @@index([date])
 }
+
+// =========================
+// WORKSPACE ISOLATION
+// =========================
+
+/// Workspace — shared context for a team. All intelligence is scoped to a workspace.
+model Workspace {
+  id          String   @id @default(uuid())
+  ownerId     String
+  name        String
+  slug        String   @unique
+  description String?
+  metadata    String?  // JSON: plan, logo, settings
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([ownerId])
+  @@index([slug])
+}
+
+/// Workspace membership — roles: owner | editor | viewer.
+model WorkspaceMember {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        String   @default("editor")  // owner | editor | viewer
+  invitedBy   String?
+  joinedAt    DateTime @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+// =========================
+// OUTCOME & LEARNING LOOP
+// =========================
+
+/// Expected vs actual outcome for a decision — triggers the learning loop.
+model Outcome {
+  id                String    @id @default(uuid())
+  userId            String
+  workspaceId       String?
+  decisionId        String    // Firestore decision ID
+  decisionTitle     String
+  // Expected
+  expectedMetric    String    // e.g. "Weekly active users"
+  expectedValue     Float
+  expectedTimeframe String    // e.g. "30 days"
+  // Actual
+  actualValue       Float?
+  observedAt        DateTime?
+  // Computed
+  deviationPct      Float?    // ((actual - expected) / expected) * 100
+  verdict           String?   // exceeded | met | missed | far_off
+  // Status
+  status            String    @default("pending")  // pending | recorded | analyzed
+  confidenceDelta   Float?    // how much confidence changed after outcome
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  learningInsights  LearningInsight[]
+
+  @@index([userId])
+  @@index([decisionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// AI-generated insight explaining why a decision succeeded or failed.
+model LearningInsight {
+  id              String   @id @default(uuid())
+  userId          String
+  workspaceId     String?
+  outcomeId       String
+  decisionId      String
+  insight         String   // main learning text
+  rootCause       String?  // why it played out this way
+  actionableNext  String?  // what to do differently next time
+  confidenceShift Float    @default(0)   // +/- applied to decision confidence
+  tags            String?  // JSON: string[]
+  modelUsed       String
+  tokensUsed      Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  outcome         Outcome  @relation(fields: [outcomeId], references: [id])
+
+  @@index([userId])
+  @@index([outcomeId])
+  @@index([decisionId])
+  @@index([createdAt])
+}
+
+// =========================
+// AUTONOMOUS AGENT RUNS
+// =========================
+
+/// A single Autonomous Mode session — tracks the full multi-step reasoning run.
+model AgentRun {
+  id            String    @id @default(uuid())
+  userId        String
+  workspaceId   String?
+  idea          String    // the input idea/question
+  depth         String    @default("standard")  // quick | standard | deep
+  status        String    @default("running")
+  // running | clarifying | researching | deciding | strategizing | generating_roadmap | completed | stopped | error
+  currentStep   String?
+  steps         String?   // JSON: AgentStep[] — full breadcrumb
+  // Outputs
+  clarifications  String?  // JSON: string[] — questions asked + answers
+  decisions       String?  // JSON: top 3 candidate decisions
+  strategy        String?  // JSON: strategic guidance
+  roadmap         String?  // JSON: 3-phase roadmap
+  verdict         String?  // PROCEED | VALIDATE_FIRST | DO_NOT_BUILD
+  verdictReason   String?
+  // Metadata
+  modelUsed     String?
+  tokensUsed    Int       @default(0)
+  durationMs    Int?
+  error         String?
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// =========================
+// ROADMAPS
+// =========================
+
+/// A roadmap item — quarter-scoped, AI-scored, linked to a decision.
+model RoadmapItem {
+  id            String   @id @default(uuid())
+  userId        String
+  workspaceId   String?
+  title         String
+  description   String?
+  quarter       String   // e.g. "Q2 2026"
+  status        String   @default("planned")  // planned | in_progress | completed | dropped
+  priority      String   @default("medium")   // high | medium | low
+  aiScore       Float?   // 0–1 alignment score from AI
+  aiRationale   String?  // why this score
+  decisionId    String?  // optional link to a Firestore decision
+  dependsOn     String?  // JSON: string[] of RoadmapItem IDs
+  tags          String?  // JSON: string[]
+  progress      Int      @default(0)  // 0–100
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([quarter])
+  @@index([status])
+}
+
+// =========================
+// EXPERIMENTS
+// =========================
+
+/// An A/B or multivariate experiment.
+model Experiment {
+  id             String              @id @default(uuid())
+  userId         String
+  workspaceId    String?
+  title          String
+  hypothesis     String
+  targetMetric   String
+  status         String              @default("planned")
+  // planned | running | paused | completed | abandoned
+  startedAt      DateTime?
+  endedAt        DateTime?
+  aiInsight      String?            // AI-generated interpretation of results
+  tags           String?            // JSON: string[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  deletedAt      DateTime?
+
+  variants       ExperimentVariant[]
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// A variant within an experiment (including control).
+model ExperimentVariant {
+  id             String     @id @default(uuid())
+  experimentId   String
+  name           String     // e.g. "Control", "Variant A"
+  isControl      Boolean    @default(false)
+  impressions    Int        @default(0)
+  conversions    Int        @default(0)
+  // Stats (computed server-side)
+  conversionRate Float?
+  lift           Float?     // vs control, %
+  pValue         Float?
+  significant    Boolean?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  experiment     Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@index([experimentId])
+}

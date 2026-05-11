@@ -18,6 +18,12 @@ import analyticsRoutes from './routes/analyticsRoutes.js';
 import marketRoutes from './routes/marketRoutes.js';
 import competitorRoutes from './routes/competitorRoutes.js';
 import agentRoutes from './routes/agentRoutes.js';
+import workspaceRoutes from './routes/workspaceRoutes.js';
+import outcomeRoutes from './routes/outcomeRoutes.js';
+import learningRoutes from './routes/learningRoutes.js';
+import roadmapRoutes from './routes/roadmapRoutes.js';
+import experimentRoutes from './routes/experimentRoutes.js';
+import agentRunRoutes from './routes/agentRunRoutes.js';
 import { verifyFirebaseAuth } from './lib/firebaseAuth.js';
 import { validateEnv } from './lib/env.js';
 import { startAnalysisWorker } from './workers/analysisWorker.js';
@@ -249,6 +255,78 @@ export const createServer = async () => {
       await instance.register(userRoutes);
     },
     { prefix: '/user' }
+  );
+
+  // Workspace routes: 60 req/hr.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+      });
+      await instance.register(workspaceRoutes);
+    },
+    { prefix: '/workspaces' }
+  );
+
+  // Outcome routes: 120 req/hr (recording + retrieval).
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 120, timeWindow: '1 hour' } };
+      });
+      await instance.register(outcomeRoutes);
+    },
+    { prefix: '/outcomes' }
+  );
+
+  // Learning insight routes: 60 req/hr.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+      });
+      await instance.register(learningRoutes);
+    },
+    { prefix: '/learning' }
+  );
+
+  // Roadmap routes: 60 req/hr (AI generation is the expensive call).
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+      });
+      await instance.register(roadmapRoutes);
+    },
+    { prefix: '/roadmaps' }
+  );
+
+  // Experiment routes: 120 req/hr (frequent variant updates during live tests).
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 120, timeWindow: '1 hour' } };
+      });
+      await instance.register(experimentRoutes);
+    },
+    { prefix: '/experiments' }
+  );
+
+  // Agent run routes: 60 req/hr.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+      });
+      await instance.register(agentRunRoutes);
+    },
+    { prefix: '/agent-runs' }
   );
 
   await fastify.register(slackRoutes,      { prefix: '/slack' });
