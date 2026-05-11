@@ -91,17 +91,15 @@ Services: `db` (PostgreSQL + pgvector), `redis`, `backend` (Fastify), `worker` (
 
 ## 6. Database Migrations
 
-Migrations run automatically on backend container startup:
-
-```bash
-# Entrypoint in docker-compose.yml:
-npx prisma migrate deploy && node dist/index.js
-```
+In Docker Compose / Dokploy, migrations run via a dedicated one-off `migrate` service
+that completes before `backend` and `worker` start.
 
 To run migrations manually:
 
 ```bash
-docker compose exec backend npx prisma migrate deploy
+docker compose run --rm migrate
+# or:
+docker compose exec backend ./node_modules/.bin/prisma migrate deploy
 ```
 
 To reset the database in development:
@@ -131,16 +129,16 @@ Each worker reads `ANALYSIS_WORKER_CONCURRENCY` (default `5`) for BullMQ concurr
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
-| `GET /health` | None | Liveness — returns `{ ok: true }` |
-| `GET /health/metrics` | `Authorization: Bearer $METRICS_TOKEN` | Detailed stats (jobs, DB pool, Redis) |
-| `GET /ws/connections` | `Authorization: Bearer $METRICS_TOKEN` | Live WebSocket connection count |
+| `GET /live` | None | Liveness — always returns `200 { status: 'ok' }` |
+| `GET /health` | None | Readiness — checks DB + Firebase; returns 200 or 503 |
+| `GET /health/metrics` | `x-metrics-token: $METRICS_TOKEN` (optional) | Operational metrics snapshot |
 
 ```bash
-# Basic liveness
-curl https://yourdomain.com/api/health
+# From inside the Docker network (recommended):
+docker compose exec backend node -e "fetch('http://127.0.0.1:3001/live').then(r=>r.text()).then(console.log)"
 
-# Metrics (requires METRICS_TOKEN)
-curl -H "Authorization: Bearer $METRICS_TOKEN" https://yourdomain.com/api/health/metrics
+# Metrics (only enforced if METRICS_TOKEN is set)
+docker compose exec backend node -e "fetch('http://127.0.0.1:3001/health/metrics',{headers:{'x-metrics-token':process.env.METRICS_TOKEN||''}}).then(r=>r.text()).then(console.log)"
 ```
 
 ---

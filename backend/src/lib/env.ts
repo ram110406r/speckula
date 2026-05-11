@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+const emptyStringToUndefined = (value: unknown) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : value;
+};
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
@@ -14,8 +20,7 @@ const envSchema = z.object({
   // connection (Prisma migrate deploy requires a non-pooled connection).
   DATABASE_URL: z.string().url('DATABASE_URL must be a valid postgresql:// URL'),
   DIRECT_DATABASE_URL: z
-    .string()
-    .url('DIRECT_DATABASE_URL must be a valid postgresql:// URL')
+    .preprocess(emptyStringToUndefined, z.string().url('DIRECT_DATABASE_URL must be a valid postgresql:// URL'))
     .optional(),
 
   // Groq — all keys issued by console.groq.com start with "gsk_".
@@ -32,14 +37,16 @@ const envSchema = z.object({
   // Use FIREBASE_PRIVATE_KEY_B64 in environments where multiline values
   // break the .env file parser (e.g. Dokploy/Docker Compose).
   FIREBASE_PRIVATE_KEY: z.string().optional(),
-  FIREBASE_PRIVATE_KEY_B64: z.string().optional(),
+  FIREBASE_PRIVATE_KEY_B64: z.preprocess(emptyStringToUndefined, z.string()).optional(),
 
   // CORS — exact origin the frontend is served from. No trailing slash.
   FRONTEND_URL: z
-    .string()
-    .url('FRONTEND_URL must be a valid URL, e.g. https://app.Speckula.io')
+    .preprocess(
+      emptyStringToUndefined,
+      z.string().url('FRONTEND_URL must be a valid URL, e.g. https://app.Speckula.io')
+    )
     .optional(),
-  FRONTEND_URLS: z.string().optional(),
+  FRONTEND_URLS: z.preprocess(emptyStringToUndefined, z.string()).optional(),
 
   // Prompt cache TTL in minutes (default 60 = 1 hour).
   AI_CACHE_TTL_MINUTES: z.coerce.number().int().min(1).default(60),
@@ -49,29 +56,36 @@ const envSchema = z.object({
   DAILY_TOKEN_QUOTA: z.coerce.number().int().min(0).default(200_000),
 
   // Sentry — optional, error tracking.
-  SENTRY_DSN: z.string().url().optional(),
+  SENTRY_DSN: z.preprocess(emptyStringToUndefined, z.string().url()).optional(),
 
   // Optional Slack OAuth credentials (only needed if Slack integration is enabled).
-  SLACK_CLIENT_ID: z.string().optional(),
-  SLACK_CLIENT_SECRET: z.string().optional(),
-  SLACK_REDIRECT_URI: z.string().url().optional(),
-  SLACK_SIGNING_SECRET: z.string().optional(),
+  SLACK_CLIENT_ID: z.preprocess(emptyStringToUndefined, z.string()).optional(),
+  SLACK_CLIENT_SECRET: z.preprocess(emptyStringToUndefined, z.string()).optional(),
+  SLACK_REDIRECT_URI: z.preprocess(emptyStringToUndefined, z.string().url()).optional(),
+  SLACK_SIGNING_SECRET: z.preprocess(emptyStringToUndefined, z.string()).optional(),
   // 64-char hex (32 bytes). Required when Slack integration is enabled.
   // Accepts hex (64 chars) or base64 (44 chars) encoded 32-byte keys.
   // Generate hex:    node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"
   // Generate base64: openssl rand -base64 32
   SLACK_TOKEN_ENCRYPTION_KEY: z
-    .string()
-    .min(32, 'SLACK_TOKEN_ENCRYPTION_KEY must be at least 32 characters')
+    .preprocess(
+      emptyStringToUndefined,
+      z.string().min(32, 'SLACK_TOKEN_ENCRYPTION_KEY must be at least 32 characters')
+    )
     .optional(),
 
   // How many days to keep PromptLog / DecisionReasoning rows (default 60).
   RETENTION_DAYS: z.coerce.number().int().min(1).default(60),
 
   // Resend — transactional email (weekly digest). Get key at resend.com.
-  RESEND_API_KEY: z.string().startsWith('re_', 'RESEND_API_KEY must start with "re_". Get one at resend.com').optional(),
+  RESEND_API_KEY: z
+    .preprocess(
+      emptyStringToUndefined,
+      z.string().startsWith('re_', 'RESEND_API_KEY must start with "re_". Get one at resend.com')
+    )
+    .optional(),
   // From-address for outbound email (e.g. "SPECKULA <digest@speckula.io>").
-  RESEND_FROM_EMAIL: z.string().email().optional(),
+  RESEND_FROM_EMAIL: z.preprocess(emptyStringToUndefined, z.string().email()).optional(),
 
   // Redis — required for BullMQ job queue, event bus, and WebSocket pub/sub.
   // Falls back to localhost in development; in production must be set.
@@ -79,14 +93,19 @@ const envSchema = z.object({
 
   // OpenAI — optional, used for text embeddings (semantic Product Brain search).
   // If unset, embedding generation is skipped and semantic search is unavailable.
-  OPENAI_API_KEY: z.string().startsWith('sk-', 'OPENAI_API_KEY must start with "sk-"').optional(),
+  OPENAI_API_KEY: z
+    .preprocess(
+      emptyStringToUndefined,
+      z.string().startsWith('sk-', 'OPENAI_API_KEY must start with "sk-"')
+    )
+    .optional(),
   OPENAI_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
 
   // Analysis worker concurrency — number of parallel AI jobs per worker process.
   ANALYSIS_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(5),
 
   // Metrics token — optional, gates the /ai/internal/metrics endpoint.
-  METRICS_TOKEN: z.string().min(16).optional(),
+  METRICS_TOKEN: z.preprocess(emptyStringToUndefined, z.string().min(16)).optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
