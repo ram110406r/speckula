@@ -24,7 +24,7 @@ COPY --from=builder --chown=fastify:nodejs /app/prisma.config.ts ./prisma.config
 USER fastify
 EXPOSE 3001
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=12 \
   CMD wget -qO- http://localhost:3001/health || exit 1
 
 CMD ["node", "dist/index.js"]
