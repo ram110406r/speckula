@@ -255,7 +255,7 @@ export function SlackView() {
       setStatusMessage(
         `Ingested ${messageCount} message${messageCount === 1 ? "" : "s"} from #${channel.name} — ${insightsCount} insight${insightsCount === 1 ? "" : "s"} extracted.`
       );
-      setActiveView("insights");
+      setActiveView("market-intelligence");
     } catch (err) {
       setStatusMessage(`Analyze failed: ${(err as Error).message}`);
     } finally {

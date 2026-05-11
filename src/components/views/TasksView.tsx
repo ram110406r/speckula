@@ -821,7 +821,7 @@ export function TasksView() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => { setPendingPRDId(selectedTask.prdId!); setActiveView("prds"); setSelectedTask(null); }}
+                    onClick={() => { setPendingPRDId(selectedTask.prdId!); setActiveView("specifications"); setSelectedTask(null); }}
                   >
                     <FileText className="mr-1.5 h-3.5 w-3.5" /> View Spec
                   </Button>

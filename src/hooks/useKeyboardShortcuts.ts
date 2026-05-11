@@ -6,12 +6,12 @@ import { useAppStore, type AppView } from "@/store/useAppStore";
 const VIEW_KEYS: Record<string, AppView> = {
   "1": "autonomous",
   "2": "editor",
-  "3": "insights",
+  "3": "market-intelligence",
   "4": "decisions",
-  "5": "prds",
+  "5": "specifications",
   "6": "tasks",
-  "7": "platform",
-  "8": "slack",
+  "7": "projects",
+  "8": "integrations",
 };
 
 export function useKeyboardShortcuts(onNewDoc?: () => void) {
