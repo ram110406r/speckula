@@ -5,6 +5,16 @@ import { getQueue, QUEUES } from '../lib/queue.js';
 
 export default async function healthRoutes(fastify: FastifyInstance) {
   fastify.get(
+    '/live',
+    {
+      config: { rateLimit: false },
+    },
+    async (_req, reply) => {
+      reply.code(200).send({ status: 'ok' });
+    }
+  );
+
+  fastify.get(
     '/health',
     {
       config: { rateLimit: false },
