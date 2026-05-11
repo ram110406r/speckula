@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { ResearchBotIcon } from "@/components/ui/icons/ResearchBotIcon";
 import { useAuth } from "@/lib/firebase/AuthProvider";
-import { useAppStore, type AppView } from "@/store/useAppStore";
+import { useAppStore, type AppView, type SpeckulaDocument } from "@/store/useAppStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { activity } from "@/store/useActivityStore";
 import {
@@ -295,7 +295,7 @@ function NavSection({
 
 interface DocumentsSectionProps {
   user: ReturnType<typeof useAuth>["user"];
-  documents: ReturnType<typeof useAppStore>["documents"];
+  documents: SpeckulaDocument[];
   currentDocId: string | null;
   isCreating: boolean;
   docsError: string | null;

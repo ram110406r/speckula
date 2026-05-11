@@ -16,7 +16,7 @@ export type AppView =
   // PLATFORM
   | 'extension' | 'notifications' | 'settings' | 'profile' | 'help';
 
-interface SpeckulaDocument {
+export interface SpeckulaDocument {
   id: string;
   title: string;
   updatedAt: Timestamp | null;
