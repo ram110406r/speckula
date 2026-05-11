@@ -39,7 +39,7 @@ const navGroups: { label: string; items: GroupedNavItem[] }[] = [
     label: "Evidence",
     items: [
       { icon: FileText, label: "Research", view: "editor" },
-      { icon: Lightbulb, label: "Signals", view: "insights" },
+      { icon: Lightbulb, label: "Signals", view: "market-intelligence" },
     ],
   },
   {
@@ -51,15 +51,15 @@ const navGroups: { label: string; items: GroupedNavItem[] }[] = [
   {
     label: "Verdict",
     items: [
-      { icon: LayoutDashboard, label: "Spec", view: "prds" },
+      { icon: LayoutDashboard, label: "Spec", view: "specifications" },
       { icon: CheckSquare, label: "Tasks", view: "tasks" },
     ],
   },
   {
     label: "Publish",
     items: [
-      { icon: Share2, label: "Cases", view: "platform" },
-      { icon: MessageSquare, label: "Slack", view: "slack" },
+      { icon: Share2, label: "Cases", view: "projects" },
+      { icon: MessageSquare, label: "Slack", view: "integrations" },
     ],
   },
 ];
@@ -67,9 +67,9 @@ const navGroups: { label: string; items: GroupedNavItem[] }[] = [
 
 const nextStepHints: Partial<Record<AppView, string>> = {
   editor: "Add your research, then generate signals →",
-  insights: "Review signals, then score decisions →",
+  "market-intelligence": "Review signals, then score decisions →",
   decisions: "Score a decision, then write the spec →",
-  prds: "Spec approved? Break it into tasks →",
+  specifications: "Spec approved? Break it into tasks →",
   tasks: "Ship it. Then close the loop.",
 };
 
