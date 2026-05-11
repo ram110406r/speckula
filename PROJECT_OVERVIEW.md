@@ -415,4 +415,4 @@ See [.env.example](.env.example) and [backend/.env.example](backend/.env.example
 | `AI_CACHE_TTL_MINUTES` | Prompt cache TTL (default `60`) |
 | `DAILY_TOKEN_QUOTA` | Per-user daily token cap (default `200000`) |
 | `RETENTION_DAYS` | Days to keep PromptLog/DecisionReasoning (default `60`) |
-| `PORT` | Fastify listen port (default `3001`) |
+| `PORT` | Fastify listen port (default `3001`)
