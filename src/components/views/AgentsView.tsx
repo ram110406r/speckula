@@ -19,8 +19,11 @@ import {
   Shield,
   Target,
   ChevronRight,
+  Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAgents, useAgentJobs } from "@/hooks/useAgents";
+import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,7 +31,7 @@ import { Button } from "@/components/ui/button";
 
 type AgentStatus = "running" | "idle" | "scheduled";
 type AgentType = "intelligence" | "synthesis" | "analysis" | "delivery";
-type LogStatus = "success" | "alert";
+type LogStatus = "success" | "alert" | "info" | "error";
 
 interface Agent {
   id: string;
@@ -207,6 +210,15 @@ const TYPE_ICON: Record<AgentType, React.ElementType> = {
   delivery: Zap,
 };
 
+/** Map a backend agent type string to our AgentType union (best-effort). */
+function toAgentType(raw: string): AgentType {
+  const lower = raw.toLowerCase();
+  if (lower.includes("intel") || lower.includes("scan") || lower.includes("watch")) return "intelligence";
+  if (lower.includes("synth") || lower.includes("digest")) return "synthesis";
+  if (lower.includes("deliv") || lower.includes("notify")) return "delivery";
+  return "analysis";
+}
+
 function StatusIndicator({ status }: { status: AgentStatus }) {
   if (status === "running") {
     return (
@@ -263,6 +275,49 @@ function MetricCard({ label, value, sub, live = false }: { label: string; value:
   );
 }
 
+/** Skeleton card shown while loading. */
+function AgentCardSkeleton() {
+  return (
+    <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 animate-pulse">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="h-8 w-8 rounded-lg bg-muted shrink-0" />
+          <div className="space-y-1.5">
+            <div className="h-3 w-28 rounded bg-muted" />
+            <div className="h-2.5 w-44 rounded bg-muted/60" />
+          </div>
+        </div>
+        <div className="h-2.5 w-16 rounded bg-muted" />
+      </div>
+      <div className="grid grid-cols-3 gap-3 py-2 border-y border-border/50">
+        <div className="h-8 rounded bg-muted/60" />
+        <div className="h-8 rounded bg-muted/60" />
+        <div className="h-8 rounded bg-muted/60" />
+      </div>
+      <div className="h-8 rounded bg-muted/40" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Data-source badge
+// ---------------------------------------------------------------------------
+
+function DataSourceBadge({ isLive }: { isLive: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+        isLive
+          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+          : "bg-muted/30 border-border text-muted-foreground/60"
+      }`}
+    >
+      <Database className="h-2.5 w-2.5" />
+      {isLive ? "Live data" : "Demo data"}
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Agent Card
 // ---------------------------------------------------------------------------
@@ -270,13 +325,18 @@ function MetricCard({ label, value, sub, live = false }: { label: string; value:
 interface AgentCardProps {
   agent: Agent;
   onToggle: (id: string) => void;
+  pulsing?: boolean;
 }
 
-function AgentCard({ agent, onToggle }: AgentCardProps) {
+function AgentCard({ agent, onToggle, pulsing = false }: AgentCardProps) {
   const TypeIcon = TYPE_ICON[agent.type];
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 hover:border-border/80 transition-colors">
+    <div
+      className={`bg-card border rounded-xl p-5 flex flex-col gap-4 hover:border-border/80 transition-colors ${
+        pulsing ? "border-emerald-500/40 shadow-[0_0_0_2px_rgba(16,185,129,0.15)]" : "border-border"
+      }`}
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
@@ -287,6 +347,12 @@ function AgentCard({ agent, onToggle }: AgentCardProps) {
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-[13px] font-semibold text-foreground leading-snug">{agent.name}</h3>
               <TypeBadge type={agent.type} />
+              {pulsing && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-400 animate-pulse">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  ACTIVE
+                </span>
+              )}
             </div>
             <p className="text-[11.5px] text-muted-foreground mt-0.5 leading-snug">{agent.description}</p>
           </div>
@@ -357,7 +423,7 @@ function AgentCard({ agent, onToggle }: AgentCardProps) {
 // Execution Log
 // ---------------------------------------------------------------------------
 
-function ExecutionLog({ entries }: { entries: ExecutionLogEntry[] }) {
+function ExecutionLog({ entries, isLive }: { entries: ExecutionLogEntry[]; isLive: boolean }) {
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
@@ -365,10 +431,14 @@ function ExecutionLog({ entries }: { entries: ExecutionLogEntry[] }) {
           <Activity className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-[13px] font-semibold text-foreground">Execution Log</span>
         </div>
-        <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          LIVE
-        </span>
+        <div className="flex items-center gap-2">
+          {isLive && (
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              LIVE
+            </span>
+          )}
+        </div>
       </div>
       <ul>
         {entries.map((entry, idx) => (
@@ -380,6 +450,8 @@ function ExecutionLog({ entries }: { entries: ExecutionLogEntry[] }) {
             <div className="flex flex-col items-center shrink-0 mt-0.5">
               {entry.status === "success" ? (
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              ) : entry.status === "error" ? (
+                <AlertCircle className="h-4 w-4 text-red-500" />
               ) : (
                 <AlertCircle className="h-4 w-4 text-amber-500" />
               )}
@@ -415,8 +487,16 @@ function ExecutionLog({ entries }: { entries: ExecutionLogEntry[] }) {
 // ---------------------------------------------------------------------------
 
 export function AgentsView() {
-  const [agents, setAgents] = useState<Agent[]>(AGENTS);
+  const [agentOverrides, setAgentOverrides] = useState<Record<string, AgentStatus>>({});
   const [tickCount, setTickCount] = useState(0);
+
+  // Real data from backend
+  const { data: agentsData, loading: agentsLoading } = useAgents();
+  const { data: jobsData } = useAgentJobs();
+  const { lastEvent } = useSpecklaBus();
+
+  // Track which agent is currently pulsing from a WS event
+  const [pulsingJobId, setPulsingJobId] = useState<string | null>(null);
 
   // Simulate live task progress tick
   useEffect(() => {
@@ -426,16 +506,76 @@ export function AgentsView() {
     return () => clearInterval(timer);
   }, []);
 
+  // When a WS event arrives for analysis.completed / analysis.progress, pulse
+  useEffect(() => {
+    if (!lastEvent) return;
+    if (lastEvent.type === "analysis.completed" || lastEvent.type === "analysis.progress") {
+      const jobId = lastEvent.data.jobId;
+      setPulsingJobId(jobId);
+      const t = setTimeout(() => setPulsingJobId(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [lastEvent]);
+
+  // Map real agent data → UI Agent[] format, falling back to mock
+  const hasRealAgents = agentsData?.agents && agentsData.agents.length > 0;
+
+  const displayAgents: Agent[] = hasRealAgents
+    ? agentsData!.agents.map((a) => ({
+        id: a.name.toLowerCase().replace(/\s/g, "-"),
+        name: a.name,
+        description: "AI-powered analysis agent",
+        status: (agentOverrides[a.name.toLowerCase().replace(/\s/g, "-")] ?? a.status) as AgentStatus,
+        type: toAgentType(a.type),
+        lastRun: a.lastActivity ? new Date(a.lastActivity).toLocaleTimeString() : "Never",
+        nextRun: a.status === "running" ? "Continuous" : "On trigger",
+        tasksCompleted: a.completedTotal,
+        successRate:
+          a.completedTotal > 0
+            ? Math.round((a.completedTotal / (a.completedTotal + a.failedTotal)) * 100)
+            : 100,
+        currentTask: a.status === "running" ? "Processing analysis queue..." : null,
+        uptime: "99.0%",
+      }))
+    : AGENTS.map((a) => ({
+        ...a,
+        status: (agentOverrides[a.id] ?? a.status) as AgentStatus,
+      }));
+
+  // Map real jobs → execution log format, falling back to mock
+  const hasRealJobs = jobsData?.jobs && jobsData.jobs.length > 0;
+
+  const displayLog: ExecutionLogEntry[] = hasRealJobs
+    ? jobsData!.jobs.slice(0, 6).map((j) => ({
+        id: j.id,
+        agent: j.pageType ?? "Analysis Engine",
+        action:
+          j.status === "completed"
+            ? "Analysis completed"
+            : j.status === "failed"
+            ? "Analysis failed"
+            : "Processing",
+        detail: j.sourceUrl
+          ? `Analyzed: ${j.sourceUrl.substring(0, 60)}...`
+          : `Job ${j.id.substring(0, 8)}`,
+        time: new Date(j.createdAt).toLocaleTimeString(),
+        status:
+          j.status === "completed"
+            ? "success"
+            : j.status === "failed"
+            ? "error"
+            : "info",
+      }))
+    : EXECUTION_LOG;
+
   const handleToggle = (id: string) => {
-    setAgents((prev) =>
-      prev.map((a) =>
-        a.id === id
-          ? { ...a, status: a.status === "running" ? "idle" : "running", currentTask: a.status === "running" ? null : a.currentTask }
-          : a
-      )
-    );
+    setAgentOverrides((prev) => {
+      const current = prev[id] ?? displayAgents.find((a) => a.id === id)?.status ?? "idle";
+      return { ...prev, [id]: current === "running" ? "idle" : "running" };
+    });
   };
 
+  const agents = displayAgents;
   const running = agents.filter((a) => a.status === "running").length;
   const idle = agents.filter((a) => a.status === "idle").length;
   const scheduled = agents.filter((a) => a.status === "scheduled").length;
@@ -461,7 +601,8 @@ export function AgentsView() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <DataSourceBadge isLive={hasRealAgents ?? false} />
             <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {running} ACTIVE
@@ -486,9 +627,21 @@ export function AgentsView() {
             </span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {agents.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} onToggle={handleToggle} />
-            ))}
+            {agentsLoading && !hasRealAgents
+              ? Array.from({ length: 4 }).map((_, i) => <AgentCardSkeleton key={i} />)
+              : agents.map((agent) => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    onToggle={handleToggle}
+                    pulsing={
+                      pulsingJobId !== null &&
+                      (agent.status === "running" ||
+                        agent.name.toLowerCase().includes("scanner") ||
+                        agent.name.toLowerCase().includes("watcher"))
+                    }
+                  />
+                ))}
           </div>
         </div>
 
@@ -512,7 +665,7 @@ export function AgentsView() {
             <div className="space-y-1">
               <div className="flex items-baseline gap-2">
                 <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
-                  {Math.round(agents.reduce((sum, a) => sum + a.successRate, 0) / agents.length)}%
+                  {Math.round(agents.reduce((sum, a) => sum + a.successRate, 0) / Math.max(agents.length, 1))}%
                 </span>
                 <span className="text-[11px] font-medium text-emerald-500 flex items-center gap-0.5">
                   <TrendingUp className="h-2.5 w-2.5" />
@@ -533,16 +686,18 @@ export function AgentsView() {
             <div className="space-y-1">
               <div className="flex items-baseline gap-2">
                 <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
-                  98.6%
+                  {hasRealAgents ? `${agentsData?.summary?.running ?? running}` : "98.6%"}
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Fleet Uptime</p>
+              <p className="text-[11px] text-muted-foreground">
+                {hasRealAgents ? "Running Now" : "Fleet Uptime"}
+              </p>
             </div>
           </div>
         </div>
 
         {/* Execution log */}
-        <ExecutionLog entries={EXECUTION_LOG} />
+        <ExecutionLog entries={displayLog} isLive={hasRealJobs ?? false} />
 
       </div>
     </div>

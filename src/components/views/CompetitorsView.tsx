@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Target,
   AlertTriangle,
@@ -17,8 +17,11 @@ import {
   DollarSign,
   Shield,
   Lightbulb,
+  Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCompetitors, useCompetitorChanges } from "@/hooks/useCompetitors";
+import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -202,6 +205,19 @@ const MATRIX_ROWS: MatrixRow[] = [
   { feature: "Startup Memory",         speckula: "yes", notion: "no",      linear: "no",      productboard: "no",      figma: "no",      jira: "no"      },
 ];
 
+// ─── Helper to format relative time ──────────────────────────────────────────
+
+function formatTimeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  return `${Math.floor(diffH / 24)}d ago`;
+}
+
 // ─── Helper Components ────────────────────────────────────────────────────────
 
 function ThreatBadge({ level }: { level: ThreatLevel }) {
@@ -240,6 +256,21 @@ function ScoreBar({ score, threat }: { score: number; threat: ThreatLevel }) {
       </div>
       <span className="text-[11px] text-muted-foreground tabular-nums w-7 text-right">{score}</span>
     </div>
+  );
+}
+
+function DataSourceBadge({ isLive, lastUpdated }: { isLive: boolean; lastUpdated?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+        isLive
+          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+          : "bg-muted/30 border-border text-muted-foreground/60"
+      }`}
+    >
+      <Database className="h-2.5 w-2.5" />
+      {isLive ? (lastUpdated ? `Live · ${lastUpdated}` : "Live data") : "Demo data"}
+    </span>
   );
 }
 
@@ -406,11 +437,76 @@ function CompetitorCard({
   );
 }
 
+// ─── Real competitor card (simplified for live data) ─────────────────────────
+
+function RealCompetitorCard({ competitor }: { competitor: { domain: string; competitorName: string; insightTypes: string[]; totalInsights: number; lastCapturedAt: string } }) {
+  return (
+    <div className="bg-card border border-emerald-500/20 rounded-xl p-5 flex flex-col gap-3 hover:border-emerald-500/40 transition-colors">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-base font-semibold text-foreground tracking-tight">{competitor.competitorName}</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded border bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-medium">
+              Live
+            </span>
+          </div>
+          <span className="text-[11px] text-muted-foreground">{competitor.domain}</span>
+        </div>
+        <span className="text-[10px] text-muted-foreground/60 shrink-0">
+          {formatTimeAgo(competitor.lastCapturedAt)}
+        </span>
+      </div>
+
+      <div>
+        <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">Tracked Insight Types</p>
+        <div className="flex flex-wrap gap-1.5">
+          {competitor.insightTypes.map((t) => (
+            <span key={t} className="px-2 py-0.5 rounded-md bg-muted/30 border border-border text-[11px] text-muted-foreground capitalize">
+              {t.replace(/_/g, " ")}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-1 border-t border-border/50 text-[11px] text-muted-foreground">
+        <span>{competitor.totalInsights} insights captured</span>
+        <Button variant="outline" size="sm" className="text-[11px] h-7 px-3">
+          View Analysis
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main View ────────────────────────────────────────────────────────────────
 
 export function CompetitorsView() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [newInsightFlash, setNewInsightFlash] = useState(false);
+
+  // Real data
+  const { data: competitorsData, loading } = useCompetitors();
+  const { data: changesData } = useCompetitorChanges();
+  const { lastEvent } = useSpecklaBus();
+
+  // Flash when a new insight arrives via WS
+  useEffect(() => {
+    if (!lastEvent) return;
+    if (lastEvent.type === "insight.created") {
+      setNewInsightFlash(true);
+      const t = setTimeout(() => setNewInsightFlash(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [lastEvent]);
+
+  const hasRealData = competitorsData?.competitors && competitorsData.competitors.length > 0;
+  const hasRealChanges = changesData?.changes && changesData.changes.length > 0;
+
+  // Most recent change time for "Last updated" badge
+  const lastUpdatedTime = hasRealChanges
+    ? formatTimeAgo(changesData!.changes[0].capturedAt)
+    : undefined;
 
   const filterTabs: { id: FilterTab; label: string }[] = [
     { id: "all", label: "All" },
@@ -433,6 +529,28 @@ export function CompetitorsView() {
     return true;
   });
 
+  // Build the alerts feed: prepend real changes first, then mock
+  const realAlerts = hasRealChanges
+    ? changesData!.changes.slice(0, 5).map((ch) => ({
+        id: ch.id,
+        icon: ch.insightType?.includes("pric") ? DollarSign : Zap,
+        description: `${ch.competitorName}: ${ch.title}`,
+        time: formatTimeAgo(ch.capturedAt),
+        competitor: ch.competitorName,
+        type: ch.insightType?.includes("pric") ? "pricing" : "feature",
+      }))
+    : [];
+
+  const displayAlerts = [
+    ...realAlerts,
+    ...RECENT_ALERTS.filter((a) => !realAlerts.find((r) => r.competitor === a.competitor)),
+  ].slice(0, 7);
+
+  // Summary metrics
+  const trackedCount = hasRealData
+    ? competitorsData!.competitors.length + COMPETITORS.length
+    : COMPETITORS.length;
+
   return (
     <div className="flex flex-col gap-6 p-6 max-w-[1400px] mx-auto">
       {/* ── Page Header ── */}
@@ -442,14 +560,25 @@ export function CompetitorsView() {
             Competitor Intelligence
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Monitoring 5 competitors across 4 categories
+            Monitoring {trackedCount} competitors across 4+ categories
           </p>
         </div>
-        <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
-          <Target className="w-3.5 h-3.5" />
-          Add Competitor
-        </Button>
+        <div className="flex items-center gap-3">
+          <DataSourceBadge isLive={hasRealData ?? false} lastUpdated={lastUpdatedTime} />
+          <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+            <Target className="w-3.5 h-3.5" />
+            Add Competitor
+          </Button>
+        </div>
       </div>
+
+      {/* ── New insight flash banner ── */}
+      {newInsightFlash && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[12px] font-medium animate-pulse">
+          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          New competitor insight detected via live monitoring
+        </div>
+      )}
 
       {/* ── Summary Metrics ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -457,18 +586,22 @@ export function CompetitorsView() {
           <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">
             Competitors Tracked
           </p>
-          <p className="text-2xl font-bold text-foreground tabular-nums">5</p>
-          <p className="text-[11px] text-muted-foreground mt-1">Across 4 categories</p>
+          <p className="text-2xl font-bold text-foreground tabular-nums">{trackedCount}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Across 4+ categories</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">
             Alerts This Week
           </p>
           <div className="flex items-end gap-1">
-            <p className="text-2xl font-bold text-foreground tabular-nums">12</p>
+            <p className="text-2xl font-bold text-foreground tabular-nums">
+              {hasRealChanges ? changesData!.total : 12}
+            </p>
             <Bell className="w-4 h-4 text-amber-400 mb-1" />
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">3 pricing · 9 feature</p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {hasRealChanges ? "From live monitoring" : "3 pricing · 9 feature"}
+          </p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">
@@ -492,36 +625,70 @@ export function CompetitorsView() {
         </div>
       </div>
 
-      {/* ── Filter Tabs ── */}
-      <div className="flex items-center gap-1 bg-muted/20 border border-border rounded-lg p-1 w-fit">
-        {filterTabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveFilter(tab.id)}
-            className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
-              activeFilter === tab.id
-                ? "bg-card text-foreground shadow-sm border border-border"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* ── Live competitors (real data) ── */}
+      {hasRealData && (
+        <div>
+          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-3">
+            Live-Monitored Competitors
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {competitorsData!.competitors.map((c) => (
+              <RealCompetitorCard key={c.domain} competitor={c} />
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* ── Competitor Cards Grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {filteredCompetitors.map((competitor) => (
-          <CompetitorCard
-            key={competitor.id}
-            competitor={competitor}
-            expanded={expandedId === competitor.id}
-            onToggleExpand={() =>
-              setExpandedId(expandedId === competitor.id ? null : competitor.id)
-            }
-          />
-        ))}
-      </div>
+      {/* ── Filter Tabs ── */}
+      {!loading && (
+        <>
+          <div className="flex items-center gap-1 bg-muted/20 border border-border rounded-lg p-1 w-fit">
+            {filterTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                  activeFilter === tab.id
+                    ? "bg-card text-foreground shadow-sm border border-border"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Competitor Cards Grid (mock / reference data) ── */}
+          <div>
+            {hasRealData && (
+              <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-3">
+                Reference Competitors
+              </p>
+            )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {filteredCompetitors.map((competitor) => (
+                <CompetitorCard
+                  key={competitor.id}
+                  competitor={competitor}
+                  expanded={expandedId === competitor.id}
+                  onToggleExpand={() =>
+                    setExpandedId(expandedId === competitor.id ? null : competitor.id)
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Loading skeletons */}
+      {loading && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-5 h-64 animate-pulse" />
+          ))}
+        </div>
+      )}
 
       {/* ── Comparison Matrix ── */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -588,14 +755,22 @@ export function CompetitorsView() {
 
       {/* ── Recent Alerts Feed ── */}
       <div className="bg-card border border-border rounded-xl">
-        <div className="px-5 py-4 border-b border-border">
-          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-0.5">
-            Live Feed
-          </p>
-          <h2 className="text-sm font-semibold text-foreground">Recent Competitor Alerts</h2>
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <div>
+            <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-0.5">
+              Live Feed
+            </p>
+            <h2 className="text-sm font-semibold text-foreground">Recent Competitor Alerts</h2>
+          </div>
+          {hasRealChanges && (
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              LIVE
+            </span>
+          )}
         </div>
         <div className="divide-y divide-border/50">
-          {RECENT_ALERTS.map((alert) => {
+          {displayAlerts.map((alert) => {
             const Icon = alert.icon;
             const iconColor =
               alert.type === "pricing" ? "text-amber-400 bg-amber-500/10" : "text-blue-400 bg-blue-500/10";

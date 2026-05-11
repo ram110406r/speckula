@@ -23,7 +23,12 @@ import {
   ArrowDownRight,
   Radio,
   Shield,
+  Wifi,
+  WifiOff,
+  Puzzle,
 } from "lucide-react";
+import { useDashboard } from "@/hooks/useDashboard";
+import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +50,7 @@ interface FeedItem {
   description: string;
   timeAgo: string;
   category: CategoryKey;
+  isNew?: boolean;
 }
 
 interface Analysis {
@@ -80,10 +86,10 @@ interface Competitor {
 }
 
 // ---------------------------------------------------------------------------
-// Static mock data
+// Static mock data  (kept as permanent fallback)
 // ---------------------------------------------------------------------------
 
-const FEED_ITEMS: FeedItem[] = [
+const MOCK_FEED_ITEMS: FeedItem[] = [
   {
     id: 1,
     icon: Globe,
@@ -156,7 +162,7 @@ const FEED_ITEMS: FeedItem[] = [
   },
 ];
 
-const ANALYSES: Analysis[] = [
+const MOCK_ANALYSES: Analysis[] = [
   {
     id: 1,
     title: "Competitor Positioning Analysis — Figma vs Speckula",
@@ -180,7 +186,7 @@ const ANALYSES: Analysis[] = [
   },
 ];
 
-const MARKET_SIGNALS: MarketSignal[] = [
+const MOCK_MARKET_SIGNALS: MarketSignal[] = [
   { id: 1, label: "AI-native tools adoption", change: 340, up: true },
   { id: 2, label: "PM tool switching intent", change: 127, up: true },
   { id: 3, label: '"Notion alternative" searches', change: 89, up: true },
@@ -188,7 +194,7 @@ const MARKET_SIGNALS: MarketSignal[] = [
   { id: 5, label: "Startup OS category", change: 512, up: true },
 ];
 
-const DECISIONS: Decision[] = [
+const MOCK_DECISIONS: Decision[] = [
   {
     id: 1,
     title: "Launch freemium tier",
@@ -212,13 +218,21 @@ const DECISIONS: Decision[] = [
   },
 ];
 
-const COMPETITORS: Competitor[] = [
+const MOCK_COMPETITORS: Competitor[] = [
   { id: 1, name: "Notion", initial: "N", color: "bg-zinc-700", updatedAgo: "2h ago", stale: false },
   { id: 2, name: "Linear", initial: "L", color: "bg-indigo-700", updatedAgo: "5h ago", stale: false },
   { id: 3, name: "Productboard", initial: "P", color: "bg-violet-700", updatedAgo: "1d ago", stale: false },
   { id: 4, name: "Figma", initial: "F", color: "bg-rose-700", updatedAgo: "3h ago", stale: false },
   { id: 5, name: "Jira", initial: "J", color: "bg-blue-800", updatedAgo: "2d ago", stale: true },
 ];
+
+const MOCK_METRICS = {
+  totalSignals: "847",
+  weeklyCaptures: "34",
+  aiJobsRunning: "12",
+  competitorDomains: "6",
+  activeAgents: "3",
+};
 
 // ---------------------------------------------------------------------------
 // Category badge config
@@ -237,6 +251,50 @@ const CATEGORY_CONFIG: Record<
   experiment: { dot: "bg-orange-500", text: "text-orange-400", label: "experiment" },
   agent: { dot: "bg-teal-500", text: "text-teal-400", label: "agent" },
 };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Map an event type string to a category key for the feed. */
+function eventTypeToCategory(type: string): CategoryKey {
+  if (type.startsWith("analysis")) return "ai";
+  if (type.startsWith("insight")) return "capture";
+  if (type.startsWith("notification")) return "agent";
+  if (type.startsWith("extension")) return "capture";
+  return "ai";
+}
+
+/** Map an event type to a lucide icon component. */
+function eventTypeToIcon(type: string): React.ElementType {
+  if (type === "analysis.completed") return Brain;
+  if (type === "analysis.progress") return Cpu;
+  if (type === "insight.created") return Zap;
+  if (type === "notification.created") return Radio;
+  if (type.startsWith("extension")) return Layers;
+  return Activity;
+}
+
+/** Build a human-readable description from a SpeckulaEvent. */
+function eventToDescription(event: { type: string; data?: Record<string, unknown> }): string {
+  const data = event.data ?? {};
+  switch (event.type) {
+    case "analysis.completed":
+      return `AI analysis complete — ${(data.entriesCreated as number) ?? 0} entries created`;
+    case "analysis.progress":
+      return `Analysis in progress: ${(data.stage as string) ?? "processing"} (${(data.progress as number) ?? 0}%)`;
+    case "insight.created":
+      return `New insight created: ${(data.entryType as string) ?? "entry"}`;
+    case "notification.created":
+      return (data.title as string) ?? "New notification";
+    case "extension.connected":
+      return "Browser extension connected";
+    case "extension.disconnected":
+      return "Browser extension disconnected";
+    default:
+      return `Event: ${event.type}`;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -272,6 +330,7 @@ function TopMetricCard({
   trendLabel,
   live = false,
   liveColor = "bg-emerald-500",
+  loading = false,
 }: {
   label: string;
   value: string;
@@ -279,7 +338,17 @@ function TopMetricCard({
   trendLabel?: string;
   live?: boolean;
   liveColor?: string;
+  loading?: boolean;
 }) {
+  if (loading) {
+    return (
+      <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 min-w-0 animate-pulse">
+        <div className="h-3 w-24 rounded bg-muted" />
+        <div className="h-7 w-16 rounded bg-muted" />
+        <div className="h-3 w-20 rounded bg-muted" />
+      </div>
+    );
+  }
   return (
     <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 min-w-0">
       <div className="flex items-center justify-between gap-2">
@@ -351,23 +420,147 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+/** Small WebSocket connection status badge shown in the page header. */
+function WsStatusBadge({ connected }: { connected: boolean }) {
+  return (
+    <span
+      className={`flex items-center gap-1.5 text-[11px] font-medium ${
+        connected ? "text-emerald-500" : "text-muted-foreground"
+      }`}
+    >
+      {connected ? (
+        <Wifi className="h-3 w-3" />
+      ) : (
+        <WifiOff className="h-3 w-3" />
+      )}
+      {connected ? "Live" : "Offline"}
+    </span>
+  );
+}
+
+/** Banner shown when the browser extension is connected. */
+function ExtensionBanner({
+  version,
+  browser,
+}: {
+  version?: string;
+  browser?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[11px] text-emerald-400">
+      <Puzzle className="h-3 w-3 shrink-0" />
+      <span>
+        Extension connected
+        {version ? ` · v${version}` : ""}
+        {browser ? ` · ${browser}` : ""}
+      </span>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
 export function DashboardView() {
+  // ── Real data ────────────────────────────────────────────────────────────
+  const { data: overview, loading } = useDashboard();
+  const { connected, lastEvent } = useSpecklaBus();
+
+  // ── Local state ──────────────────────────────────────────────────────────
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Live WebSocket events prepended to the feed (max 5 live items shown)
+  const [liveItems, setLiveItems] = useState<FeedItem[]>([]);
+  const liveIdRef = useRef(-1); // negative IDs to avoid collisions with mock data
+
+  // ── Rotate highlighted row in the feed ───────────────────────────────────
+  const feedItems: FeedItem[] = [
+    ...liveItems,
+    ...(overview?.recentActivity
+      ? overview.recentActivity.map(
+          (
+            a: {
+              id?: unknown;
+              type?: string;
+              description?: string;
+              createdAt?: string;
+              category?: string;
+            },
+            idx: number
+          ): FeedItem => ({
+            id: typeof a.id === "number" ? a.id : idx + 1000,
+            icon: eventTypeToIcon(a.type ?? ""),
+            description: a.description ?? eventToDescription({ type: a.type ?? "", data: {} }),
+            timeAgo: a.createdAt
+              ? new Date(a.createdAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "just now",
+            category: (a.category as CategoryKey | undefined) ?? eventTypeToCategory(a.type ?? ""),
+          })
+        )
+      : MOCK_FEED_ITEMS),
+  ];
+
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      setHighlightedIndex((prev) => (prev + 1) % FEED_ITEMS.length);
+      setHighlightedIndex((prev) => (prev + 1) % feedItems.length);
     }, 3000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedItems.length]);
 
+  // ── Inject live WebSocket events into the feed ───────────────────────────
+  useEffect(() => {
+    if (!lastEvent) return;
+    const relevantTypes = ["analysis.completed", "insight.created", "notification.created"];
+    if (!relevantTypes.includes(lastEvent.type)) return;
+
+    const newItem: FeedItem = {
+      id: liveIdRef.current--,
+      icon: eventTypeToIcon(lastEvent.type),
+      description: eventToDescription({
+        type: lastEvent.type,
+        data: ("data" in lastEvent ? lastEvent.data : {}) as Record<string, unknown>,
+      }),
+      timeAgo: "just now",
+      category: eventTypeToCategory(lastEvent.type),
+      isNew: true,
+    };
+
+    setLiveItems((prev) => [newItem, ...prev].slice(0, 5));
+  }, [lastEvent]);
+
+  // ── Derive metrics (real data ?? mock fallback) ───────────────────────────
+  const isMetricsLoading = loading && overview === null;
+
+  const metrics = {
+    totalSignals: overview?.totalSignals != null
+      ? String(overview.totalSignals)
+      : MOCK_METRICS.totalSignals,
+    weeklyCaptures: overview?.weeklyCaptures != null
+      ? String(overview.weeklyCaptures)
+      : MOCK_METRICS.weeklyCaptures,
+    aiJobsRunning: overview?.realtimeConnections != null
+      ? String(overview.realtimeConnections)
+      : MOCK_METRICS.aiJobsRunning,
+    competitorDomains: overview?.competitorInsights != null
+      ? String(overview.competitorInsights)
+      : MOCK_METRICS.competitorDomains,
+    activeAgents: MOCK_METRICS.activeAgents, // no real source yet
+  };
+
+  // ── Extension status ──────────────────────────────────────────────────────
+  const extensionConnected = overview?.extension?.connected === true;
+  const extensionVersion = overview?.extension?.version as string | undefined;
+  const extensionBrowser = overview?.extension?.browser as string | undefined;
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="h-full overflow-y-auto bg-background">
       <div className="max-w-[1280px] mx-auto px-5 py-6 space-y-5">
@@ -389,8 +582,16 @@ export function DashboardView() {
               </p>
             </div>
           </div>
-          <LiveBadge />
+          <div className="flex items-center gap-3">
+            <WsStatusBadge connected={connected} />
+            <LiveBadge />
+          </div>
         </div>
+
+        {/* Extension connected banner (only when real extension is active) */}
+        {extensionConnected && (
+          <ExtensionBanner version={extensionVersion} browser={extensionBrowser} />
+        )}
 
         {/* ----------------------------------------------------------------- */}
         {/* Top metrics row (5 cards)                                          */}
@@ -398,32 +599,37 @@ export function DashboardView() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <TopMetricCard
             label="Signals Captured"
-            value="847"
+            value={metrics.totalSignals}
             trend="↑12%"
             trendLabel="this week"
+            loading={isMetricsLoading}
           />
           <TopMetricCard
             label="Market Trends"
-            value="34"
+            value={metrics.weeklyCaptures}
             trend="↑5 new"
             trendLabel="today"
+            loading={isMetricsLoading}
           />
           <TopMetricCard
             label="AI Analyses Running"
-            value="12"
+            value={metrics.aiJobsRunning}
             live
             liveColor="bg-blue-500"
+            loading={isMetricsLoading}
           />
           <TopMetricCard
             label="Competitors Tracked"
-            value="6"
+            value={metrics.competitorDomains}
             trend="↑1 new"
+            loading={isMetricsLoading}
           />
           <TopMetricCard
             label="Active Agents"
-            value="3"
+            value={metrics.activeAgents}
             live
             liveColor="bg-emerald-500"
+            loading={isMetricsLoading}
           />
         </div>
 
@@ -444,7 +650,7 @@ export function DashboardView() {
                 <LiveBadge />
               </div>
               <ul>
-                {FEED_ITEMS.map((item, idx) => {
+                {feedItems.map((item, idx) => {
                   const Icon = item.icon;
                   const isHighlighted = idx === highlightedIndex;
                   return (
@@ -454,7 +660,7 @@ export function DashboardView() {
                         isHighlighted
                           ? "bg-primary/5"
                           : "hover:bg-muted/40"
-                      }`}
+                      } ${item.isNew ? "ring-1 ring-inset ring-emerald-500/20" : ""}`}
                     >
                       <div className="mt-0.5 h-6 w-6 rounded-md bg-muted flex items-center justify-center shrink-0">
                         <Icon className="h-3.5 w-3.5 text-muted-foreground" />
@@ -469,6 +675,11 @@ export function DashboardView() {
                             {item.timeAgo}
                           </span>
                           <CategoryBadge category={item.category} />
+                          {item.isNew && (
+                            <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                              new
+                            </span>
+                          )}
                         </div>
                       </div>
                       {isHighlighted && (
@@ -489,12 +700,12 @@ export function DashboardView() {
                 badge={
                   <span className="flex items-center gap-1.5 text-[11px] font-medium text-blue-400">
                     <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-                    {ANALYSES.length} running
+                    {MOCK_ANALYSES.length} running
                   </span>
                 }
               />
               <div className="space-y-3">
-                {ANALYSES.map((analysis) => (
+                {MOCK_ANALYSES.map((analysis) => (
                   <div
                     key={analysis.id}
                     className="bg-card border border-border rounded-xl p-4"
@@ -536,7 +747,7 @@ export function DashboardView() {
                 </span>
               </div>
               <ul>
-                {MARKET_SIGNALS.map((signal) => (
+                {MOCK_MARKET_SIGNALS.map((signal) => (
                   <li
                     key={signal.id}
                     className="flex items-center justify-between px-4 py-2.5 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
@@ -568,7 +779,7 @@ export function DashboardView() {
             <div>
               <SectionHeader title="Recent Decisions" />
               <div className="space-y-2.5">
-                {DECISIONS.map((decision) => (
+                {MOCK_DECISIONS.map((decision) => (
                   <div
                     key={decision.id}
                     className="bg-card border border-border rounded-xl p-4 flex items-start gap-3"
@@ -599,7 +810,7 @@ export function DashboardView() {
                 <Shield className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
               <ul>
-                {COMPETITORS.map((comp) => (
+                {MOCK_COMPETITORS.map((comp) => (
                   <li
                     key={comp.id}
                     className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"

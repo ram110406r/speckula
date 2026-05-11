@@ -17,9 +17,12 @@ import {
   BarChart2,
   ChevronRight,
   CheckCircle2,
+  Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useMarketSignals, useMarketTrends } from "@/hooks/useMarketSignals";
+import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -229,6 +232,39 @@ const FILTER_PILLS: { id: FilterKey; label: string }[] = [
   { id: "complaint", label: "Complaints" },
   { id: "launch", label: "Launches" },
 ];
+
+/** Format an ISO timestamp as a relative string. */
+function formatTimeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h`;
+  return `${Math.floor(diffH / 24)}d`;
+}
+
+/** Map a backend signalType to a UI SignalCategory. */
+function mapSignalTypeToCategory(signalType: string): SignalCategory {
+  const t = signalType.toLowerCase();
+  if (t.includes("pain") || t.includes("problem")) return "pain_point";
+  if (t.includes("complaint") || t.includes("frustrat")) return "complaint";
+  if (t.includes("trend") || t.includes("market_shift")) return "trend";
+  if (t.includes("opportun") || t.includes("gap")) return "opportunity";
+  if (t.includes("launch") || t.includes("feature_launch")) return "launch";
+  if (t.includes("competitor")) return "trend";
+  return "trend";
+}
+
+/** Map a backend signalType to a TrendCategory for the sidebar. */
+function mapSignalTypeToTrendCategory(signalType: string): TrendCategory {
+  const t = signalType.toLowerCase();
+  if (t.includes("churn") || t.includes("switching")) return "churn_signal";
+  if (t.includes("competitor") || t.includes("weakness")) return "competitor_weakness";
+  if (t.includes("feature") || t.includes("demand")) return "feature_demand";
+  return "category_creation";
+}
 
 function getSourceBadge(source: string): { bg: string; text: string; dot: string } {
   if (source.toLowerCase().includes("reddit")) {
@@ -464,6 +500,21 @@ function MetricCard({ label, value, sub, icon, accent }: MetricCardProps) {
   );
 }
 
+function DataSourceBadge({ isLive }: { isLive: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+        isLive
+          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+          : "bg-muted/30 border-border text-muted-foreground/60"
+      }`}
+    >
+      <Database className="h-2.5 w-2.5" />
+      {isLive ? "Live data" : "Demo data"}
+    </span>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main View
 // ─────────────────────────────────────────────────────────────────────────────
@@ -473,7 +524,15 @@ export function InsightsView() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [pulseKey, setPulseKey] = useState<number>(0);
+  const [newSignalFlash, setNewSignalFlash] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Real data from backend
+  const { data: signalsData, loading: signalsLoading } = useMarketSignals(
+    activeFilter !== "all" ? activeFilter : undefined
+  );
+  const { data: trendsData } = useMarketTrends();
+  const { lastEvent } = useSpecklaBus();
 
   // Simulate live-update pulse every 30 seconds
   useEffect(() => {
@@ -485,13 +544,22 @@ export function InsightsView() {
     };
   }, []);
 
+  // Flash "New signal detected" when WS delivers an insight
+  useEffect(() => {
+    if (!lastEvent) return;
+    if (lastEvent.type === "insight.created") {
+      setNewSignalFlash(true);
+      const t = setTimeout(() => setNewSignalFlash(false), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [lastEvent]);
+
   const handleAddToBrain = (id: string) => {
     setAddedIds((prev) => {
       const next = new Set(prev);
       next.add(id);
       return next;
     });
-    // Auto-reset after 3s for re-usability
     setTimeout(() => {
       setAddedIds((prev) => {
         const next = new Set(prev);
@@ -501,7 +569,42 @@ export function InsightsView() {
     }, 3000);
   };
 
-  const filteredSignals = SIGNALS.filter((s) => {
+  // Map real signals to UI format
+  const hasRealSignals = signalsData?.signals && signalsData.signals.length > 0;
+
+  const realSignals: Signal[] = hasRealSignals
+    ? signalsData!.signals.map((s) => {
+        let hostname = "SPECKULA AI";
+        if (s.sourceUrl) {
+          try {
+            hostname = new URL(s.sourceUrl).hostname.replace("www.", "");
+          } catch {
+            hostname = s.sourceUrl.substring(0, 30);
+          }
+        }
+        return {
+          id: s.id,
+          source: hostname,
+          category: mapSignalTypeToCategory(s.signalType),
+          sentiment: s.strength > 0.6 ? "positive" : s.strength < 0.4 ? "negative" : "neutral",
+          title: s.title,
+          excerpt: s.content.substring(0, 200),
+          votes: Math.round(s.strength * 1000),
+          comments: Math.round(s.strength * 200),
+          timeAgo: formatTimeAgo(s.detectedAt),
+          trend: s.strength > 0.8 ? "viral" : s.strength > 0.6 ? "rising" : "stable",
+          urgency: s.strength > 0.8 ? "high" : s.strength > 0.5 ? "medium" : "low",
+        };
+      })
+    : [];
+
+  // Merge: real signals first, then mock fill-in (deduplicated by title)
+  const mergedSignals: Signal[] = [
+    ...realSignals,
+    ...SIGNALS.filter((m) => !realSignals.find((r) => r.title === m.title)),
+  ].slice(0, 15);
+
+  const filteredSignals = mergedSignals.filter((s) => {
     const matchesFilter = activeFilter === "all" || s.category === activeFilter;
     const matchesSearch =
       searchQuery.trim() === "" ||
@@ -511,8 +614,24 @@ export function InsightsView() {
     return matchesFilter && matchesSearch;
   });
 
-  const highUrgencyCount = SIGNALS.filter((s) => s.urgency === "high").length;
-  const viralCount = SIGNALS.filter((s) => s.trend === "viral").length;
+  // Map real trends data to UI Trend[] format, fallback to mock
+  const hasRealTrends = trendsData?.byType && trendsData.byType.length > 0;
+
+  const displayTrends: Trend[] = hasRealTrends
+    ? trendsData!.byType.slice(0, 6).map((entry) => ({
+        name: entry.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        growth: `+${Math.round(entry.avgStrength * 100)}%`,
+        volume: `${entry.count} signals`,
+        category: mapSignalTypeToTrendCategory(entry.type),
+        momentum: Math.round(entry.avgStrength * 100),
+      }))
+    : TRENDS;
+
+  const highUrgencyCount = mergedSignals.filter((s) => s.urgency === "high").length;
+  const viralCount = mergedSignals.filter((s) => s.trend === "viral").length;
+
+  // suppress pulseKey — used only to drive re-render
+  void pulseKey;
 
   return (
     <div className="flex flex-col h-full bg-background transition-colors duration-300">
@@ -521,17 +640,31 @@ export function InsightsView() {
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/60">
           MARKET INTELLIGENCE
         </span>
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          </span>
-          <span className="font-mono text-[10px] text-emerald-400">LIVE</span>
+        <div className="flex items-center gap-3">
+          <DataSourceBadge isLive={hasRealSignals ?? false} />
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="font-mono text-[10px] text-emerald-400">LIVE</span>
+          </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-auto custom-scrollbar">
         <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto">
+
+          {/* ── New signal flash banner ───────────────────────────────────── */}
+          {newSignalFlash && (
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[12px] font-medium animate-pulse">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              New signal detected via live monitoring
+            </div>
+          )}
 
           {/* ── Page Header ──────────────────────────────────────────────── */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -549,7 +682,10 @@ export function InsightsView() {
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
               </span>
               <span className="text-[12px] text-muted-foreground font-mono">
-                Updated <span className="text-foreground font-semibold">2 minutes ago</span>
+                {hasRealSignals
+                  ? <span>Live · <span className="text-foreground font-semibold">{signalsData!.total} signals</span></span>
+                  : <>Updated <span className="text-foreground font-semibold">2 minutes ago</span></>
+                }
               </span>
             </div>
           </div>
@@ -558,14 +694,14 @@ export function InsightsView() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricCard
               label="Signals Today"
-              value="47"
-              sub="↑ 23% from yesterday"
+              value={hasRealSignals ? String(signalsData!.total) : "47"}
+              sub={hasRealSignals ? "from live sources" : "↑ 23% from yesterday"}
               icon={<Zap className="h-3.5 w-3.5 text-amber-400" />}
               accent="bg-amber-500/10"
             />
             <MetricCard
               label="Trending Topics"
-              value="6"
+              value={String(displayTrends.length)}
               sub={`${viralCount} viral right now`}
               icon={<Flame className="h-3.5 w-3.5 text-red-400" />}
               accent="bg-red-500/10"
@@ -629,7 +765,16 @@ export function InsightsView() {
                 </span>
               </div>
 
-              {filteredSignals.length === 0 ? (
+              {/* Loading skeleton */}
+              {signalsLoading && !hasRealSignals && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="h-40 rounded-xl border border-border bg-card animate-pulse" />
+                  ))}
+                </div>
+              )}
+
+              {!signalsLoading && filteredSignals.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 rounded-xl border-2 border-dashed border-border text-center p-6">
                   <AlertTriangle className="h-6 w-6 text-muted-foreground/40 mb-3" />
                   <p className="text-sm text-muted-foreground">No signals match this filter.</p>
@@ -661,7 +806,7 @@ export function InsightsView() {
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  {TRENDS.map((trend) => {
+                  {displayTrends.map((trend) => {
                     const badge = getTrendCategoryBadge(trend.category);
                     return (
                       <div

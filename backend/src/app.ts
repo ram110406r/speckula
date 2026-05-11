@@ -15,6 +15,9 @@ import websocketRoutes from './routes/websocketRoutes.js';
 import productBrainRoutes from './routes/productBrainRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
+import marketRoutes from './routes/marketRoutes.js';
+import competitorRoutes from './routes/competitorRoutes.js';
+import agentRoutes from './routes/agentRoutes.js';
 import { verifyFirebaseAuth } from './lib/firebaseAuth.js';
 import { validateEnv } from './lib/env.js';
 import { startAnalysisWorker } from './workers/analysisWorker.js';
@@ -198,6 +201,42 @@ export const createServer = async () => {
       await instance.register(analyticsRoutes);
     },
     { prefix: '/analytics' }
+  );
+
+  // Market signal routes: 60 req/hr.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+      });
+      await instance.register(marketRoutes);
+    },
+    { prefix: '/market' }
+  );
+
+  // Competitor intelligence routes: 60 req/hr.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+      });
+      await instance.register(competitorRoutes);
+    },
+    { prefix: '/competitors' }
+  );
+
+  // Agent status routes: 60 req/hr.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', verifyFirebaseAuth);
+      instance.addHook('onRoute', (route) => {
+        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+      });
+      await instance.register(agentRoutes);
+    },
+    { prefix: '/agents' }
   );
 
   // User routes: low limit (destructive operations).
