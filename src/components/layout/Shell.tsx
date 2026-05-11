@@ -21,6 +21,7 @@ const ProfileView       = dynamic(() => import("../views/ProfileView").then(m =>
 const HelpView          = dynamic(() => import("../views/HelpView").then(m => ({ default: m.HelpView })), { ssr: false });
 const SettingsView      = dynamic(() => import("../views/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
 import { ModernSidebar } from "@/components/ui/modern-side-bar";
+import { ViewErrorBoundary } from "@/components/ui/ViewErrorBoundary";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { LandingPage } from "./LandingPage";
 import { Loader2, Sparkles, ChevronRight, CheckCircle2 } from "lucide-react";
@@ -133,6 +134,20 @@ export function Shell() {
     if (activeView === "autonomous") setAutonomousMounted(true);
   }, [activeView]);
 
+  // True when viewport is >= lg (1024px). Initialised synchronously from
+  // window so there is no flash on client-only renders. Used to ensure only
+  // one <AIPanel> instance is ever mounted at a time (desktop column vs mobile
+  // overlay) — two concurrent instances would fire duplicate analysis timers.
+  const [isDesktopPanel, setIsDesktopPanel] = React.useState<boolean>(
+    () => typeof window !== "undefined" ? window.innerWidth >= 1024 : false
+  );
+  React.useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const onChange = (e: MediaQueryListEvent) => setIsDesktopPanel(e.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
   if (loading) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -152,23 +167,26 @@ export function Shell() {
   const activityText = formatRelativeActivity(currentDoc?.updatedAt);
 
   const renderMainView = () => {
+    const wrap = (name: string, node: React.ReactNode) => (
+      <ViewErrorBoundary viewName={name}>{node}</ViewErrorBoundary>
+    );
     switch (activeView) {
-      case "insights":      return <InsightsView />;
-      case "prds":          return <PRDsView />;
-      case "tasks":         return <TasksView />;
-      case "decisions":     return <DecisionView />;
-      case "platform":      return <PlatformView />;
-      case "slack":         return <SlackView />;
-      case "workspace":     return <WorkspaceView />;
-      case "notifications": return <NotificationsView />;
-      case "billing":       return <BillingView />;
-      case "extension":     return <ExtensionView />;
-      case "activity":      return <ActivityView />;
-      case "profile":       return <ProfileView />;
-      case "help":          return <HelpView />;
-      case "settings":      return <SettingsView />;
+      case "insights":      return wrap("Insights", <InsightsView />);
+      case "prds":          return wrap("PRDs", <PRDsView />);
+      case "tasks":         return wrap("Tasks", <TasksView />);
+      case "decisions":     return wrap("Decisions", <DecisionView />);
+      case "platform":      return wrap("Platform", <PlatformView />);
+      case "slack":         return wrap("Slack", <SlackView />);
+      case "workspace":     return wrap("Workspace", <WorkspaceView />);
+      case "notifications": return wrap("Notifications", <NotificationsView />);
+      case "billing":       return wrap("Billing", <BillingView />);
+      case "extension":     return wrap("Extension", <ExtensionView />);
+      case "activity":      return wrap("Activity", <ActivityView />);
+      case "profile":       return wrap("Profile", <ProfileView />);
+      case "help":          return wrap("Help", <HelpView />);
+      case "settings":      return wrap("Settings", <SettingsView />);
       // "autonomous" is rendered persistently below — not here
-      default:              return <Editor />;
+      default:              return wrap("Editor", <Editor />);
     }
   };
 
@@ -250,13 +268,19 @@ export function Shell() {
 
         {showAIPanel && (
           <div className="hidden min-h-0 border-l border-border/70 bg-muted/40 lg:block">
-            <AIPanel />
+            {/* Only mount AIPanel when this column is actually visible (lg+).
+                The mobile overlay below renders the same component on smaller
+                screens. Never mounting both at once prevents duplicate timers,
+                analysis calls, and subscriptions from the two instances. */}
+            {isDesktopPanel && <AIPanel />}
           </div>
         )}
       </div>
 
       {/* ── Mobile AI panel overlay (xs/sm/md — below lg) ── */}
-      {showAIPanel && (
+      {/* Only rendered when below the lg breakpoint so AIPanel is never
+          mounted twice alongside the desktop column above. */}
+      {showAIPanel && !isDesktopPanel && (
         <>
           {/* Backdrop */}
           <div

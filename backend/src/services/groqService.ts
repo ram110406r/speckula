@@ -41,12 +41,16 @@ const warnDbDegraded = (op: string, error: unknown) => {
 };
 
 const MODELS = {
-  fast: "llama-3.3-70b-versatile",
+  // Short, latency-sensitive calls (pattern analysis, signal scanning, task
+  // suggestion). ~8x cheaper than the reasoning model.
+  fast: "llama-3.1-8b-instant",
+  // Deeper reasoning: decision scoring, PRD generation, insight extraction.
   reasoning: "llama-3.3-70b-versatile",
 };
 
-// Llama 3.3 70B Versatile, USD per million tokens.
+// USD per million tokens (Groq console.groq.com pricing as of 2026-05).
 const RATES: Record<string, { input: number; output: number }> = {
+  "llama-3.1-8b-instant":    { input: 0.05, output: 0.08 },
   "llama-3.3-70b-versatile": { input: 0.59, output: 0.79 },
 };
 
