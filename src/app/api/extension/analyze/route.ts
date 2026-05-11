@@ -1,25 +1,43 @@
-import { NextRequest, NextResponse } from "next/server";
+export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest) {
+import { backendUrl } from '@/lib/env';
+
+const PROXY_TIMEOUT_MS = 30_000;
+
+export async function POST(req: Request) {
+  const auth = req.headers.get('authorization');
+  if (!auth) {
+    return new Response(JSON.stringify({ ok: false, error: 'Authorization header required.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const rawBody = await req.text();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+  req.signal.addEventListener('abort', () => controller.abort(), { once: true });
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const upstream = await fetch(`${backendUrl()}/extension/analyze`, {
+      method: 'POST',
+      headers: { authorization: auth, 'Content-Type': 'application/json' },
+      body: rawBody || undefined,
+      signal: controller.signal,
+    });
 
-    const body = await req.json();
-    const { content, pageType, selectedText } = body;
-
-    if (!content || !pageType) {
-      return NextResponse.json({ error: "content and pageType are required" }, { status: 400 });
-    }
-
-    // Generate a unique job ID and return immediately — actual processing
-    // would be handled by an async worker writing to Firestore.
-    const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-
-    return NextResponse.json({ jobId, status: "queued" }, { status: 202 });
-  } catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    const data = await upstream.json();
+    return new Response(JSON.stringify(data), {
+      status: upstream.status,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Backend unreachable.';
+    return new Response(JSON.stringify({ ok: false, error: `Backend unreachable: ${message}` }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

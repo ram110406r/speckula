@@ -1,72 +1,61 @@
-import { NextRequest, NextResponse } from "next/server";
-import { extractBearerToken, extractUidFromToken } from "@/lib/firebase/serverAuth";
+export const dynamic = 'force-dynamic';
 
-// In production: proxy to a real job queue service (Fastify backend, Redis BullMQ, etc.)
-// For now: return a plausible job status with progress and stage info.
+import { backendUrl } from '@/lib/env';
 
-const JOB_TTL_MS = 24 * 60 * 60 * 1000; // jobs expire after 24h
+const PROXY_TIMEOUT_MS = 15_000;
+
+async function proxy(
+  req: Request,
+  jobId: string,
+  method: 'GET' | 'DELETE',
+): Promise<Response> {
+  const auth = req.headers.get('authorization');
+  if (!auth) {
+    return new Response(JSON.stringify({ ok: false, error: 'Authorization header required.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+  req.signal.addEventListener('abort', () => controller.abort(), { once: true });
+
+  try {
+    const upstream = await fetch(`${backendUrl()}/extension/jobs/${encodeURIComponent(jobId)}`, {
+      method,
+      headers: { authorization: auth },
+      signal: controller.signal,
+    });
+
+    const data = await upstream.json();
+    return new Response(JSON.stringify(data), {
+      status: upstream.status,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Backend unreachable.';
+    return new Response(JSON.stringify({ ok: false, error: `Backend unreachable: ${message}` }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> }
+  req: Request,
+  { params }: { params: Promise<{ jobId: string }> },
 ) {
-  const token = extractBearerToken(req.headers.get("Authorization"));
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const uid = extractUidFromToken(token);
-  if (!uid) {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-  }
-
   const { jobId } = await params;
-  if (!jobId) {
-    return NextResponse.json({ error: "jobId is required" }, { status: 400 });
-  }
-
-  const now = Date.now();
-  const expiresAt = new Date(now + JOB_TTL_MS).toISOString();
-
-  return NextResponse.json({
-    jobId,
-    status: "completed",
-    progress: 100,
-    currentStage: "done",
-    stages: [
-      { name: "extracting",  label: "Extracting content", done: true  },
-      { name: "processing",  label: "Processing with AI",  done: true  },
-      { name: "classifying", label: "Classifying signal",  done: true  },
-      { name: "done",        label: "Complete",             done: true  },
-    ],
-    insight: {
-      id: jobId,
-      type: "competitive_intelligence",
-      summary: "Page analysed successfully.",
-      evidence: [],
-      tags: [],
-      confidence: 0.85,
-      sourceUrl: "",
-      timestamp: new Date().toISOString(),
-    },
-    expiresAt,
-  });
+  return proxy(req, jobId, 'GET');
 }
 
 export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> }
+  req: Request,
+  { params }: { params: Promise<{ jobId: string }> },
 ) {
-  const token = extractBearerToken(req.headers.get("Authorization"));
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const uid = extractUidFromToken(token);
-  if (!uid) {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-  }
-
   const { jobId } = await params;
-  return NextResponse.json({ jobId, status: "cancelled" });
+  return proxy(req, jobId, 'DELETE');
 }
