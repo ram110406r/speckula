@@ -25,6 +25,6 @@ USER fastify
 EXPOSE 3001
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=12 \
-  CMD wget -qO- http://localhost:3001/live || exit 1
+  CMD node -e "fetch('http://127.0.0.1:3001/live').then((res) => { if (!res.ok) process.exit(1); }).catch(() => process.exit(1))"
 
 CMD ["node", "dist/index.js"]
