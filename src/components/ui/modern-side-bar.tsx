@@ -28,7 +28,6 @@ import {
   Settings,
   HelpCircle,
   Activity,
-  CreditCard,
 } from "lucide-react";
 import { ResearchBotIcon } from "@/components/ui/icons/ResearchBotIcon";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -63,7 +62,6 @@ const NAV_ITEMS: NavItem[] = [
   { icon: Puzzle,        label: "Extension",        view: "extension",     group: "Platform" },
   { icon: Activity,      label: "Activity",         view: "activity",      group: "Platform" },
   { icon: Bell,          label: "Notifications",    view: "notifications", group: "Platform" },
-  { icon: CreditCard,    label: "Billing",          view: "billing",       group: "Platform" },
   { icon: Settings,      label: "Settings",         view: "settings",      group: "Account"  },
   { icon: UserIcon,      label: "Profile",          view: "profile",       group: "Account"  },
   { icon: HelpCircle,    label: "Help",             view: "help",          group: "Account"  },

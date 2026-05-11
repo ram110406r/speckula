@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import {
-  Settings, Cpu, Puzzle, Users, Bell, CreditCard,
+  Settings, Cpu, Puzzle, Users, Bell,
   Key, Shield, ChevronRight, Check, Copy, RefreshCw,
   Trash2, Plus, Eye, EyeOff, Globe, Loader2, AlertCircle,
-  Zap, Brain, ToggleLeft, ToggleRight,
+  Brain, ToggleLeft, ToggleRight,
 } from "lucide-react";
 import Image from "next/image";
 
@@ -14,7 +14,7 @@ import Image from "next/image";
 
 type Section =
   | "general" | "ai" | "extension" | "team"
-  | "notifications" | "billing" | "api-keys" | "privacy";
+  | "notifications" | "api-keys" | "privacy";
 
 interface SectionMeta { id: Section; label: string; icon: React.ElementType; }
 
@@ -24,7 +24,6 @@ const SECTIONS: SectionMeta[] = [
   { id: "extension",     label: "Extension",          icon: Puzzle      },
   { id: "team",          label: "Team",               icon: Users       },
   { id: "notifications", label: "Notifications",      icon: Bell        },
-  { id: "billing",       label: "Billing & Usage",    icon: CreditCard  },
   { id: "api-keys",      label: "API Keys",           icon: Key         },
   { id: "privacy",       label: "Privacy & Security", icon: Shield      },
 ];
@@ -487,81 +486,6 @@ function NotificationsSection() {
   );
 }
 
-function BillingSection() {
-  const usages = [
-    { label: "AI Credits", used: 2840, total: 5000, unit: "credits" },
-    { label: "Analyses run", used: 47, total: 100, unit: "analyses" },
-    { label: "Storage", used: 128, total: 500, unit: "MB" },
-  ];
-
-  return (
-    <div>
-      <h2 className="text-base font-semibold text-foreground mb-1">Billing & Usage</h2>
-      <p className="text-xs text-muted-foreground mb-6">Monitor your AI consumption and manage your subscription.</p>
-
-      {/* Plan */}
-      <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Zap className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold text-foreground">Starter Plan</span>
-            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">Active</span>
-          </div>
-          <p className="text-xs text-muted-foreground">5,000 AI credits / month · 100 analyses · 500 MB storage</p>
-        </div>
-        <button className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity">
-          Upgrade
-        </button>
-      </div>
-
-      {/* Usage bars */}
-      <div className="space-y-4 mb-6">
-        {usages.map((u) => {
-          const pct = Math.round((u.used / u.total) * 100);
-          return (
-            <div key={u.label}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-medium text-foreground">{u.label}</span>
-                <span className="text-xs text-muted-foreground font-mono">
-                  {u.used.toLocaleString()} / {u.total.toLocaleString()} {u.unit}
-                </span>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${pct > 80 ? "bg-warning" : "bg-primary"}`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <p className="mt-1 text-[10px] text-muted-foreground">{pct}% used</p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Invoices */}
-      <div className="rounded-xl border border-border overflow-hidden">
-        <div className="px-4 py-2.5 bg-muted/30 border-b border-border">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Invoice History</p>
-        </div>
-        {[
-          { date: "May 2026", amount: "$29.00", status: "Paid" },
-          { date: "Apr 2026", amount: "$29.00", status: "Paid" },
-          { date: "Mar 2026", amount: "$29.00", status: "Paid" },
-        ].map((inv) => (
-          <div key={inv.date} className="flex items-center justify-between px-4 py-3 border-b border-border/50 last:border-0">
-            <span className="text-sm text-foreground">{inv.date}</span>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-mono text-foreground">{inv.amount}</span>
-              <span className="px-2 py-0.5 rounded-full bg-success/10 text-success text-[10px] font-semibold">{inv.status}</span>
-              <button className="text-xs text-primary hover:underline">Download</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function APIKeysSection() {
   const [keys, setKeys] = useState([
     { id: "key_1", name: "Extension Integration", created: "May 1, 2026", lastUsed: "2 hours ago", scopes: ["read", "capture"] },
@@ -830,7 +754,6 @@ const SECTION_COMPONENTS: Record<Section, React.ComponentType<any>> = {
   extension:     ExtensionSection,
   team:          TeamSection,
   notifications: NotificationsSection,
-  billing:       BillingSection,
   "api-keys":    APIKeysSection,
   privacy:       PrivacySection,
 };

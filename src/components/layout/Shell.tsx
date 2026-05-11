@@ -14,7 +14,6 @@ const SlackView = dynamic(() => import("../views/SlackView").then(m => ({ defaul
 const AutonomousModeView = dynamic(() => import("../views/AutonomousModeView").then(m => ({ default: m.AutonomousModeView })), { ssr: false });
 const WorkspaceView     = dynamic(() => import("../views/WorkspaceView").then(m => ({ default: m.WorkspaceView })), { ssr: false });
 const NotificationsView = dynamic(() => import("../views/NotificationsView").then(m => ({ default: m.NotificationsView })), { ssr: false });
-const BillingView       = dynamic(() => import("../views/BillingView").then(m => ({ default: m.BillingView })), { ssr: false });
 const ExtensionView     = dynamic(() => import("../views/ExtensionView").then(m => ({ default: m.ExtensionView })), { ssr: false });
 const ActivityView      = dynamic(() => import("../views/ActivityView").then(m => ({ default: m.ActivityView })), { ssr: false });
 const ProfileView       = dynamic(() => import("../views/ProfileView").then(m => ({ default: m.ProfileView })), { ssr: false });
@@ -179,7 +178,6 @@ export function Shell() {
       case "slack":         return wrap("Slack", <SlackView />);
       case "workspace":     return wrap("Workspace", <WorkspaceView />);
       case "notifications": return wrap("Notifications", <NotificationsView />);
-      case "billing":       return wrap("Billing", <BillingView />);
       case "extension":     return wrap("Extension", <ExtensionView />);
       case "activity":      return wrap("Activity", <ActivityView />);
       case "profile":       return wrap("Profile", <ProfileView />);
