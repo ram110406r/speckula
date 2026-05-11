@@ -67,6 +67,10 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
+      match /activity/{id} {
+        allow read, write: if isOwner(userId);
+      }
+
       // Expected/actual outcomes per doc — kept under the user so they sync
       // across devices instead of living only in localStorage.
       match /outcomes/{outcomeDocId} {
