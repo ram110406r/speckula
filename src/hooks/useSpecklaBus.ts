@@ -29,9 +29,19 @@ export type SpeckulaEvent =
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
-const WS_BASE =
-  process.env.NEXT_PUBLIC_WS_URL ??
-  (process.env.NODE_ENV === "production" ? "" : "ws://localhost:3001");
+// Derive the WebSocket base URL. In production the WS gateway sits behind the
+// same host as the app (nginx routes /ws → backend), so we derive from
+// window.location when NEXT_PUBLIC_WS_URL is not explicitly set. A relative
+// URL string is invalid for the WebSocket constructor, so we always build an
+// absolute ws:// / wss:// URL.
+const getWsBase = (): string => {
+  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}`;
+  }
+  return "ws://localhost:3001";
+};
 
 const PING_INTERVAL_MS  = 30_000;
 const TOKEN_REFRESH_MS  = 55 * 60 * 1000;
@@ -73,7 +83,7 @@ export function useSpecklaBus() {
 
     setStatus("connecting");
 
-    const url = `${WS_BASE}/ws?token=${encodeURIComponent(token)}`;
+    const url = `${getWsBase()}/ws?token=${encodeURIComponent(token)}`;
     const ws  = new WebSocket(url);
     wsRef.current = ws;
 
