@@ -8,6 +8,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { subscribeToActivity, type ActivityEvent, type ActivityEventType } from "@/lib/firebase/db";
+import { useApi } from "@/hooks/useApi";
+import { useExtensionPreferences } from "@/hooks/useExtensionPreferences";
+import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
 type FilterKey = "all" | ActivityEventType;
 
@@ -32,7 +35,8 @@ const TYPE_CONFIG: Record<ActivityEventType, { icon: React.ElementType; color: s
 
 function dateLabel(ts: ActivityEvent["createdAt"]): string {
   if (!ts) return "Unknown";
-  const d = ts.toDate();
+  const d = toDate(ts);
+  if (!d) return "Unknown";
   const now = new Date();
   const diff = Math.floor((now.getTime() - d.getTime()) / 86_400_000);
   if (diff === 0) return "Today";
@@ -43,7 +47,25 @@ function dateLabel(ts: ActivityEvent["createdAt"]): string {
 
 function timeLabel(ts: ActivityEvent["createdAt"]): string {
   if (!ts) return "";
-  return ts.toDate().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const d = toDate(ts);
+  if (!d) return "";
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function toDate(ts: unknown): Date | null {
+  if (!ts) return null;
+  if (ts instanceof Date) return ts;
+  if (typeof ts === "string") {
+    const parsed = new Date(ts);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (typeof ts === "number") return new Date(ts);
+  if (typeof ts === "object") {
+    const t = ts as { seconds?: number; toDate?: () => Date };
+    if (typeof t.toDate === "function") return t.toDate();
+    if (typeof t.seconds === "number") return new Date(t.seconds * 1000);
+  }
+  return null;
 }
 
 function actorInitials(actor: string): string {
@@ -55,21 +77,87 @@ const colorFor = (s: string) => AVATAR_COLORS[s.charCodeAt(0) % AVATAR_COLORS.le
 
 export function ActivityView() {
   const { user } = useAuth();
+  const { preferences } = useExtensionPreferences();
+  const activeWorkspaceId = preferences?.activeWorkspaceId ?? null;
+
+  type BackendActivityItem = {
+    id: string;
+    actorId: string;
+    eventType: string;
+    title: string;
+    description: string | null;
+    createdAt: string;
+  };
+
+  const { data: backendActivity, loading: backendLoading, refetch: refetchBackend } = useApi<{ items: BackendActivityItem[] }>(
+    activeWorkspaceId ? `/api/workspaces/${activeWorkspaceId}/activity?limit=100` : "",
+    { enabled: Boolean(activeWorkspaceId), refreshInterval: 60_000 }
+  );
+
+  const { lastEvent } = useSpecklaBus(activeWorkspaceId);
+
   const [events,  setEvents]  = useState<ActivityEvent[]>([]);
   const [filter,  setFilter]  = useState<FilterKey>("all");
   const [search,  setSearch]  = useState("");
   const [limit,   setLimit]   = useState(20);
   const [loading, setLoading] = useState(true);
 
+  const effectiveLoading = activeWorkspaceId ? backendLoading : loading;
+
   useEffect(() => {
-    if (!user) { setLoading(false); return; }
+    if (!user) { return; }
+
+    // Prefer backend workspace-scoped activity when a workspace is active.
+    if (activeWorkspaceId) {
+      const items = backendActivity?.items ?? [];
+      const mapped: ActivityEvent[] = items.map((it) => {
+        const type: ActivityEventType =
+          it.eventType.startsWith("analysis.") ? "ai" :
+          it.eventType.includes("signal") || it.eventType.includes("insight") || it.eventType.includes("competitor") ? "signal" :
+          it.eventType.startsWith("workspace.") ? "auth" :
+          "ai";
+
+        const actor = it.actorId === user.uid ? "You" : it.actorId;
+        const action =
+          it.eventType === "analysis.queued" ? "queued an analysis" :
+          it.eventType === "analysis.started" ? "started an analysis" :
+          it.eventType === "analysis.completed" ? "completed an analysis" :
+          it.eventType === "analysis.failed" ? "analysis failed" :
+          it.eventType === "insight.created" ? "captured insight" :
+          it.eventType === "market_signal.detected" ? "detected market signal" :
+          it.eventType === "competitor.updated" ? "updated competitor" :
+          it.eventType;
+
+        return {
+          id: it.id,
+          type,
+          actor,
+          action,
+          subject: it.title,
+          meta: it.description ?? undefined,
+          createdAt: it.createdAt as unknown as ActivityEvent["createdAt"],
+        } as ActivityEvent;
+      });
+
+      setEvents(mapped);
+      return;
+    }
+
     const unsub = subscribeToActivity(
       user.uid,
       (data) => { setEvents(data); setLoading(false); },
       () => setLoading(false)
     );
     return unsub;
-  }, [user]);
+  }, [user, activeWorkspaceId, backendActivity, backendLoading]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    if (!lastEvent) return;
+    if (lastEvent.type === "activity.created" || lastEvent.type.startsWith("analysis.") || lastEvent.type === "insight.created") {
+      refetchBackend();
+    }
+  }, [activeWorkspaceId, lastEvent, refetchBackend]);
 
   const filtered = events.filter((e) => {
     const matchType   = filter === "all" || e.type === filter;
@@ -136,7 +224,7 @@ export function ActivityView() {
         </div>
 
         {/* ── Timeline ── */}
-        {loading ? (
+        {effectiveLoading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>

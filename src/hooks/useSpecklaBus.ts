@@ -13,19 +13,22 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { getAuth } from "firebase/auth";
+import { getExtensionPreferences } from "@/lib/firebase/db";
 
 export type SpeckulaEvent =
   | { type: "extension.connected";    userId: string; data: { connectionId: string } }
   | { type: "extension.disconnected"; userId: string; data: { connectionId: string } }
   | { type: "analysis.queued";        userId: string; data: { jobId: string } }
-  | { type: "analysis.progress";      userId: string; data: { jobId: string; stage: string; progress: number } }
-  | { type: "analysis.completed";     userId: string; data: { jobId: string; entriesCreated: number } }
+  | { type: "analysis.progress";      userId: string; data: { jobId: string; status?: string; stage?: string; progress: number } }
+  | { type: "analysis.completed";     userId: string; data: { jobId: string; result?: unknown } }
   | { type: "analysis.failed";        userId: string; data: { jobId: string; error: string } }
-  | { type: "insight.created";        userId: string; data: { entryId: string; entryType: string } }
+  | { type: "insight.created";        userId: string; data: { entryId: string; entryType: string; title?: string } }
   | { type: "notification.created";   userId: string; data: { notificationId: string; title: string } }
-  | { type: "connected";              connectionId: string; userId: string; serverTime: string }
+  | { type: "connected";              connectionId: string; userId: string; workspaceId?: string | null; serverTime: string }
   | { type: "pong";                   serverTime: string }
   | { type: "error";                  code: string; message: string };
+
+type AnyEvent = { type: string; [key: string]: unknown };
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -43,34 +46,65 @@ const getWsBase = (): string => {
   return "ws://localhost:3001";
 };
 
-const PING_INTERVAL_MS  = 30_000;
-const TOKEN_REFRESH_MS  = 55 * 60 * 1000;
+const PING_INTERVAL_MS = 30_000;
+const TOKEN_REFRESH_MS = 55 * 60 * 1000;
 const RECONNECT_DELAY_MS = 3_000;
 const MAX_RECONNECT_ATTEMPTS = 8;
 
-export function useSpecklaBus() {
-  const [status, setStatus]     = useState<ConnectionStatus>("disconnected");
-  const [lastEvent, setLastEvent] = useState<SpeckulaEvent | null>(null);
+type Listener = (s: { status: ConnectionStatus; lastEvent: AnyEvent | null }) => void;
 
-  const wsRef           = useRef<WebSocket | null>(null);
-  const pingTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const tokenTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-  const reconnectRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const attemptsRef     = useRef(0);
-  const mountedRef      = useRef(true);
+const bus = {
+  status: "disconnected" as ConnectionStatus,
+  lastEvent: null as AnyEvent | null,
+  ws: null as WebSocket | null,
+  pingTimer: null as ReturnType<typeof setInterval> | null,
+  tokenTimer: null as ReturnType<typeof setInterval> | null,
+  reconnectTimer: null as ReturnType<typeof setTimeout> | null,
+  attempts: 0,
+  listeners: new Set<Listener>(),
+  desiredWorkspaceId: null as string | null,
+  currentWorkspaceId: null as string | null,
+  authUnsub: null as (() => void) | null,
+  bootstrapped: false,
 
-  const clearTimers = useCallback(() => {
-    if (pingTimerRef.current)  { clearInterval(pingTimerRef.current);  pingTimerRef.current  = null; }
-    if (tokenTimerRef.current) { clearInterval(tokenTimerRef.current); tokenTimerRef.current = null; }
-    if (reconnectRef.current)  { clearTimeout(reconnectRef.current);   reconnectRef.current  = null; }
-  }, []);
+  notify() {
+    for (const l of this.listeners) {
+      try { l({ status: this.status, lastEvent: this.lastEvent }); } catch { /* ignore */ }
+    }
+  },
 
-  const connect = useCallback(async () => {
-    if (!mountedRef.current) return;
+  clearTimers() {
+    if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+    if (this.tokenTimer) { clearInterval(this.tokenTimer); this.tokenTimer = null; }
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+  },
 
+  async resolveWorkspaceId(explicitWorkspaceId?: string | null): Promise<string | null> {
+    if (explicitWorkspaceId) return explicitWorkspaceId;
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return null;
+    try {
+      const prefs = await getExtensionPreferences(user.uid);
+      return typeof prefs.activeWorkspaceId === "string" ? prefs.activeWorkspaceId : null;
+    } catch {
+      return null;
+    }
+  },
+
+  async connect(workspaceIdHint?: string | null) {
     const auth = getAuth();
     const user = auth.currentUser;
     if (!user) return;
+
+    const resolvedWorkspaceId = await this.resolveWorkspaceId(workspaceIdHint);
+    this.desiredWorkspaceId = resolvedWorkspaceId;
+
+    // If we're already connected/connecting for the same workspace, do nothing.
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      if (this.currentWorkspaceId === resolvedWorkspaceId) return;
+      try { this.ws.close(1000, "workspace-change"); } catch { /* ignore */ }
+    }
 
     let token: string;
     try {
@@ -79,91 +113,124 @@ export function useSpecklaBus() {
       return;
     }
 
-    if (!mountedRef.current) return;
+    this.status = "connecting";
+    this.notify();
 
-    setStatus("connecting");
+    const qs = new URLSearchParams({ token });
+    if (resolvedWorkspaceId) qs.set("workspaceId", resolvedWorkspaceId);
 
-    const url = `${getWsBase()}/ws?token=${encodeURIComponent(token)}`;
-    const ws  = new WebSocket(url);
-    wsRef.current = ws;
+    const url = `${getWsBase()}/ws?${qs.toString()}`;
+    const ws = new WebSocket(url);
+    this.ws = ws;
+    this.currentWorkspaceId = resolvedWorkspaceId;
 
     ws.onopen = () => {
-      if (!mountedRef.current) { ws.close(); return; }
-      setStatus("connected");
-      attemptsRef.current = 0;
+      this.status = "connected";
+      this.attempts = 0;
+      this.notify();
 
-      pingTimerRef.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "ping" }));
-        }
+      this.pingTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
       }, PING_INTERVAL_MS);
 
-      tokenTimerRef.current = setInterval(async () => {
+      this.tokenTimer = setInterval(async () => {
         const freshToken = await auth.currentUser?.getIdToken(true).catch(() => null);
         if (!freshToken || ws.readyState !== WebSocket.OPEN) return;
-        // Re-connect with the fresh token — the server verifies on connect only.
         ws.close(1000, "token-refresh");
       }, TOKEN_REFRESH_MS);
     };
 
     ws.onmessage = (ev) => {
       try {
-        const event = JSON.parse(ev.data as string) as SpeckulaEvent;
-        setLastEvent(event);
+        const event = JSON.parse(ev.data as string) as AnyEvent;
+        this.lastEvent = event;
+        this.notify();
       } catch {
-        // ignore unparseable frames
+        // ignore
       }
     };
 
     ws.onclose = (ev) => {
-      clearTimers();
-      wsRef.current = null;
-      if (!mountedRef.current) return;
+      this.clearTimers();
+      this.ws = null;
+      this.currentWorkspaceId = null;
+      this.status = "disconnected";
+      this.notify();
 
-      setStatus("disconnected");
-
-      // Normal close (1000/1001) or too many attempts → stop reconnecting.
       if (ev.code === 1000 || ev.code === 1001) {
-        // Deliberate close (e.g. token refresh cycle) — reconnect immediately.
-        if (mountedRef.current) connect();
+        this.connect(this.desiredWorkspaceId);
         return;
       }
-      if (attemptsRef.current >= MAX_RECONNECT_ATTEMPTS) return;
 
-      attemptsRef.current += 1;
-      const delay = RECONNECT_DELAY_MS * Math.min(attemptsRef.current, 4);
-      reconnectRef.current = setTimeout(connect, delay);
+      if (this.attempts >= MAX_RECONNECT_ATTEMPTS) return;
+      this.attempts += 1;
+      const delay = RECONNECT_DELAY_MS * Math.min(this.attempts, 4);
+      this.reconnectTimer = setTimeout(() => this.connect(this.desiredWorkspaceId), delay);
     };
 
     ws.onerror = () => {
-      setStatus("error");
-      // onclose fires after onerror — reconnect logic lives there.
+      this.status = "error";
+      this.notify();
     };
-  }, [clearTimers]);
+  },
+
+  disconnect(reason: string) {
+    this.clearTimers();
+    this.ws?.close(1000, reason);
+    this.ws = null;
+    this.status = "disconnected";
+    this.notify();
+  },
+
+  bootstrap() {
+    if (this.bootstrapped) return;
+    this.bootstrapped = true;
+    const auth = getAuth();
+    this.authUnsub = auth.onAuthStateChanged((user) => {
+      if (user) {
+        this.connect(this.desiredWorkspaceId);
+      } else {
+        this.disconnect("signed-out");
+      }
+    });
+  },
+};
+
+export function useSpecklaBus(workspaceId?: string | null) {
+  const [status, setStatus] = useState<ConnectionStatus>(bus.status);
+  const [lastEvent, setLastEvent] = useState<AnyEvent | null>(bus.lastEvent);
+
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
+    bus.bootstrap();
 
-    const auth = getAuth();
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        connect();
+    if (workspaceId !== undefined && workspaceId !== bus.desiredWorkspaceId) {
+      bus.desiredWorkspaceId = workspaceId;
+      // Force reconnect if already connected.
+      if (bus.ws && bus.ws.readyState === WebSocket.OPEN) {
+        bus.ws.close(1000, "workspace-change");
       } else {
-        clearTimers();
-        wsRef.current?.close(1000, "signed-out");
-        wsRef.current = null;
-        setStatus("disconnected");
+        bus.connect(workspaceId);
       }
-    });
+    }
+
+    const listener: Listener = ({ status: nextStatus, lastEvent: nextEvent }) => {
+      if (!mountedRef.current) return;
+      setStatus(nextStatus);
+      setLastEvent(nextEvent);
+    };
+
+    bus.listeners.add(listener);
+    // Sync immediately.
+    listener({ status: bus.status, lastEvent: bus.lastEvent });
 
     return () => {
       mountedRef.current = false;
-      unsubscribe();
-      clearTimers();
-      wsRef.current?.close(1000, "unmount");
-      wsRef.current = null;
+      bus.listeners.delete(listener);
     };
-  }, [connect, clearTimers]);
+  }, [workspaceId]);
 
   return { status, connected: status === "connected", lastEvent };
 }

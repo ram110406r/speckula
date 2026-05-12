@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useApi } from "./useApi";
 import { useSpecklaBus } from "./useSpecklaBus";
+import { useExtensionPreferences } from "./useExtensionPreferences";
 
 export interface DashboardOverview {
   totalSignals: number;
@@ -38,11 +39,18 @@ export interface DashboardOverview {
 }
 
 export function useDashboard() {
-  const { data, loading, error, refetch } = useApi<DashboardOverview>(
-    '/api/analytics/overview',
-    { refreshInterval: 30_000 },
-  );
-  const { lastEvent } = useSpecklaBus();
+  const { preferences } = useExtensionPreferences();
+  const activeWorkspaceId = preferences?.activeWorkspaceId ?? null;
+
+  const url = activeWorkspaceId
+    ? `/api/workspaces/${activeWorkspaceId}/dashboard`
+    : '/api/analytics/overview';
+
+  const { data, loading, error, refetch } = useApi<DashboardOverview>(url, {
+    refreshInterval: 30_000,
+  });
+
+  const { lastEvent } = useSpecklaBus(activeWorkspaceId);
 
   // Refetch when relevant WebSocket events arrive.
   useEffect(() => {
