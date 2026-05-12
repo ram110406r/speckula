@@ -19,6 +19,7 @@ import { verifyFirebaseIdToken } from '../lib/firebaseAdmin.js';
 import { wsManager } from '../services/websocketManager.js';
 import { publishEvent } from '../services/eventBus.js';
 import { db } from '../lib/db.js';
+import { workspaceBootstrapService } from '../services/workspaceBootstrapService.js';
 
 export default async function websocketRoutes(fastify: FastifyInstance) {
   fastify.get(
@@ -48,6 +49,19 @@ export default async function websocketRoutes(fastify: FastifyInstance) {
       const connectionId = crypto.randomUUID();
       const workspaceId = url.searchParams.get('workspaceId') ?? null;
 
+      if (workspaceId) {
+        await workspaceBootstrapService.ensureWorkspaceForUser(workspaceId, userId).catch(() => undefined);
+        const membership = await db.workspaceMember.findUnique({
+          where: { workspaceId_userId: { workspaceId, userId } },
+          select: { role: true },
+        });
+        if (!membership) {
+          socket.send(JSON.stringify({ type: 'error', code: 'forbidden', message: 'Not a workspace member' }));
+          socket.close(1008, 'Forbidden');
+          return;
+        }
+      }
+
       await wsManager.register(connectionId, socket, userId, workspaceId, {
         userAgent: request.headers['user-agent'],
         ip:        request.ip,
@@ -60,6 +74,7 @@ export default async function websocketRoutes(fastify: FastifyInstance) {
         type:         'connected',
         connectionId,
         userId,
+        workspaceId,
         serverTime:   new Date().toISOString(),
       }));
 

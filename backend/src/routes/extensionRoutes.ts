@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { db } from '../lib/db.js';
 import { enqueueAnalysis } from '../lib/queue.js';
 import { publishEvent } from '../services/eventBus.js';
+import { requireWorkspaceRole } from '../lib/workspaceAuth.js';
+import { workspaceActivityService } from '../services/workspaceActivityService.js';
+import { workspaceBootstrapService } from '../services/workspaceBootstrapService.js';
 
 const requireUserId = (request: FastifyRequest, reply: FastifyReply): string | null => {
   const uid = request.userId;
@@ -104,10 +107,17 @@ export default async function extensionRoutes(fastify: FastifyInstance) {
     }
     const { content, pageType, sourceUrl, selectedText, projectId, workspaceId } = body.data;
 
+    if (workspaceId) {
+      await workspaceBootstrapService.ensureWorkspaceForUser(workspaceId, userId).catch(() => undefined);
+      const auth = await requireWorkspaceRole(request, reply, workspaceId, 'viewer');
+      if (!auth) return;
+    }
+
     // Create a DB job record first so the client can poll status.
     const job = await db.analysisJob.create({
       data: {
         userId,
+        workspaceId: workspaceId ?? null,
         projectId: projectId ?? null,
         pageType,
         sourceUrl: sourceUrl ?? null,
@@ -121,11 +131,25 @@ export default async function extensionRoutes(fastify: FastifyInstance) {
       jobId:        job.id,
       userId,
       projectId:    projectId ?? null,
+      workspaceId:  workspaceId ?? null,
       content,
       pageType,
       sourceUrl:    sourceUrl ?? null,
       selectedText: selectedText ?? null,
     });
+
+    if (workspaceId) {
+      workspaceActivityService.create({
+        workspaceId,
+        actorId: userId,
+        eventType: 'analysis.queued',
+        title: `Analysis queued: ${pageType}`,
+        description: sourceUrl ?? undefined,
+        entityType: 'AnalysisJob',
+        entityId: job.id,
+        metadata: { pageType, sourceUrl },
+      }).catch(() => undefined);
+    }
 
     // Log activity.
     db.activityLog.create({
