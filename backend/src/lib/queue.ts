@@ -47,6 +47,7 @@ export interface AnalysisJobData {
   jobId: string;        // our DB id (AnalysisJob.id)
   userId: string;
   projectId: string | null;
+  workspaceId: string | null;
   content: string;
   pageType: string;
   sourceUrl: string | null;

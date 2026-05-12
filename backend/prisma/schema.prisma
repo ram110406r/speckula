@@ -196,6 +196,7 @@ model AnalysisJob {
   id           String    @id @default(uuid())
   userId       String
   projectId    String?
+  workspaceId  String?
   bullJobId    String?   // BullMQ job.id (same as our id by default)
   status       String    @default("queued")
   // queued | extracting | classifying | generating_insights | embedding | saving | completed | failed
@@ -210,6 +211,7 @@ model AnalysisJob {
   completedAt  DateTime?
 
   @@index([userId])
+  @@index([workspaceId])
   @@index([status])
   @@index([createdAt])
 }
@@ -390,6 +392,16 @@ model Workspace {
   slug        String   @unique
   description String?
   metadata    String?  // JSON: plan, logo, settings
+
+  // Workspace profile fields (startup intelligence context)
+  logoUrl        String?
+  startupStage   String?
+  industry       String?
+  productCategory String?
+  businessModel  String?
+  icp            String?
+  aiStrategy     String?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   deletedAt   DateTime?
@@ -410,6 +422,54 @@ model WorkspaceMember {
   @@unique([workspaceId, userId])
   @@index([workspaceId])
   @@index([userId])
+}
+
+/// Workspace activity feed — realtime event stream persisted for dashboards.
+model WorkspaceActivity {
+  id          String   @id @default(uuid())
+  workspaceId String
+  actorId     String
+  eventType   String
+  title       String
+  description String?
+  entityType  String?
+  entityId    String?
+  metadata    String?  // JSON
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, eventType])
+  @@index([actorId, createdAt])
+}
+
+/// Workspace derived metrics — stored rollups for realtime cards.
+model WorkspaceMetrics {
+  id              String   @id @default(uuid())
+  workspaceId     String   @unique
+  totalSignals    Int      @default(0)
+  totalDecisions  Int      @default(0)
+  totalSpecs      Int      @default(0)
+  totalTasks      Int      @default(0)
+  totalExperiments Int     @default(0)
+  aiConfidence    Float    @default(0)
+  updatedAt       DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+/// Workspace context blob — injected into AI prompts for continuity.
+model WorkspaceContext {
+  id            String   @id @default(uuid())
+  workspaceId   String   @unique
+  competitors   String?  // JSON
+  strategy      String?  // JSON
+  goals         String?  // JSON
+  constraints   String?  // JSON
+  startupContext String? // JSON
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId])
 }
 
 // =========================
