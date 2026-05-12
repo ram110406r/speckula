@@ -38,10 +38,21 @@ export type SpeckulaEvent =
   | { type: 'notification.created';   userId: string; data: { notificationId: string; type: string; title: string } }
   | { type: 'auth.expired';           userId: string; data: Record<string, unknown> };
 
+export type WorkspaceEvent = {
+  type: string;
+  event?: string; // compatibility with clients expecting "event"
+  workspaceId: string;
+  userId?: string;
+  data: unknown;
+  timestamp: string;
+};
+
 const CHANNEL_PREFIX = 'speckula:events:';
 
 // Per-userId channel so each user's events are isolated.
 const userChannel = (userId: string) => `${CHANNEL_PREFIX}${userId}`;
+// Workspace channel for workspace-scoped fanout.
+const workspaceChannel = (workspaceId: string) => `${CHANNEL_PREFIX}workspace:${workspaceId}`;
 
 // Publish an event to a user's channel.
 export const publishEvent = async (event: SpeckulaEvent): Promise<void> => {
@@ -49,9 +60,21 @@ export const publishEvent = async (event: SpeckulaEvent): Promise<void> => {
   await redis.publish(userChannel(event.userId), JSON.stringify(event));
 };
 
+export const publishWorkspaceEvent = async (event: Omit<WorkspaceEvent, 'timestamp'> & { timestamp?: string }): Promise<void> => {
+  const redis = getRedis();
+  const payload: WorkspaceEvent = {
+    ...event,
+    event: event.event ?? event.type,
+    timestamp: event.timestamp ?? new Date().toISOString(),
+  };
+  await redis.publish(workspaceChannel(payload.workspaceId), JSON.stringify(payload));
+};
+
 type EventHandler = (event: SpeckulaEvent) => void;
+type WorkspaceEventHandler = (event: WorkspaceEvent) => void;
 
 const handlers = new Map<string, Set<EventHandler>>();
+const workspaceHandlers = new Map<string, Set<WorkspaceEventHandler>>();
 
 let subscriberBootstrapped = false;
 
@@ -85,21 +108,62 @@ export const subscribeUserEvents = (userId: string, handler: EventHandler): () =
   };
 };
 
+export const subscribeWorkspaceEvents = (workspaceId: string, handler: WorkspaceEventHandler): () => void => {
+  const channel = workspaceChannel(workspaceId);
+
+  if (!workspaceHandlers.has(channel)) {
+    workspaceHandlers.set(channel, new Set());
+  }
+  workspaceHandlers.get(channel)!.add(handler);
+
+  bootstrapSubscriber();
+
+  const sub = getRedisSubscriber();
+  sub.subscribe(channel).catch((err) => {
+    console.error(`[eventBus] subscribe error for ${channel}:`, err.message);
+  });
+
+  return () => {
+    const set = workspaceHandlers.get(channel);
+    if (set) {
+      set.delete(handler);
+      if (set.size === 0) {
+        workspaceHandlers.delete(channel);
+        sub.unsubscribe(channel).catch(() => undefined);
+      }
+    }
+  };
+};
+
 function bootstrapSubscriber() {
   if (subscriberBootstrapped) return;
   subscriberBootstrapped = true;
 
   const sub = getRedisSubscriber();
   sub.on('message', (channel: string, message: string) => {
-    const set = handlers.get(channel);
-    if (!set || set.size === 0) return;
     try {
-      const event = JSON.parse(message) as SpeckulaEvent;
-      set.forEach((h) => {
-        try { h(event); } catch (err) {
-          console.error('[eventBus] handler error:', err);
-        }
-      });
+      if (handlers.has(channel)) {
+        const set = handlers.get(channel);
+        if (!set || set.size === 0) return;
+        const event = JSON.parse(message) as SpeckulaEvent;
+        set.forEach((h) => {
+          try { h(event); } catch (err) {
+            console.error('[eventBus] handler error:', err);
+          }
+        });
+        return;
+      }
+
+      if (workspaceHandlers.has(channel)) {
+        const set = workspaceHandlers.get(channel);
+        if (!set || set.size === 0) return;
+        const event = JSON.parse(message) as WorkspaceEvent;
+        set.forEach((h) => {
+          try { h(event); } catch (err) {
+            console.error('[eventBus] workspace handler error:', err);
+          }
+        });
+      }
     } catch {
       // Malformed message — ignore.
     }

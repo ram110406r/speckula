@@ -4,7 +4,8 @@
 
 import { db } from '../lib/db.js';
 import { generateEmbedding, saveEmbedding, semanticSearch } from './embeddingService.js';
-import { publishEvent } from './eventBus.js';
+import { publishEvent, publishWorkspaceEvent } from './eventBus.js';
+import { workspaceActivityService } from './workspaceActivityService.js';
 
 export type EntryType =
   | 'competitor_insight'
@@ -57,6 +58,26 @@ export const productBrainService = {
       userId: input.userId,
       data: { entryId: entry.id, entryType: input.entryType, title: input.title },
     }).catch(() => undefined);
+
+    if (input.workspaceId) {
+      publishWorkspaceEvent({
+        type: 'insight.created',
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        data: { entryId: entry.id, entryType: input.entryType, title: input.title },
+      }).catch(() => undefined);
+
+      workspaceActivityService.create({
+        workspaceId: input.workspaceId,
+        actorId: input.userId,
+        eventType: 'insight.created',
+        title: input.title,
+        description: input.content.slice(0, 240),
+        entityType: 'ProductBrainEntry',
+        entityId: entry.id,
+        metadata: { entryType: input.entryType },
+      }).catch(() => undefined);
+    }
 
     return entry.id;
   },
@@ -113,6 +134,26 @@ export const productBrainService = {
       data: { domain: data.domain, insightType: data.insightType },
     }).catch(() => undefined);
 
+    if (data.workspaceId) {
+      publishWorkspaceEvent({
+        type: 'competitor.updated',
+        workspaceId: data.workspaceId,
+        userId,
+        data: { domain: data.domain, insightType: data.insightType },
+      }).catch(() => undefined);
+
+      workspaceActivityService.create({
+        workspaceId: data.workspaceId,
+        actorId: userId,
+        eventType: 'competitor.updated',
+        title: data.title,
+        description: data.content.slice(0, 240),
+        entityType: 'CompetitorInsight',
+        entityId: insight.id,
+        metadata: { domain: data.domain, insightType: data.insightType },
+      }).catch(() => undefined);
+    }
+
     return insight.id;
   },
 
@@ -162,6 +203,26 @@ export const productBrainService = {
       userId,
       data: { signalId: signal.id, signalType: data.signalType, title: data.title },
     }).catch(() => undefined);
+
+    if (data.workspaceId) {
+      publishWorkspaceEvent({
+        type: 'market_signal.detected',
+        workspaceId: data.workspaceId,
+        userId,
+        data: { signalId: signal.id, signalType: data.signalType, title: data.title },
+      }).catch(() => undefined);
+
+      workspaceActivityService.create({
+        workspaceId: data.workspaceId,
+        actorId: userId,
+        eventType: 'market_signal.detected',
+        title: data.title,
+        description: data.content.slice(0, 240),
+        entityType: 'MarketSignal',
+        entityId: signal.id,
+        metadata: { signalType: data.signalType, strength: data.strength },
+      }).catch(() => undefined);
+    }
 
     return signal.id;
   },
