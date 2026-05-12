@@ -246,6 +246,34 @@ export default async function extensionRoutes(fastify: FastifyInstance) {
     });
   });
 
+  // GET /extension/rate-limits
+  // Returns real monthly and per-minute capture counts derived from AnalysisJob records.
+  fastify.get('/rate-limits', async (request, reply) => {
+    const userId = requireUserId(request, reply);
+    if (!userId) return;
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const oneMinuteAgo = new Date(now.getTime() - 60_000);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const [capturesThisMonth, capturesThisMinute] = await Promise.all([
+      db.analysisJob.count({ where: { userId, createdAt: { gte: startOfMonth } } }),
+      db.analysisJob.count({ where: { userId, createdAt: { gte: oneMinuteAgo } } }),
+    ]);
+
+    reply.code(200).send({
+      ok: true,
+      data: {
+        capturesThisMonth,
+        monthlyQuota: 100,
+        capturesThisMinute,
+        minuteQuota: 10,
+        resetAt: startOfNextMonth.toISOString(),
+      },
+    });
+  });
+
   // POST /extension/disconnect
   // Explicitly disconnect the extension session (user sign-out from extension).
   fastify.post('/disconnect', async (request, reply) => {

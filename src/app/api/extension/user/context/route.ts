@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractBearerToken, extractUidFromToken } from "@/lib/firebase/serverAuth";
 import { firestoreGet } from "@/lib/firebase/firestoreRest";
+import { backendUrl } from "@/lib/env";
 
 const EXT_VERSION = "1.0.0";
 
@@ -47,14 +48,26 @@ export async function GET(req: NextRequest) {
       },
     ];
 
-    // Rate limit stubs — replace with real DB counters in production
-    const rateLimitStatus = {
+    // Fetch real rate limit counts from the backend.
+    let rateLimitStatus = {
       capturesThisMonth: 0,
       monthlyQuota: 100,
       capturesThisMinute: 0,
       minuteQuota: 10,
-      resetAt: new Date(new Date().setDate(new Date().getDate() + 1)).toISOString(),
+      resetAt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
     };
+    try {
+      const rateRes = await fetch(`${backendUrl()}/extension/rate-limits`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (rateRes.ok) {
+        const rateJson = await rateRes.json() as { ok: boolean; data?: typeof rateLimitStatus };
+        if (rateJson?.ok && rateJson.data) rateLimitStatus = rateJson.data;
+      }
+    } catch {
+      // Non-fatal — fall back to zero counts rather than failing the whole context response.
+    }
 
     return NextResponse.json({
       userId: uid,

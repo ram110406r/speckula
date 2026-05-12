@@ -1761,6 +1761,58 @@ export const subscribeToExtensionPreferences = (
   );
 };
 
+// ── Integration connections ───────────────────────────────────────────────────
+// Stored at users/{userId}/settings/integrations
+// Each key is an integration id (e.g. "github", "slack"). Value is a connection
+// record or null (null means explicitly disconnected).
+
+export interface IntegrationConnection {
+  status: "connected" | "error";
+  connectedAt: string;  // ISO timestamp
+  lastSyncAt?: string;  // ISO timestamp
+  error?: string;
+}
+
+export interface UserIntegrations {
+  [integrationId: string]: IntegrationConnection | null;
+}
+
+export const subscribeToIntegrationConnections = (
+  userId: string,
+  onUpdate: (connections: UserIntegrations) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe => {
+  return onSnapshot(
+    userSettingRef(userId, "integrations"),
+    (snap) => {
+      if (!snap.exists()) { onUpdate({}); return; }
+      const { updatedAt: _updatedAt, ...rest } = snap.data();
+      onUpdate(rest as UserIntegrations);
+    },
+    (err) => {
+      logFirestorePermissionHint("subscribeToIntegrationConnections", err);
+      onError?.(err);
+    }
+  );
+};
+
+export const setIntegrationConnection = async (
+  userId: string,
+  integrationId: string,
+  connection: IntegrationConnection | null
+): Promise<void> => {
+  try {
+    await setDoc(
+      userSettingRef(userId, "integrations"),
+      { [integrationId]: connection, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  } catch (error) {
+    logFirestorePermissionHint("setIntegrationConnection", error);
+    throw error;
+  }
+};
+
 // ── Profile settings ──────────────────────────────────────────────────────────
 // Stored at users/{userId}/settings/profile
 
