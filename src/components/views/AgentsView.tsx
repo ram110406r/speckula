@@ -510,7 +510,12 @@ export function AgentsView() {
   useEffect(() => {
     if (!lastEvent) return;
     if (lastEvent.type === "analysis.completed" || lastEvent.type === "analysis.progress") {
-      const jobId = lastEvent.data.jobId;
+      const data = (lastEvent as { data?: unknown }).data;
+      if (!data || typeof data !== "object") return;
+      if (!("jobId" in data)) return;
+      const jobId = (data as { jobId?: unknown }).jobId;
+      if (typeof jobId !== "string") return;
+
       setPulsingJobId(jobId);
       const t = setTimeout(() => setPulsingJobId(null), 4000);
       return () => clearTimeout(t);
