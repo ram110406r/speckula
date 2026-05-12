@@ -75,9 +75,21 @@ export function useApi<T>(url: string, options: UseApiOptions = {}): UseApiResul
           setError(errMsg);
           setData(null);
         } else {
-          const json = await res.json() as T;
-          if (!cancelled) {
-            setData(json);
+          const json = await res.json() as unknown;
+          if (cancelled) return;
+
+          // Most backend routes respond with { ok: boolean, data?: T, error?: string }.
+          if (json && typeof json === 'object' && 'ok' in json) {
+            const env = json as { ok: boolean; data?: T; error?: string };
+            if (env.ok) {
+              setData((env.data ?? null) as T | null);
+              setError(null);
+            } else {
+              setError(env.error ?? 'Request failed.');
+              setData(null);
+            }
+          } else {
+            setData(json as T);
             setError(null);
           }
         }

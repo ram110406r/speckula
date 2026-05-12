@@ -15,7 +15,8 @@ import { QUEUES, moveToDeadLetter, type AnalysisJobData, type AnalysisJobResult 
 import { db } from '../lib/db.js';
 import { groqService } from '../services/groqService.js';
 import { productBrainService } from '../services/productBrainService.js';
-import { publishEvent } from '../services/eventBus.js';
+import { publishEvent, publishWorkspaceEvent } from '../services/eventBus.js';
+import { workspaceActivityService } from '../services/workspaceActivityService.js';
 
 const CONCURRENCY = parseInt(process.env.ANALYSIS_WORKER_CONCURRENCY ?? '5', 10);
 
@@ -85,15 +86,39 @@ const emitProgress = (userId: string, jobId: string, status: string, progress: n
   }).catch(() => undefined);
 };
 
+const emitWorkspaceProgress = (workspaceId: string, userId: string, jobId: string, status: string, progress: number): void => {
+  publishWorkspaceEvent({
+    type: 'analysis.progress',
+    workspaceId,
+    userId,
+    data: { jobId, status, progress },
+  }).catch(() => undefined);
+};
+
 async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJobResult> {
   const data = job.data;
   const { jobId, userId } = data;
+  const workspaceId = data.workspaceId ?? null;
 
   publishEvent({ type: 'analysis.started', userId, data: { jobId } }).catch(() => undefined);
+  if (workspaceId) {
+    publishWorkspaceEvent({ type: 'analysis.started', workspaceId, userId, data: { jobId } }).catch(() => undefined);
+    workspaceActivityService.create({
+      workspaceId,
+      actorId: userId,
+      eventType: 'analysis.started',
+      title: `Analysis started`,
+      description: data.sourceUrl ?? undefined,
+      entityType: 'AnalysisJob',
+      entityId: jobId,
+      metadata: { pageType: data.pageType, sourceUrl: data.sourceUrl },
+    }).catch(() => undefined);
+  }
 
   // Stage 1: Extracting
   await updateJob(jobId, { status: 'extracting', progress: 10 });
   emitProgress(userId, jobId, 'extracting', 10);
+  if (workspaceId) emitWorkspaceProgress(workspaceId, userId, jobId, 'extracting', 10);
 
   if (!data.content || data.content.length < 20) {
     throw new Error('Insufficient page content for analysis');
@@ -102,12 +127,14 @@ async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJo
   // Stage 2: Classifying — detect page type if not provided
   await updateJob(jobId, { status: 'classifying', progress: 25 });
   emitProgress(userId, jobId, 'classifying', 25);
+  if (workspaceId) emitWorkspaceProgress(workspaceId, userId, jobId, 'classifying', 25);
 
   const pageType = data.pageType || 'general';
 
   // Stage 3: Generating insights via Groq
   await updateJob(jobId, { status: 'generating_insights', progress: 40 });
   emitProgress(userId, jobId, 'generating_insights', 40);
+  if (workspaceId) emitWorkspaceProgress(workspaceId, userId, jobId, 'generating_insights', 40);
 
   const prompt = buildPrompt({ ...data, pageType });
   const aiResult = await groqService.callGroq(
@@ -136,6 +163,7 @@ async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJo
   // Stage 4: Embedding (Product Brain persistence)
   await updateJob(jobId, { status: 'embedding', progress: 65 });
   emitProgress(userId, jobId, 'embedding', 65);
+  if (workspaceId) emitWorkspaceProgress(workspaceId, userId, jobId, 'embedding', 65);
 
   const insights = Array.isArray(parsed.insights) ? parsed.insights : [];
   const marketSignals = Array.isArray(parsed.marketSignals) ? parsed.marketSignals : [];
@@ -150,6 +178,7 @@ async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJo
     const entryType = item.type as 'pm_insight' || 'pm_insight';
     await productBrainService.create({
       userId,
+      workspaceId,
       entryType,
       title: item.title,
       content: item.content,
@@ -164,6 +193,7 @@ async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJo
   // Persist competitor data if detected.
   if (parsed.competitorData?.domain) {
     await productBrainService.saveCompetitorInsight(userId, {
+      workspaceId: workspaceId ?? undefined,
       domain: parsed.competitorData.domain,
       competitorName: parsed.competitorData.competitorName,
       insightType: parsed.competitorData.insightType ?? 'general',
@@ -179,6 +209,7 @@ async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJo
     const sig = raw as { signalType?: string; title?: string; content?: string; strength?: number };
     if (!sig.title || !sig.content) continue;
     await productBrainService.saveMarketSignal(userId, {
+      workspaceId: workspaceId ?? undefined,
       signalType: sig.signalType ?? 'trend',
       title: sig.title,
       content: sig.content,
@@ -191,6 +222,7 @@ async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJo
   // Stage 5: Saving
   await updateJob(jobId, { status: 'saving', progress: 85 });
   emitProgress(userId, jobId, 'saving', 85);
+  if (workspaceId) emitWorkspaceProgress(workspaceId, userId, jobId, 'saving', 85);
 
   const result: AnalysisJobResult = {
     insights,
@@ -213,6 +245,20 @@ async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJo
     userId,
     data: { jobId, result },
   }).catch(() => undefined);
+
+  if (workspaceId) {
+    publishWorkspaceEvent({ type: 'analysis.completed', workspaceId, userId, data: { jobId, result } }).catch(() => undefined);
+    workspaceActivityService.create({
+      workspaceId,
+      actorId: userId,
+      eventType: 'analysis.completed',
+      title: `Analysis completed`,
+      description: data.sourceUrl ?? undefined,
+      entityType: 'AnalysisJob',
+      entityId: jobId,
+      metadata: { insightCount: insights.length },
+    }).catch(() => undefined);
+  }
 
   // Create in-app notification.
   await productBrainService.notify(
@@ -274,6 +320,25 @@ export const startAnalysisWorker = (): Worker => {
       userId: data.userId,
       data: { jobId: data.jobId, error: err.message },
     }).catch(() => undefined);
+
+    if (data.workspaceId) {
+      publishWorkspaceEvent({
+        type: 'analysis.failed',
+        workspaceId: data.workspaceId,
+        userId: data.userId,
+        data: { jobId: data.jobId, error: err.message },
+      }).catch(() => undefined);
+      workspaceActivityService.create({
+        workspaceId: data.workspaceId,
+        actorId: data.userId,
+        eventType: 'analysis.failed',
+        title: `Analysis failed`,
+        description: err.message,
+        entityType: 'AnalysisJob',
+        entityId: data.jobId,
+        metadata: { error: err.message },
+      }).catch(() => undefined);
+    }
     await productBrainService.notify(
       data.userId,
       'job_failed',
