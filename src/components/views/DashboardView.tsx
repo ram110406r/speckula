@@ -29,6 +29,9 @@ import {
 } from "lucide-react";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useSpecklaBus } from "@/hooks/useSpecklaBus";
+import { useAgents, useAgentJobs, type AgentJob } from "@/hooks/useAgents";
+import { useMarketSignals, type MarketSignalData } from "@/hooks/useMarketSignals";
+import { useCompetitors, type CompetitorSummary } from "@/hooks/useCompetitors";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -297,6 +300,68 @@ function eventToDescription(event: { type: string; data?: Record<string, unknown
 }
 
 // ---------------------------------------------------------------------------
+// Real-data mapping helpers
+// ---------------------------------------------------------------------------
+
+const COMPETITOR_COLORS = [
+  "bg-zinc-700", "bg-indigo-700", "bg-violet-700", "bg-rose-700", "bg-blue-800",
+  "bg-teal-700", "bg-amber-700",
+];
+
+function competitorColor(domain: string): string {
+  let h = 0;
+  for (let i = 0; i < domain.length; i++) h = (h * 31 + domain.charCodeAt(i)) & 0xffff;
+  return COMPETITOR_COLORS[h % COMPETITOR_COLORS.length];
+}
+
+function mapCompetitor(c: CompetitorSummary, idx: number): Competitor {
+  const staleMs = 2 * 24 * 60 * 60 * 1000;
+  const stale = Date.now() - new Date(c.lastCapturedAt).getTime() > staleMs;
+  const diff = Date.now() - new Date(c.lastCapturedAt).getTime();
+  const updatedAgo =
+    diff < 3_600_000 ? `${Math.floor(diff / 60_000)}m ago` :
+    diff < 86_400_000 ? `${Math.floor(diff / 3_600_000)}h ago` :
+    `${Math.floor(diff / 86_400_000)}d ago`;
+  return {
+    id: idx + 1,
+    name: c.competitorName || c.domain,
+    initial: (c.competitorName || c.domain).charAt(0).toUpperCase(),
+    color: competitorColor(c.domain),
+    updatedAgo,
+    stale,
+  };
+}
+
+function mapJob(job: AgentJob, idx: number): Analysis {
+  const COLORS = ["bg-blue-500", "bg-purple-500", "bg-emerald-500", "bg-amber-500"];
+  const diff = Date.now() - new Date(job.createdAt).getTime();
+  const startedAgo =
+    diff < 60_000 ? "just now" :
+    diff < 3_600_000 ? `${Math.floor(diff / 60_000)}m ago` :
+    `${Math.floor(diff / 3_600_000)}h ago`;
+  let urlHost = "";
+  try { if (job.sourceUrl) urlHost = new URL(job.sourceUrl).hostname; } catch { urlHost = job.sourceUrl ?? ""; }
+  return {
+    id: idx + 1,
+    title: urlHost
+      ? `${job.pageType ?? "Analysis"} — ${urlHost}`
+      : `${job.pageType ?? "Analysis"} job`,
+    progress: job.progress ?? (job.status === "completed" ? 100 : 20),
+    startedAgo,
+    color: COLORS[idx % COLORS.length],
+  };
+}
+
+function mapSignal(s: MarketSignalData, idx: number): MarketSignal {
+  return {
+    id: idx + 1,
+    label: s.title,
+    change: Math.round(s.strength * 100),
+    up: true,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -466,6 +531,10 @@ export function DashboardView() {
   // ── Real data ────────────────────────────────────────────────────────────
   const { data: overview, loading } = useDashboard();
   const { connected, lastEvent } = useSpecklaBus();
+  const { data: agentsData } = useAgents();
+  const { data: jobsData } = useAgentJobs();
+  const { data: signalsData } = useMarketSignals();
+  const { data: competitorsData } = useCompetitors();
 
   // ── Local state ──────────────────────────────────────────────────────────
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
@@ -552,8 +621,26 @@ export function DashboardView() {
     competitorDomains: overview?.competitorInsights != null
       ? String(overview.competitorInsights)
       : MOCK_METRICS.competitorDomains,
-    activeAgents: MOCK_METRICS.activeAgents, // no real source yet
+    activeAgents: agentsData?.summary.running != null
+      ? String(agentsData.summary.running)
+      : "—",
   };
+
+  // ── Real data arrays (fall back to mock when empty) ───────────────────────
+  const activeJobs = (jobsData?.jobs ?? [])
+    .filter((j) => j.status === "queued" || j.status === "processing")
+    .slice(0, 3);
+  const analyses: Analysis[] = activeJobs.length > 0
+    ? activeJobs.map(mapJob)
+    : MOCK_ANALYSES;
+
+  const marketSignals: MarketSignal[] = signalsData?.signals?.length
+    ? signalsData.signals.slice(0, 5).map(mapSignal)
+    : MOCK_MARKET_SIGNALS;
+
+  const competitors: Competitor[] = competitorsData?.competitors?.length
+    ? competitorsData.competitors.slice(0, 5).map(mapCompetitor)
+    : MOCK_COMPETITORS;
 
   // ── Extension status ──────────────────────────────────────────────────────
   const extensionConnected = overview?.extension?.connected === true;
@@ -700,12 +787,12 @@ export function DashboardView() {
                 badge={
                   <span className="flex items-center gap-1.5 text-[11px] font-medium text-blue-400">
                     <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-                    {MOCK_ANALYSES.length} running
+                    {analyses.length} running
                   </span>
                 }
               />
               <div className="space-y-3">
-                {MOCK_ANALYSES.map((analysis) => (
+                {analyses.map((analysis) => (
                   <div
                     key={analysis.id}
                     className="bg-card border border-border rounded-xl p-4"
@@ -747,7 +834,7 @@ export function DashboardView() {
                 </span>
               </div>
               <ul>
-                {MOCK_MARKET_SIGNALS.map((signal) => (
+                {marketSignals.map((signal) => (
                   <li
                     key={signal.id}
                     className="flex items-center justify-between px-4 py-2.5 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
@@ -810,7 +897,7 @@ export function DashboardView() {
                 <Shield className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
               <ul>
-                {MOCK_COMPETITORS.map((comp) => (
+                {competitors.map((comp) => (
                   <li
                     key={comp.id}
                     className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"

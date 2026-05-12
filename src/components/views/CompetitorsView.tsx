@@ -548,7 +548,7 @@ export function CompetitorsView() {
 
   // Summary metrics
   const trackedCount = hasRealData
-    ? competitorsData!.competitors.length + COMPETITORS.length
+    ? competitorsData!.competitors.length
     : COMPETITORS.length;
 
   return (

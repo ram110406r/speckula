@@ -1,33 +1,48 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
-  FlaskConical,
-  Brain,
-  CheckCircle2,
-  Clock,
-  Pause,
-  Play,
-  ChevronRight,
-  TrendingUp,
-  TrendingDown,
-  ArrowUpRight,
-  Users,
-  BarChart2,
-  Lightbulb,
-  AlertTriangle,
-  BookOpen,
-  Sparkles,
-  Target,
-  Zap,
+  FlaskConical, Brain, CheckCircle2, Clock, Pause, Play,
+  ChevronRight, TrendingUp, TrendingDown, ArrowUpRight,
+  Users, BarChart2, Lightbulb, AlertTriangle, BookOpen,
+  Sparkles, Target, Zap, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useApi } from "@/hooks/useApi";
+import { useExtensionPreferences } from "@/hooks/useExtensionPreferences";
+import { useAuth } from "@/lib/firebase/AuthProvider";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ─── types ────────────────────────────────────────────────────────────────────
 
-type ExperimentStatus = "running" | "completed" | "paused" | "planned";
+type ExperimentStatus = "running" | "completed" | "paused" | "abandoned";
+
+interface ApiVariantStat {
+  id: string;
+  name: string;
+  isControl: boolean;
+  impressions: number;
+  conversions: number;
+  conversionRate: number;
+  lift: number | null;
+  pValue: number | null;
+  significant: boolean;
+}
+
+interface ApiExperiment {
+  id: string;
+  title: string;
+  hypothesis: string;
+  targetMetric: string;
+  status: ExperimentStatus;
+  startedAt: string | null;
+  endedAt: string | null;
+  createdAt: string;
+  aiInsight: string | null;
+  tags: string[] | null;
+  variants: ApiVariantStat[];
+  stats: ApiVariantStat[];
+  verdict: string;
+}
 
 interface Experiment {
   id: string;
@@ -42,187 +57,83 @@ interface Experiment {
   improvement: string | null;
   confidence: number | null;
   n: number;
-  started: string | null;
+  startedAt: string | null;
   aiInsight: string;
 }
 
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
+// ─── transform ────────────────────────────────────────────────────────────────
 
-const EXPERIMENTS: Experiment[] = [
-  {
-    id: "1",
-    name: "Onboarding Context-First vs Feature-First",
-    hypothesis:
-      'Showing users their "startup context" being built in real-time increases 7-day activation by 30%',
-    status: "running",
-    variant_a: "Feature tour (current)",
-    variant_b: "Live context building",
-    metric: "7-day activation rate",
-    baseline: 18.3,
-    variant_result: 22.5,
-    improvement: "+23%",
-    confidence: 89,
-    n: 234,
-    started: "4 days ago",
-    aiInsight: "Strong signal — context-first resonates with technical founders",
-  },
-  {
-    id: "2",
-    name: 'Pricing Page CTA: "Start Free" vs "Add to Chrome"',
-    hypothesis:
-      '"Add to Chrome" CTA will convert better because extension is the zero-friction entry point',
-    status: "running",
-    variant_a: "Start Free button",
-    variant_b: "Add to Chrome CTA",
-    metric: "Homepage conversion",
-    baseline: 4.2,
-    variant_result: 7.8,
-    improvement: "+86%",
-    confidence: 94,
-    n: 1247,
-    started: "7 days ago",
-    aiInsight: "Extension CTA outperforming significantly — consider making primary CTA",
-  },
-  {
-    id: "3",
-    name: "Dashboard: Signal Feed vs Metric Overview",
-    hypothesis: "Showing market signals first (vs metrics) increases daily retention",
-    status: "completed",
-    variant_a: "Metrics overview",
-    variant_b: "Signal feed first",
-    metric: "D7 retention",
-    baseline: 31.2,
-    variant_result: 38.7,
-    improvement: "+24%",
-    confidence: 97,
-    n: 892,
-    started: "14 days ago",
-    aiInsight:
-      "Signals-first wins — users want intelligence, not analytics. Implement immediately.",
-  },
-  {
-    id: "4",
-    name: "Email Digest: Weekly vs Daily",
-    hypothesis:
-      "Daily digests will increase engagement but weekly will be preferred for reduced noise",
-    status: "paused",
-    variant_a: "Weekly digest (current)",
-    variant_b: "Daily digest",
-    metric: "Email open rate",
-    baseline: 42.1,
-    variant_result: 38.3,
-    improvement: "-9%",
-    confidence: 72,
-    n: 156,
-    started: "10 days ago",
-    aiInsight: "Daily is worse for open rates. Weekly preferred. Pause and stick with weekly.",
-  },
-  {
-    id: "5",
-    name: "Browser Extension: Auto-capture vs Manual capture",
-    hypothesis: "Auto-capture of competitor pages increases weekly signal count by 5x",
-    status: "planned",
-    variant_a: "Manual capture (current)",
-    variant_b: "Auto-detect competitor pages",
-    metric: "Weekly signals per user",
-    baseline: 12,
-    variant_result: null,
-    improvement: null,
-    confidence: null,
-    n: 0,
-    started: null,
-    aiInsight: "High confidence hypothesis based on market research",
-  },
-];
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
 
-const LEARNINGS = [
-  {
-    id: "1",
-    icon: CheckCircle2,
-    color: "text-emerald-500",
-    bg: "bg-emerald-500/10 border-emerald-500/20",
-    text: "Context-first onboarding +23% activation — shipped to production",
-    status: "shipped",
-  },
-  {
-    id: "2",
-    icon: TrendingUp,
-    color: "text-blue-400",
-    bg: "bg-blue-500/10 border-blue-500/20",
-    text: "Extension CTA +86% conversion — A/B still running, high confidence",
-    status: "in_progress",
-  },
-  {
-    id: "3",
-    icon: CheckCircle2,
-    color: "text-emerald-500",
-    bg: "bg-emerald-500/10 border-emerald-500/20",
-    text: "Weekly digest preferred over daily — confirmed",
-    status: "confirmed",
-  },
-];
+function mapExperiment(api: ApiExperiment): Experiment {
+  const stats = api.stats ?? api.variants ?? [];
+  const control    = stats.find((s) => s.isControl)  ?? stats[0];
+  const challenger = stats.find((s) => !s.isControl) ?? stats[1];
 
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
+  const baseline       = control    ? Math.round(control.conversionRate    * 10000) / 100 : 0;
+  const variant_result = challenger ? Math.round(challenger.conversionRate * 10000) / 100 : null;
 
-const STATUS_CONFIG: Record<
-  ExperimentStatus,
-  { label: string; color: string; bg: string; dotClass: string; pulse: boolean }
-> = {
-  running: {
-    label: "Running",
-    color: "text-emerald-500",
-    bg: "bg-emerald-500/10 border-emerald-500/20",
-    dotClass: "bg-emerald-500",
-    pulse: true,
-  },
-  completed: {
-    label: "Completed",
-    color: "text-blue-400",
-    bg: "bg-blue-500/10 border-blue-500/20",
-    dotClass: "bg-blue-500",
-    pulse: false,
-  },
-  paused: {
-    label: "Paused",
-    color: "text-amber-400",
-    bg: "bg-amber-500/10 border-amber-500/20",
-    dotClass: "bg-amber-500",
-    pulse: false,
-  },
-  planned: {
-    label: "Planned",
-    color: "text-muted-foreground",
-    bg: "bg-muted/40 border-border",
-    dotClass: "bg-muted-foreground/50",
-    pulse: false,
-  },
+  let improvement: string | null = null;
+  if (challenger?.lift != null) {
+    const l = Math.round(challenger.lift);
+    improvement = (l >= 0 ? "+" : "") + l + "%";
+  }
+
+  let confidence: number | null = null;
+  if (challenger?.pValue != null) {
+    confidence = Math.min(100, Math.round((1 - challenger.pValue) * 100));
+  }
+
+  const n = stats.reduce((sum, s) => sum + s.impressions, 0);
+
+  return {
+    id:             api.id,
+    name:           api.title,
+    hypothesis:     api.hypothesis,
+    status:         api.status,
+    variant_a:      control?.name    ?? "Control",
+    variant_b:      challenger?.name ?? "Challenger",
+    metric:         api.targetMetric,
+    baseline,
+    variant_result,
+    improvement,
+    confidence,
+    n,
+    startedAt:      api.startedAt,
+    aiInsight:      api.aiInsight ?? "No AI insight yet — complete the experiment to generate one.",
+  };
+}
+
+// ─── config ───────────────────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<ExperimentStatus, { label: string; color: string; bg: string; dotClass: string; pulse: boolean }> = {
+  running:   { label: "Running",   color: "text-emerald-500",      bg: "bg-emerald-500/10 border-emerald-500/20", dotClass: "bg-emerald-500",       pulse: true  },
+  completed: { label: "Completed", color: "text-blue-400",         bg: "bg-blue-500/10 border-blue-500/20",       dotClass: "bg-blue-500",           pulse: false },
+  paused:    { label: "Paused",    color: "text-amber-400",        bg: "bg-amber-500/10 border-amber-500/20",     dotClass: "bg-amber-500",          pulse: false },
+  abandoned: { label: "Abandoned", color: "text-muted-foreground", bg: "bg-muted/40 border-border",               dotClass: "bg-muted-foreground/50", pulse: false },
 };
 
-function confidenceColor(confidence: number): string {
-  if (confidence >= 95) return "bg-emerald-500";
-  if (confidence >= 85) return "bg-blue-500";
-  if (confidence >= 70) return "bg-amber-500";
+function confidenceColor(c: number): string {
+  if (c >= 95) return "bg-emerald-500";
+  if (c >= 85) return "bg-blue-500";
+  if (c >= 70) return "bg-amber-500";
   return "bg-red-500";
 }
 
-function confidenceTextColor(confidence: number): string {
-  if (confidence >= 95) return "text-emerald-500";
-  if (confidence >= 85) return "text-blue-400";
-  if (confidence >= 70) return "text-amber-400";
+function confidenceTextColor(c: number): string {
+  if (c >= 95) return "text-emerald-500";
+  if (c >= 85) return "text-blue-400";
+  if (c >= 70) return "text-amber-400";
   return "text-red-400";
 }
 
-function improvementIsPositive(imp: string): boolean {
-  return imp.startsWith("+");
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
+// ─── sub-components ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: ExperimentStatus }) {
   const cfg = STATUS_CONFIG[status];
@@ -234,29 +145,11 @@ function StatusBadge({ status }: { status: ExperimentStatus }) {
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  sub,
-  positive,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  positive?: boolean;
-}) {
+function MetricCard({ label, value, sub, positive }: { label: string; value: string | number; sub?: string; positive?: boolean }) {
   return (
     <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-1.5">
       <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
-      <span
-        className={`text-2xl font-bold tracking-tight leading-none tabular-nums ${
-          positive !== undefined
-            ? positive
-              ? "text-emerald-500"
-              : "text-foreground"
-            : "text-foreground"
-        }`}
-      >
+      <span className={`text-2xl font-bold tracking-tight leading-none tabular-nums ${positive ? "text-emerald-500" : "text-foreground"}`}>
         {value}
       </span>
       {sub && <span className="text-[11px] text-muted-foreground">{sub}</span>}
@@ -264,76 +157,63 @@ function MetricCard({
   );
 }
 
-interface ExperimentCardProps {
+function ExperimentCard({
+  experiment,
+  onToggle,
+}: {
   experiment: Experiment;
-  onToggle: (id: string) => void;
-}
-
-function ExperimentCard({ experiment, onToggle }: ExperimentCardProps) {
+  onToggle: (id: string, newStatus: ExperimentStatus) => void;
+}) {
   const hasResults = experiment.variant_result !== null && experiment.improvement !== null;
-  const isPositive = hasResults ? improvementIsPositive(experiment.improvement!) : false;
+  const isPositive = hasResults && experiment.improvement!.startsWith("+");
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden hover:border-border/80 transition-colors">
-      {/* Card header */}
       <div className="px-5 py-4 border-b border-border/50 flex items-start gap-3">
         <StatusBadge status={experiment.status} />
-        {experiment.started && (
+        {experiment.startedAt && (
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground ml-auto">
             <Clock className="h-3 w-3" />
-            Started {experiment.started}
+            Started {relativeTime(experiment.startedAt)}
           </span>
         )}
       </div>
 
       <div className="px-5 py-4 space-y-4">
-        {/* Name + hypothesis */}
         <div className="space-y-1.5">
           <h3 className="text-[14px] font-semibold text-foreground leading-snug">{experiment.name}</h3>
           <p className="text-[12px] italic text-muted-foreground leading-relaxed">{experiment.hypothesis}</p>
         </div>
 
-        {/* Variant comparison */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-muted/30 rounded-lg p-3.5 border border-border/50 space-y-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1.5 py-0.5 rounded bg-muted border border-border">
-                A · Control
-              </span>
-            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1.5 py-0.5 rounded bg-muted border border-border">
+              A · Control
+            </span>
             <p className="text-[12px] font-medium text-foreground">{experiment.variant_a}</p>
-            {hasResults && (
+            {experiment.n > 0 && (
               <div className="space-y-0.5">
                 <span className="text-[10px] text-muted-foreground">{experiment.metric}</span>
                 <p className="text-[16px] font-bold text-foreground tabular-nums">{experiment.baseline}%</p>
               </div>
             )}
-            {!hasResults && experiment.status !== "planned" && (
-              <p className="text-[12px] font-bold text-foreground tabular-nums">{experiment.baseline}{experiment.metric.includes("rate") || experiment.metric.includes("count") ? "" : ""}</p>
-            )}
           </div>
 
           <div className={`rounded-lg p-3.5 border space-y-2 ${
-            hasResults && isPositive
-              ? "bg-emerald-500/5 border-emerald-500/20"
-              : hasResults && !isPositive
-              ? "bg-red-500/5 border-red-500/20"
-              : "bg-muted/30 border-border/50"
+            hasResults && isPositive  ? "bg-emerald-500/5 border-emerald-500/20" :
+            hasResults && !isPositive ? "bg-red-500/5 border-red-500/20"         :
+                                        "bg-muted/30 border-border/50"
           }`}>
             <div className="flex items-center gap-1.5">
               <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
-                hasResults && isPositive
-                  ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
-                  : hasResults && !isPositive
-                  ? "text-red-400 bg-red-500/10 border-red-500/20"
-                  : "text-muted-foreground bg-muted border-border"
+                hasResults && isPositive  ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
+                hasResults && !isPositive ? "text-red-400 bg-red-500/10 border-red-500/20"             :
+                                            "text-muted-foreground bg-muted border-border"
               }`}>
                 B · Challenger
               </span>
               {hasResults && experiment.improvement && (
-                <span className={`text-[11px] font-bold ml-auto flex items-center gap-0.5 ${
-                  isPositive ? "text-emerald-500" : "text-red-400"
-                }`}>
+                <span className={`text-[11px] font-bold ml-auto flex items-center gap-0.5 ${isPositive ? "text-emerald-500" : "text-red-400"}`}>
                   {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                   {experiment.improvement}
                 </span>
@@ -348,13 +228,12 @@ function ExperimentCard({ experiment, onToggle }: ExperimentCardProps) {
                 </p>
               </div>
             )}
-            {experiment.status === "planned" && (
+            {experiment.n === 0 && (
               <p className="text-[11px] text-muted-foreground italic">Not started yet</p>
             )}
           </div>
         </div>
 
-        {/* Confidence meter */}
         {experiment.confidence !== null && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-[11px]">
@@ -380,7 +259,6 @@ function ExperimentCard({ experiment, onToggle }: ExperimentCardProps) {
           </div>
         )}
 
-        {/* Sample size */}
         {experiment.n > 0 && (
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <Users className="h-3 w-3" />
@@ -388,7 +266,6 @@ function ExperimentCard({ experiment, onToggle }: ExperimentCardProps) {
           </div>
         )}
 
-        {/* AI Insight */}
         <div className="flex items-start gap-2.5 rounded-lg bg-amber-500/8 border border-amber-500/20 px-3.5 py-3">
           <Brain className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-0.5 min-w-0">
@@ -397,44 +274,23 @@ function ExperimentCard({ experiment, onToggle }: ExperimentCardProps) {
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-2 pt-1">
           <Button size="sm" variant="ghost" className="h-8 text-[11px] px-2.5 gap-1 border border-border/50">
-            View Details
-            <ChevronRight className="h-3 w-3" />
+            View Details <ChevronRight className="h-3 w-3" />
           </Button>
-
           {experiment.status === "running" && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-[11px] px-2.5 gap-1"
-              onClick={() => onToggle(experiment.id)}
-            >
-              <Pause className="h-3 w-3" />
-              Stop
+            <Button size="sm" variant="outline" className="h-8 text-[11px] px-2.5 gap-1" onClick={() => onToggle(experiment.id, "paused")}>
+              <Pause className="h-3 w-3" /> Pause
             </Button>
           )}
-
           {experiment.status === "paused" && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-[11px] px-2.5 gap-1"
-              onClick={() => onToggle(experiment.id)}
-            >
-              <Play className="h-3 w-3" />
-              Resume
+            <Button size="sm" variant="outline" className="h-8 text-[11px] px-2.5 gap-1" onClick={() => onToggle(experiment.id, "running")}>
+              <Play className="h-3 w-3" /> Resume
             </Button>
           )}
-
           {(experiment.status === "completed" || (experiment.confidence !== null && experiment.confidence >= 90)) && (
-            <Button
-              size="sm"
-              className="h-8 text-[11px] px-3 gap-1.5 ml-auto bg-emerald-600 hover:bg-emerald-700 text-white border-0"
-            >
-              <Zap className="h-3 w-3" />
-              Implement Winner
+            <Button size="sm" className="h-8 text-[11px] px-3 gap-1.5 ml-auto bg-emerald-600 hover:bg-emerald-700 text-white border-0">
+              <Zap className="h-3 w-3" /> Implement Winner
             </Button>
           )}
         </div>
@@ -443,11 +299,28 @@ function ExperimentCard({ experiment, onToggle }: ExperimentCardProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Learning Loop section
-// ---------------------------------------------------------------------------
+function LearningLoop({ experiments }: { experiments: Experiment[] }) {
+  const completed = experiments.filter(
+    (e) => e.status === "completed" && e.aiInsight && !e.aiInsight.startsWith("No AI insight")
+  );
 
-function LearningLoop() {
+  if (completed.length === 0) {
+    return (
+      <div className="bg-card border border-border rounded-xl p-5 text-center text-xs text-muted-foreground">
+        Complete experiments to build your learning loop.
+      </div>
+    );
+  }
+
+  const positiveLifts = experiments
+    .filter((e) => e.improvement?.startsWith("+"))
+    .map((e) => parseFloat(e.improvement!.replace("+", "").replace("%", "")))
+    .filter((n) => !isNaN(n));
+
+  const avgLift = positiveLifts.length > 0
+    ? Math.round(positiveLifts.reduce((a, b) => a + b, 0) / positiveLifts.length)
+    : 0;
+
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center gap-2">
@@ -456,51 +329,42 @@ function LearningLoop() {
         <span className="text-[11px] text-muted-foreground ml-1">— insights extracted and applied</span>
       </div>
       <div className="p-5 space-y-3">
-        {LEARNINGS.map((learning) => {
-          const Icon = learning.icon;
-          return (
-            <div
-              key={learning.id}
-              className={`flex items-start gap-3 rounded-lg border p-4 ${learning.bg}`}
-            >
-              <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${learning.color}`} />
-              <div className="flex-1 min-w-0 space-y-1">
-                <p className="text-[12.5px] text-foreground leading-snug">{learning.text}</p>
-                <span className={`text-[10px] font-semibold uppercase tracking-wide ${learning.color}`}>
-                  {learning.status === "shipped"
-                    ? "Shipped to production"
-                    : learning.status === "confirmed"
-                    ? "Confirmed"
-                    : "High confidence · still running"}
+        {completed.slice(0, 3).map((exp) => (
+          <div key={exp.id} className="flex items-start gap-3 rounded-lg border p-4 bg-emerald-500/10 border-emerald-500/20">
+            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500" />
+            <div className="flex-1 min-w-0 space-y-1">
+              <p className="text-[12.5px] text-foreground leading-snug font-medium">{exp.name}</p>
+              <p className="text-[11px] text-muted-foreground leading-snug">{exp.aiInsight}</p>
+              {exp.improvement && (
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500">
+                  {exp.improvement} improvement · completed
                 </span>
-              </div>
-              {learning.status === "shipped" && (
-                <div className="shrink-0 flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Live
-                </div>
               )}
             </div>
-          );
-        })}
+            <div className="shrink-0 flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">
+              <CheckCircle2 className="h-3 w-3" />
+              Done
+            </div>
+          </div>
+        ))}
       </div>
-
-      {/* Summary bar */}
       <div className="px-5 pb-5">
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-muted/30 rounded-lg p-3 text-center border border-border/50 space-y-0.5">
-            <p className="text-[18px] font-bold text-emerald-500 tabular-nums leading-none">+23%</p>
-            <p className="text-[10px] text-muted-foreground">Activation lift</p>
+            <p className="text-[18px] font-bold text-emerald-500 tabular-nums leading-none">
+              {avgLift > 0 ? `+${avgLift}%` : "—"}
+            </p>
+            <p className="text-[10px] text-muted-foreground">Avg improvement</p>
           </div>
           <div className="bg-muted/30 rounded-lg p-3 text-center border border-border/50 space-y-0.5">
             <p className="text-[18px] font-bold text-blue-400 tabular-nums leading-none flex items-center justify-center gap-0.5">
-              +86%
+              {positiveLifts.length}
               <ArrowUpRight className="h-3.5 w-3.5" />
             </p>
-            <p className="text-[10px] text-muted-foreground">Conversion boost</p>
+            <p className="text-[10px] text-muted-foreground">Positive results</p>
           </div>
           <div className="bg-muted/30 rounded-lg p-3 text-center border border-border/50 space-y-0.5">
-            <p className="text-[18px] font-bold text-foreground tabular-nums leading-none">3</p>
+            <p className="text-[18px] font-bold text-foreground tabular-nums leading-none">{completed.length}</p>
             <p className="text-[10px] text-muted-foreground">Learnings applied</p>
           </div>
         </div>
@@ -509,46 +373,60 @@ function LearningLoop() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
+// ─── main component ───────────────────────────────────────────────────────────
 
 export function ExperimentsView() {
-  const [experiments, setExperiments] = useState<Experiment[]>(EXPERIMENTS);
+  const { user } = useAuth();
+  const { preferences } = useExtensionPreferences();
+  const workspaceId = preferences?.activeWorkspaceId;
+
+  const { data: apiData, loading, error, refetch } = useApi<{ experiments: ApiExperiment[] }>(
+    `/api/experiments${workspaceId ? `?workspaceId=${workspaceId}` : ""}`,
+    { refreshInterval: 15_000 }
+  );
+
+  const experiments: Experiment[] = (apiData?.experiments ?? []).map(mapExperiment);
+
   const [filter, setFilter] = useState<ExperimentStatus | "all">("all");
 
-  const handleToggle = (id: string) => {
-    setExperiments((prev) =>
-      prev.map((e) =>
-        e.id === id
-          ? { ...e, status: e.status === "running" ? "paused" : e.status === "paused" ? "running" : e.status }
-          : e
-      )
-    );
-  };
+  const handleToggle = useCallback(async (id: string, newStatus: ExperimentStatus) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/experiments/${id}/status`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      refetch();
+    } catch {
+      // non-fatal
+    }
+  }, [user, refetch]);
 
-  const running = experiments.filter((e) => e.status === "running").length;
+  const running   = experiments.filter((e) => e.status === "running").length;
   const completed = experiments.filter((e) => e.status === "completed").length;
-  const paused = experiments.filter((e) => e.status === "paused").length;
+  const paused    = experiments.filter((e) => e.status === "paused").length;
 
   const positiveImprovements = experiments
-    .filter((e) => e.improvement && improvementIsPositive(e.improvement))
-    .map((e) => parseFloat(e.improvement!.replace("+", "").replace("%", "")));
+    .filter((e) => e.improvement?.startsWith("+"))
+    .map((e) => parseFloat(e.improvement!.replace("+", "").replace("%", "")))
+    .filter((n) => !isNaN(n));
 
-  const avgImprovement =
-    positiveImprovements.length > 0
-      ? Math.round(positiveImprovements.reduce((a, b) => a + b, 0) / positiveImprovements.length)
-      : 0;
+  const avgImprovement = positiveImprovements.length > 0
+    ? Math.round(positiveImprovements.reduce((a, b) => a + b, 0) / positiveImprovements.length)
+    : 0;
 
-  const filteredExperiments =
-    filter === "all" ? experiments : experiments.filter((e) => e.status === filter);
+  const filteredExperiments = filter === "all"
+    ? experiments
+    : experiments.filter((e) => e.status === filter);
 
   const filterOptions: Array<{ id: ExperimentStatus | "all"; label: string }> = [
-    { id: "all", label: "All" },
-    { id: "running", label: "Running" },
+    { id: "all",       label: "All"       },
+    { id: "running",   label: "Running"   },
     { id: "completed", label: "Completed" },
-    { id: "paused", label: "Paused" },
-    { id: "planned", label: "Planned" },
+    { id: "paused",    label: "Paused"    },
+    { id: "abandoned", label: "Abandoned" },
   ];
 
   return (
@@ -567,6 +445,7 @@ export function ExperimentsView() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
             {running > 0 && (
               <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -576,17 +455,20 @@ export function ExperimentsView() {
           </div>
         </div>
 
+        {/* Error state */}
+        {error && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-500">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            {error}
+          </div>
+        )}
+
         {/* Metrics row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MetricCard label="Running" value={running} sub="active tests" />
-          <MetricCard label="Completed" value={completed} sub="with results" />
-          <MetricCard label="Paused" value={paused} sub="on hold" />
-          <MetricCard
-            label="Avg Improvement"
-            value={`+${avgImprovement}%`}
-            sub="positive variants"
-            positive={true}
-          />
+          <MetricCard label="Running"         value={running}                                                           sub="active tests"      />
+          <MetricCard label="Completed"       value={completed}                                                         sub="with results"      />
+          <MetricCard label="Paused"          value={paused}                                                            sub="on hold"           />
+          <MetricCard label="Avg Improvement" value={avgImprovement > 0 ? `+${avgImprovement}%` : "—"}                 sub="positive variants" positive={avgImprovement > 0} />
         </div>
 
         {/* Filter bar */}
@@ -614,73 +496,74 @@ export function ExperimentsView() {
 
         {/* Experiment cards */}
         <div className="space-y-4">
-          {filteredExperiments.length === 0 ? (
+          {loading && experiments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-border/60 rounded-2xl bg-card/40">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-3" />
+              <p className="text-[13px] font-semibold text-foreground">Loading experiments…</p>
+            </div>
+          ) : filteredExperiments.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-border/60 rounded-2xl bg-card/40">
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-3">
                 <FlaskConical className="h-5 w-5 text-primary" />
               </div>
-              <p className="text-[13px] font-semibold text-foreground">No experiments found</p>
-              <p className="text-[11px] text-muted-foreground mt-1">Try a different filter</p>
+              <p className="text-[13px] font-semibold text-foreground">
+                {filter === "all" ? "No experiments yet" : `No ${filter} experiments`}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {filter === "all" ? "Create your first experiment to start testing hypotheses." : "Try a different filter."}
+              </p>
             </div>
           ) : (
             filteredExperiments.map((experiment) => (
-              <ExperimentCard
-                key={experiment.id}
-                experiment={experiment}
-                onToggle={handleToggle}
-              />
+              <ExperimentCard key={experiment.id} experiment={experiment} onToggle={handleToggle} />
             ))
           )}
         </div>
 
         {/* Experiment health summary */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Experiment Health
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="space-y-1">
-              <div className="flex items-baseline gap-2">
+        {experiments.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Experiment Health</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="space-y-1">
                 <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
                   {experiments.reduce((sum, e) => sum + e.n, 0).toLocaleString()}
                 </span>
+                <p className="text-[11px] text-muted-foreground">Total Participants</p>
               </div>
-              <p className="text-[11px] text-muted-foreground">Total Participants</p>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-baseline gap-2">
-                <span className="text-[22px] font-bold text-emerald-500 tabular-nums leading-none">
-                  {experiments.filter((e) => e.confidence !== null && e.confidence >= 90).length}
-                </span>
-                <span className="text-[11px] text-muted-foreground">of {experiments.filter((e) => e.confidence !== null).length}</span>
+              <div className="space-y-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[22px] font-bold text-emerald-500 tabular-nums leading-none">
+                    {experiments.filter((e) => e.confidence !== null && e.confidence >= 90).length}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    of {experiments.filter((e) => e.confidence !== null).length}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">High Confidence</p>
               </div>
-              <p className="text-[11px] text-muted-foreground">High Confidence</p>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-baseline gap-2">
+              <div className="space-y-1">
                 <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
-                  {experiments.filter((e) => e.improvement && improvementIsPositive(e.improvement)).length}
+                  {positiveImprovements.length}
                 </span>
+                <p className="text-[11px] text-muted-foreground">Positive Results</p>
               </div>
-              <p className="text-[11px] text-muted-foreground">Positive Results</p>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-baseline gap-2">
+              <div className="space-y-1">
                 <span className="text-[22px] font-bold text-emerald-500 tabular-nums leading-none flex items-center gap-1">
-                  +{avgImprovement}%
-                  <TrendingUp className="h-4 w-4" />
+                  {avgImprovement > 0 ? `+${avgImprovement}%` : "—"}
+                  {avgImprovement > 0 && <TrendingUp className="h-4 w-4" />}
                 </span>
+                <p className="text-[11px] text-muted-foreground">Avg Uplift</p>
               </div>
-              <p className="text-[11px] text-muted-foreground">Avg Uplift</p>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Learning loop */}
-        <LearningLoop />
+        <LearningLoop experiments={experiments} />
 
         {/* AI hypothesis generator prompt */}
         <div className="bg-card border border-border rounded-xl p-5 flex items-start gap-4">
@@ -699,25 +582,23 @@ export function ExperimentsView() {
           </Button>
         </div>
 
-        {/* Upcoming experiments */}
-        {experiments.filter((e) => e.status === "planned").length > 0 && (
+        {/* Planned / not-started experiments (0 impressions, not running) */}
+        {experiments.filter((e) => e.n === 0 && e.status !== "running").length > 0 && (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-3.5 border-b border-border flex items-center gap-2">
               <Target className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-[13px] font-semibold text-foreground">Planned Experiments</span>
+              <span className="text-[13px] font-semibold text-foreground">Not Yet Started</span>
               <span className="text-[11px] text-muted-foreground ml-1">
-                — {experiments.filter((e) => e.status === "planned").length} queued
+                — {experiments.filter((e) => e.n === 0 && e.status !== "running").length} queued
               </span>
             </div>
             <ul>
               {experiments
-                .filter((e) => e.status === "planned")
+                .filter((e) => e.n === 0 && e.status !== "running")
                 .map((exp, idx, arr) => (
                   <li
                     key={exp.id}
-                    className={`flex items-start gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors ${
-                      idx < arr.length - 1 ? "border-b border-border/50" : ""
-                    }`}
+                    className={`flex items-start gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors ${idx < arr.length - 1 ? "border-b border-border/50" : ""}`}
                   >
                     <div className="h-6 w-6 rounded-md bg-muted flex items-center justify-center shrink-0 mt-0.5">
                       <FlaskConical className="h-3 w-3 text-muted-foreground" />
@@ -731,9 +612,11 @@ export function ExperimentsView() {
                         <AlertTriangle className="h-2.5 w-2.5" />
                         Not started
                       </span>
-                      <Button size="sm" variant="ghost" className="h-7 text-[11px] px-2 gap-1">
-                        Launch
-                        <ChevronRight className="h-3 w-3" />
+                      <Button
+                        size="sm" variant="ghost" className="h-7 text-[11px] px-2 gap-1"
+                        onClick={() => handleToggle(exp.id, "running")}
+                      >
+                        Launch <ChevronRight className="h-3 w-3" />
                       </Button>
                     </div>
                   </li>

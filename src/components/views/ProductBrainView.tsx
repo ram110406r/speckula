@@ -1,27 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Brain,
-  BookOpen,
-  Compass,
-  AlertTriangle,
-  Lightbulb,
-  FlaskConical,
-  Search,
-  Plus,
-  X,
-  ChevronDown,
-  ChevronUp,
-  Link2,
-  Tag,
-  Zap,
-  TrendingUp,
-  Database,
-  Shield,
+  Brain, BookOpen, Compass, AlertTriangle, Lightbulb, FlaskConical,
+  Search, Plus, X, ChevronDown, ChevronUp, Link2, Tag, Zap,
+  TrendingUp, Database, Shield, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/lib/firebase/AuthProvider";
+import { useProductBrain, type ProductBrainEntry } from "@/hooks/useProductBrain";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -41,241 +29,104 @@ interface Memory {
   connections: number;
 }
 
-// ─── Mock Data ───────────────────────────────────────────────────────────────
+// ─── Entry type mappings ─────────────────────────────────────────────────────
 
-const MEMORIES: Memory[] = [
-  {
-    id: "1",
-    type: "learning",
-    category: "market",
-    title: "Early-stage PMs need automated context, not manual data entry",
-    content:
-      "After analyzing 847 Reddit posts and 12 user interviews, the core insight: PMs spend 4h/week manually aggregating context. The job-to-be-done is \"ambient intelligence\" — the tool should learn and surface, not require input.",
-    tags: ["market-insight", "jtbd", "validated"],
-    confidence: 94,
-    source: "Market analysis",
-    createdAt: "2 days ago",
-    connections: 7,
-  },
-  {
-    id: "2",
-    type: "decision",
-    category: "product",
-    title: "Launch freemium with browser extension as growth lever",
-    content:
-      "Decision: Lead with free browser extension (zero friction) → demonstrate value through automatic intelligence capture → convert when Product Brain fills with context. Extension becomes the moat.",
-    tags: ["growth", "freemium", "decided"],
-    confidence: 91,
-    source: "Decision Engine",
-    createdAt: "3 days ago",
-    connections: 5,
-  },
-  {
-    id: "3",
-    type: "assumption",
-    category: "strategy",
-    title: "Startups will pay $49/mo for an autonomous PM intelligence layer",
-    content:
-      "Assumption: If SPECKULA can autonomously monitor competitors + surface market signals + connect to execution — early-stage startups (seed to Series A) will pay $49/mo. Needs validation.",
-    tags: ["pricing", "unvalidated", "critical"],
-    confidence: 67,
-    source: "Founder hypothesis",
-    createdAt: "5 days ago",
-    connections: 3,
-  },
-  {
-    id: "4",
-    type: "insight",
-    category: "competitor",
-    title: "Notion AI failed because it lacks product context — our core advantage",
-    content:
-      "Notion AI generates generic summaries. SPECKULA's advantage: we know your product, your market, your decisions. AI is only valuable when it has context. This is our moat.",
-    tags: ["competitive-advantage", "validated", "ai"],
-    confidence: 89,
-    source: "Competitor analysis",
-    createdAt: "1 week ago",
-    connections: 9,
-  },
-  {
-    id: "5",
-    type: "experiment",
-    category: "growth",
-    title: "Onboarding A/B Test: Context-first vs Feature-first",
-    content:
-      "Hypothesis: Showing users their \"startup context\" being built in real-time during onboarding increases activation by 30%+. Running A/B test. Current result: Variant B (context-first) +23% activation at 234 users.",
-    tags: ["experiment", "running", "onboarding"],
-    confidence: 76,
-    source: "Growth team",
-    createdAt: "4 days ago",
-    connections: 4,
-  },
-  {
-    id: "6",
-    type: "learning",
-    category: "product",
-    title: "Browser extension is the #1 acquisition channel hypothesis",
-    content:
-      "Extension gives immediate value (capture + analyze any page) with zero setup. Compare: Productboard requires 2h setup. Our extension: 30s. Hypothesis: extension installs convert at 3x rate.",
-    tags: ["acquisition", "extension", "hypothesis"],
-    confidence: 81,
-    source: "Product analysis",
-    createdAt: "1 week ago",
-    connections: 6,
-  },
-  {
-    id: "7",
-    type: "insight",
-    category: "market",
-    title: "YC W26 cohort is 40% AI-native startups — prime target segment",
-    content:
-      "YC W26: 40% of companies are AI-native. These founders understand AI-native tools. They're building with AI, not adopting AI. Perfect early adopter segment.",
-    tags: ["segment", "yc", "early-adopters"],
-    confidence: 92,
-    source: "Market research",
-    createdAt: "6 days ago",
-    connections: 8,
-  },
-  {
-    id: "8",
-    type: "assumption",
-    category: "product",
-    title: "Autonomous mode will become primary PM workflow within 18 months",
-    content:
-      "Assumption: As AI agents mature, the PM workflow shifts from \"using tools\" to \"supervising agents\". SPECKULA must build for this future now. Autonomous mode is the 2027 product, built today.",
-    tags: ["future", "autonomous", "unvalidated"],
-    confidence: 58,
-    source: "Founder vision",
-    createdAt: "2 weeks ago",
-    connections: 2,
-  },
-];
+const ENTRY_TYPE_TO_MEMORY_TYPE: Record<string, MemoryType> = {
+  competitor_insight:  "insight",
+  market_signal:       "learning",
+  pm_insight:          "insight",
+  pricing_observation: "assumption",
+  onboarding_pattern:  "learning",
+  feature_comparison:  "insight",
+  strategic_decision:  "decision",
+  ux_friction:         "learning",
+  icp_inference:       "assumption",
+};
 
-const AI_PATTERNS = [
-  {
-    id: "p1",
-    priority: "high",
-    label: "Market timing is strong",
-    detail: "3 converging signals point to PMF window in the next 6 months.",
-  },
-  {
-    id: "p2",
-    priority: "critical",
-    label: "Pricing assumption needs validation",
-    detail: "Low confidence score (67%). Schedule a pricing discovery sprint.",
-  },
-  {
-    id: "p3",
-    priority: "medium",
-    label: "Competitor gap identified",
-    detail: "No tool combines browser extension + PM workflow automation.",
-  },
-];
+const ENTRY_TYPE_TO_CATEGORY: Record<string, MemoryCategory> = {
+  competitor_insight:  "competitor",
+  market_signal:       "market",
+  pm_insight:          "product",
+  pricing_observation: "strategy",
+  onboarding_pattern:  "growth",
+  feature_comparison:  "competitor",
+  strategic_decision:  "strategy",
+  ux_friction:         "product",
+  icp_inference:       "market",
+};
 
-const TOP_TAGS = [
-  { label: "validated", weight: 9 },
-  { label: "market-insight", weight: 8 },
-  { label: "extension", weight: 7 },
-  { label: "jtbd", weight: 8 },
-  { label: "freemium", weight: 6 },
-  { label: "ai", weight: 7 },
-  { label: "growth", weight: 9 },
-  { label: "competitor", weight: 5 },
-  { label: "hypothesis", weight: 6 },
-  { label: "unvalidated", weight: 5 },
-  { label: "segment", weight: 4 },
-  { label: "autonomous", weight: 4 },
-];
+const MEMORY_TYPE_TO_ENTRY_TYPE: Record<MemoryType, string> = {
+  learning:   "market_signal",
+  decision:   "strategic_decision",
+  assumption: "icp_inference",
+  insight:    "pm_insight",
+  experiment: "market_signal",
+};
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+function mapEntry(e: ProductBrainEntry): Memory {
+  return {
+    id:          e.id,
+    type:        ENTRY_TYPE_TO_MEMORY_TYPE[e.entryType] ?? "insight",
+    category:    ENTRY_TYPE_TO_CATEGORY[e.entryType]    ?? "product",
+    title:       e.title,
+    content:     e.content,
+    tags:        e.tags,
+    confidence:  Math.round((e.confidence ?? 0) * 100),
+    source:      e.sourceUrl ? new URL(e.sourceUrl).hostname : e.entryType.replace(/_/g, " "),
+    createdAt:   e.createdAt,
+    connections: 0,
+  };
+}
+
+// ─── Config ──────────────────────────────────────────────────────────────────
 
 const FILTER_TABS: { label: string; value: MemoryType | "all" }[] = [
-  { label: "All", value: "all" },
-  { label: "Learnings", value: "learning" },
-  { label: "Decisions", value: "decision" },
+  { label: "All",         value: "all"        },
+  { label: "Learnings",   value: "learning"   },
+  { label: "Decisions",   value: "decision"   },
   { label: "Assumptions", value: "assumption" },
-  { label: "Insights", value: "insight" },
+  { label: "Insights",    value: "insight"    },
   { label: "Experiments", value: "experiment" },
 ];
 
-// ─── Helper Maps ─────────────────────────────────────────────────────────────
-
-const TYPE_CONFIG: Record<
-  MemoryType,
-  { icon: React.ElementType; color: string; bg: string; border: string; label: string }
-> = {
-  learning: {
-    icon: BookOpen,
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/10",
-    border: "border-emerald-500/30",
-    label: "Learning",
-  },
-  decision: {
-    icon: Compass,
-    color: "text-blue-400",
-    bg: "bg-blue-500/10",
-    border: "border-blue-500/30",
-    label: "Decision",
-  },
-  assumption: {
-    icon: AlertTriangle,
-    color: "text-amber-400",
-    bg: "bg-amber-500/10",
-    border: "border-amber-500/30",
-    label: "Assumption",
-  },
-  insight: {
-    icon: Lightbulb,
-    color: "text-purple-400",
-    bg: "bg-purple-500/10",
-    border: "border-purple-500/30",
-    label: "Insight",
-  },
-  experiment: {
-    icon: FlaskConical,
-    color: "text-orange-400",
-    bg: "bg-orange-500/10",
-    border: "border-orange-500/30",
-    label: "Experiment",
-  },
+const TYPE_CONFIG: Record<MemoryType, { icon: React.ElementType; color: string; bg: string; border: string; label: string }> = {
+  learning:   { icon: BookOpen,      color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", label: "Learning"   },
+  decision:   { icon: Compass,       color: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/30",    label: "Decision"   },
+  assumption: { icon: AlertTriangle, color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   label: "Assumption" },
+  insight:    { icon: Lightbulb,     color: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-500/30",  label: "Insight"    },
+  experiment: { icon: FlaskConical,  color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  label: "Experiment" },
 };
 
 const CATEGORY_CONFIG: Record<MemoryCategory, { bg: string; text: string }> = {
-  market: { bg: "bg-sky-500/10", text: "text-sky-400" },
-  product: { bg: "bg-violet-500/10", text: "text-violet-400" },
-  strategy: { bg: "bg-teal-500/10", text: "text-teal-400" },
-  competitor: { bg: "bg-rose-500/10", text: "text-rose-400" },
-  growth: { bg: "bg-lime-500/10", text: "text-lime-400" },
+  market:     { bg: "bg-sky-500/10",    text: "text-sky-400"    },
+  product:    { bg: "bg-violet-500/10", text: "text-violet-400" },
+  strategy:   { bg: "bg-teal-500/10",   text: "text-teal-400"   },
+  competitor: { bg: "bg-rose-500/10",   text: "text-rose-400"   },
+  growth:     { bg: "bg-lime-500/10",   text: "text-lime-400"   },
 };
 
 function confidenceColor(n: number) {
   if (n >= 80) return { bar: "bg-emerald-500", text: "text-emerald-400" };
-  if (n >= 60) return { bar: "bg-amber-500", text: "text-amber-400" };
-  return { bar: "bg-red-500", text: "text-red-400" };
-}
-
-function priorityConfig(p: string) {
-  if (p === "critical") return { dot: "bg-red-500", text: "text-red-400", label: "Critical" };
-  if (p === "high") return { dot: "bg-amber-500", text: "text-amber-400", label: "High" };
-  return { dot: "bg-blue-500", text: "text-blue-400", label: "Medium" };
+  if (n >= 60) return { bar: "bg-amber-500",   text: "text-amber-400"   };
+  return              { bar: "bg-red-500",      text: "text-red-400"     };
 }
 
 // ─── Sparkline SVG ───────────────────────────────────────────────────────────
 
 function Sparkline() {
-  // Simple upward-trending sparkline path
   const points = [10, 18, 14, 22, 19, 28, 24, 34, 30, 40];
-  const w = 120;
-  const h = 40;
-  const maxVal = 40;
-  const minVal = 10;
-  const range = maxVal - minVal;
+  const w = 120; const h = 40; const minVal = 10; const maxVal = 40; const range = maxVal - minVal;
   const step = w / (points.length - 1);
-  const coords = points.map((v, i) => {
-    const x = i * step;
-    const y = h - ((v - minVal) / range) * (h - 4) - 2;
-    return `${x},${y}`;
-  });
+  const coords = points.map((v, i) => `${i * step},${h - ((v - minVal) / range) * (h - 4) - 2}`);
   const pathD = `M ${coords.join(" L ")}`;
-
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} fill="none" className="overflow-visible">
       <defs>
@@ -284,153 +135,86 @@ function Sparkline() {
           <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path
-        d={`${pathD} L ${w},${h} L 0,${h} Z`}
-        fill="url(#sparkGrad)"
-      />
+      <path d={`${pathD} L ${w},${h} L 0,${h} Z`} fill="url(#sparkGrad)" />
       <path d={pathD} stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={points.length - 1 ? (points.length - 1) * step : 0} cy={h - ((points[points.length - 1] - minVal) / range) * (h - 4) - 2} r="3" fill="#10b981" />
+      <circle cx={(points.length - 1) * step} cy={h - ((points[points.length - 1] - minVal) / range) * (h - 4) - 2} r="3" fill="#10b981" />
     </svg>
   );
 }
 
 // ─── Memory Card ─────────────────────────────────────────────────────────────
 
-interface MemoryCardProps {
-  memory: Memory;
-  expanded: boolean;
-  onToggleExpand: (id: string) => void;
-}
-
-function MemoryCard({ memory, expanded, onToggleExpand }: MemoryCardProps) {
+function MemoryCard({ memory, expanded, onToggleExpand }: {
+  memory: Memory; expanded: boolean; onToggleExpand: (id: string) => void;
+}) {
   const tc = TYPE_CONFIG[memory.type];
   const cc = CATEGORY_CONFIG[memory.category];
   const conf = confidenceColor(memory.confidence);
   const Icon = tc.icon;
 
   return (
-    <div
-      className={`rounded-xl border border-border/60 bg-card/80 hover:bg-card transition-all duration-200 hover:border-border hover:shadow-md overflow-hidden`}
-    >
-      {/* Card Header */}
+    <div className="rounded-xl border border-border/60 bg-card/80 hover:bg-card transition-all duration-200 hover:border-border hover:shadow-md overflow-hidden">
       <div className="p-4 pb-3">
         <div className="flex items-start gap-3">
-          {/* Type Icon */}
           <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 ${tc.bg} ${tc.border} border`}>
             <Icon className={`h-4 w-4 ${tc.color}`} />
           </div>
-
           <div className="flex-1 min-w-0">
-            {/* Type label + Category badge */}
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <span className={`text-xs font-medium ${tc.color}`}>{tc.label}</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cc.bg} ${cc.text}`}>
-                {memory.category}
-              </span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cc.bg} ${cc.text}`}>{memory.category}</span>
             </div>
-            {/* Title */}
-            <h3 className="text-sm font-semibold text-foreground leading-snug mb-2">
-              {memory.title}
-            </h3>
-            {/* Content */}
-            <p
-              className={`text-xs text-muted-foreground leading-relaxed transition-all ${
-                expanded ? "" : "line-clamp-3"
-              }`}
-            >
+            <h3 className="text-sm font-semibold text-foreground leading-snug mb-2">{memory.title}</h3>
+            <p className={`text-xs text-muted-foreground leading-relaxed transition-all ${expanded ? "" : "line-clamp-3"}`}>
               {memory.content}
             </p>
-            {/* Expand toggle */}
             <button
               onClick={() => onToggleExpand(memory.id)}
               className="mt-1 flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
             >
-              {expanded ? (
-                <>
-                  <ChevronUp className="h-3 w-3" /> Show less
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="h-3 w-3" /> Read more
-                </>
-              )}
+              {expanded ? <><ChevronUp className="h-3 w-3" /> Show less</> : <><ChevronDown className="h-3 w-3" /> Read more</>}
             </button>
           </div>
         </div>
-
-        {/* Tags */}
         {memory.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-3 pl-11">
             {memory.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs bg-muted/60 text-muted-foreground border border-border/40"
-              >
-                <Tag className="h-2.5 w-2.5" />
-                {tag}
+              <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs bg-muted/60 text-muted-foreground border border-border/40">
+                <Tag className="h-2.5 w-2.5" />{tag}
               </span>
             ))}
           </div>
         )}
       </div>
-
-      {/* Card Footer */}
       <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Confidence */}
           <div className="flex items-center gap-2 flex-1 min-w-[160px]">
             <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden flex-shrink-0">
-              <div
-                className={`h-full rounded-full ${conf.bar} transition-all`}
-                style={{ width: `${memory.confidence}%` }}
-              />
+              <div className={`h-full rounded-full ${conf.bar} transition-all`} style={{ width: `${memory.confidence}%` }} />
             </div>
             <span className={`text-xs font-semibold ${conf.text}`}>{memory.confidence}%</span>
             <span className="text-xs text-muted-foreground/60">confidence</span>
           </div>
-
-          {/* Source */}
-          <span className="text-xs text-muted-foreground/60 hidden sm:block">
-            {memory.source}
-          </span>
-
-          {/* Connections */}
+          <span className="text-xs text-muted-foreground/60 hidden sm:block">{memory.source}</span>
           <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-            <Link2 className="h-3 w-3" />
-            {memory.connections} connections
+            <Link2 className="h-3 w-3" />{memory.connections} connections
           </button>
-
-          {/* Time */}
-          <span className="text-xs text-muted-foreground/50">{memory.createdAt}</span>
-
-          {/* Related */}
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs ml-auto">
-            Related
-          </Button>
+          <span className="text-xs text-muted-foreground/50">{relativeTime(memory.createdAt)}</span>
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs ml-auto">Related</Button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Metric Card ─────────────────────────────────────────────────────────────
+// ─── Metric Card ──────────────────────────────────────────────────────────────
 
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  iconColor,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  sub?: string;
-  iconColor: string;
+function MetricCard({ icon: Icon, label, value, sub, iconColor }: {
+  icon: React.ElementType; label: string; value: string; sub?: string; iconColor: string;
 }) {
   return (
     <div className="rounded-xl border border-border/60 bg-card/80 px-4 py-3 flex items-center gap-3">
-      <div className={`rounded-lg p-2 bg-muted/60`}>
+      <div className="rounded-lg p-2 bg-muted/60">
         <Icon className={`h-4 w-4 ${iconColor}`} />
       </div>
       <div>
@@ -444,33 +228,49 @@ function MetricCard({
 
 // ─── Add Memory Form ──────────────────────────────────────────────────────────
 
-interface AddMemoryFormProps {
-  onClose: () => void;
-}
-
-function AddMemoryForm({ onClose }: AddMemoryFormProps) {
+function AddMemoryForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [type, setType] = useState<MemoryType>("learning");
+  const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!user || !title.trim()) return;
+    setSaving(true);
+    try {
+      const token = await user.getIdToken();
+      await fetch("/api/product-brain/entries", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entryType: MEMORY_TYPE_TO_ENTRY_TYPE[type],
+          title: title.trim(),
+          content: content.trim() || title.trim(),
+        }),
+      });
+      onSaved();
+      onClose();
+    } catch {
+      // non-fatal
+    } finally {
+      setSaving(false);
+    }
+  }, [user, title, content, type, onSaved, onClose]);
 
   return (
     <div className="rounded-xl border border-border bg-card/90 p-4 space-y-3 shadow-lg">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <Plus className="h-4 w-4 text-muted-foreground" />
-          New Memory
+          <Plus className="h-4 w-4 text-muted-foreground" /> New Memory
         </h3>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
           <X className="h-4 w-4" />
         </button>
       </div>
-
-      {/* Type selector */}
       <div className="flex gap-1.5 flex-wrap">
         {(Object.keys(TYPE_CONFIG) as MemoryType[]).map((t) => {
           const tc = TYPE_CONFIG[t];
@@ -480,18 +280,14 @@ function AddMemoryForm({ onClose }: AddMemoryFormProps) {
               key={t}
               onClick={() => setType(t)}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
-                type === t
-                  ? `${tc.bg} ${tc.color} ${tc.border}`
-                  : "border-border/40 text-muted-foreground hover:border-border"
+                type === t ? `${tc.bg} ${tc.color} ${tc.border}` : "border-border/40 text-muted-foreground hover:border-border"
               }`}
             >
-              <Icon className="h-3 w-3" />
-              {tc.label}
+              <Icon className="h-3 w-3" />{tc.label}
             </button>
           );
         })}
       </div>
-
       <Input
         ref={inputRef}
         placeholder="Memory title..."
@@ -499,7 +295,6 @@ function AddMemoryForm({ onClose }: AddMemoryFormProps) {
         onChange={(e) => setTitle(e.target.value)}
         className="h-8 text-sm bg-muted/40 border-border/60 focus:border-border"
       />
-
       <textarea
         placeholder="What did you learn, decide, or discover?"
         value={content}
@@ -507,13 +302,10 @@ function AddMemoryForm({ onClose }: AddMemoryFormProps) {
         rows={3}
         className="w-full rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring focus:border-border resize-none"
       />
-
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onClose} className="h-7 px-3 text-xs">
-          Cancel
-        </Button>
-        <Button size="sm" className="h-7 px-3 text-xs" disabled={!title.trim()}>
-          Save Memory
+        <Button variant="ghost" size="sm" onClick={onClose} className="h-7 px-3 text-xs">Cancel</Button>
+        <Button size="sm" className="h-7 px-3 text-xs" disabled={!title.trim() || saving} onClick={handleSave}>
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save Memory"}
         </Button>
       </div>
     </div>
@@ -529,7 +321,10 @@ export function ProductBrainView() {
   const [showAddForm, setShowAddForm] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Keyboard shortcut: Cmd+K focuses search
+  const debouncedSearch = useDebounce(searchQuery, 400);
+
+  const { data, loading, error, refetch } = useProductBrain(undefined, debouncedSearch || undefined);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -541,21 +336,52 @@ export function ProductBrainView() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Filter memories
-  const filtered = MEMORIES.filter((m) => {
-    const matchesType = activeType === "all" || m.type === activeType;
-    const q = searchQuery.toLowerCase();
-    const matchesQuery =
-      !q ||
-      m.title.toLowerCase().includes(q) ||
-      m.content.toLowerCase().includes(q) ||
-      m.tags.some((t) => t.toLowerCase().includes(q));
-    return matchesType && matchesQuery;
-  });
+  const allMemories: Memory[] = (data?.entries ?? []).map(mapEntry);
+  const total = data?.total ?? allMemories.length;
 
-  const handleToggleExpand = (id: string) => {
-    setExpandedId((prev) => (prev === id ? null : id));
+  const filtered = allMemories.filter((m) =>
+    activeType === "all" || m.type === activeType
+  );
+
+  // Derived stats
+  const highConfidence = allMemories.filter((m) => m.confidence >= 80).length;
+  const lowConfidence  = allMemories.filter((m) => m.confidence < 60).length;
+  const medConfidence  = allMemories.length - highConfidence - lowConfidence;
+
+  // Tag frequency cloud
+  const tagCounts: Record<string, number> = {};
+  for (const m of allMemories) {
+    for (const t of m.tags) {
+      tagCounts[t] = (tagCounts[t] ?? 0) + 1;
+    }
+  }
+  const topTags = Object.entries(tagCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12);
+
+  // Per-type counts for filter tabs
+  const typeCounts: Record<MemoryType, number> = {
+    learning: 0, decision: 0, assumption: 0, insight: 0, experiment: 0,
   };
+  for (const m of allMemories) typeCounts[m.type]++;
+
+  // Memory network category counts
+  const categoryCounts: Record<MemoryCategory, number> = {
+    market: 0, product: 0, strategy: 0, competitor: 0, growth: 0,
+  };
+  for (const m of allMemories) categoryCounts[m.category]++;
+
+  const networkClusters = [
+    { label: "Market Intelligence", count: categoryCounts.market,     color: "text-sky-400",    bg: "bg-sky-500/10",    border: "border-sky-500/30"    },
+    { label: "Product Decisions",   count: categoryCounts.product,    color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/30" },
+    { label: "Growth Experiments",  count: categoryCounts.growth,     color: "text-lime-400",   bg: "bg-lime-500/10",   border: "border-lime-500/30"   },
+    { label: "Competitor Insights", count: categoryCounts.competitor, color: "text-rose-400",   bg: "bg-rose-500/10",   border: "border-rose-500/30"   },
+    { label: "Strategy Assumptions",count: categoryCounts.strategy,   color: "text-teal-400",   bg: "bg-teal-500/10",   border: "border-teal-500/30"   },
+  ];
+
+  const highPct = total > 0 ? Math.round((highConfidence / total) * 100) : 0;
+  const medPct  = total > 0 ? Math.round((medConfidence  / total) * 100) : 0;
+  const lowPct  = total > 0 ? Math.round((lowConfidence  / total) * 100) : 0;
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
@@ -570,7 +396,7 @@ export function ProductBrainView() {
               <h1 className="text-2xl font-bold text-foreground tracking-tight">Product Brain</h1>
             </div>
             <p className="text-sm text-muted-foreground pl-14">
-              847 memories · 34 connections ·{" "}
+              {loading ? "Loading…" : `${total} ${total === 1 ? "memory" : "memories"}`} ·{" "}
               <span className="text-violet-400 font-medium">AI-indexed</span>
             </p>
           </div>
@@ -579,12 +405,10 @@ export function ProductBrainView() {
             size="sm"
             className="flex-shrink-0 h-8 gap-1.5 bg-violet-600 hover:bg-violet-700 text-white border-0"
           >
-            <Plus className="h-4 w-4" />
-            Add Memory
+            <Plus className="h-4 w-4" /> Add Memory
           </Button>
         </div>
 
-        {/* Search Bar */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -595,21 +419,16 @@ export function ProductBrainView() {
             className="pl-10 pr-24 h-10 bg-muted/40 border-border/60 focus:border-violet-500/50 focus:ring-violet-500/20 text-sm"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
             {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
+              <button onClick={() => setSearchQuery("")} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-mono bg-muted border border-border/60 text-muted-foreground/60">
-              ⌘K
-            </kbd>
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-mono bg-muted border border-border/60 text-muted-foreground/60">⌘K</kbd>
           </div>
         </div>
 
-        {/* Filter Tabs */}
         <div className="flex gap-1 mt-3 overflow-x-auto pb-0.5">
           {FILTER_TABS.map((tab) => (
             <button
@@ -623,9 +442,7 @@ export function ProductBrainView() {
             >
               {tab.label}
               {tab.value !== "all" && (
-                <span className="ml-1.5 opacity-60">
-                  {MEMORIES.filter((m) => m.type === tab.value).length}
-                </span>
+                <span className="ml-1.5 opacity-60">{typeCounts[tab.value]}</span>
               )}
             </button>
           ))}
@@ -636,41 +453,21 @@ export function ProductBrainView() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ── Main Feed ── */}
         <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5 space-y-4">
-          {/* Top Metrics */}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-            <MetricCard
-              icon={Database}
-              label="Total Memories"
-              value="847"
-              iconColor="text-violet-400"
-            />
-            <MetricCard
-              icon={Shield}
-              label="High Confidence"
-              value="312"
-              sub="37% of total"
-              iconColor="text-emerald-400"
-            />
-            <MetricCard
-              icon={AlertTriangle}
-              label="Unvalidated"
-              value="45"
-              sub="Need attention"
-              iconColor="text-amber-400"
-            />
-            <MetricCard
-              icon={Link2}
-              label="Connected Insights"
-              value="89"
-              sub="Cross-referenced"
-              iconColor="text-blue-400"
-            />
+            <MetricCard icon={Database}      label="Total Memories"     value={String(total)}                                        iconColor="text-violet-400" />
+            <MetricCard icon={Shield}        label="High Confidence"    value={String(highConfidence)} sub={`${highPct}% of total`}  iconColor="text-emerald-400" />
+            <MetricCard icon={AlertTriangle} label="Low Confidence"     value={String(lowConfidence)}  sub="Need attention"          iconColor="text-amber-400" />
+            <MetricCard icon={Link2}         label="Entries loaded"     value={String(allMemories.length)}                           iconColor="text-blue-400" />
           </div>
 
-          {/* Add Memory Form */}
-          {showAddForm && <AddMemoryForm onClose={() => setShowAddForm(false)} />}
+          {showAddForm && <AddMemoryForm onClose={() => setShowAddForm(false)} onSaved={refetch} />}
 
-          {/* Search result header */}
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-500">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />{error}
+            </div>
+          )}
+
           {searchQuery && (
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>
@@ -678,24 +475,30 @@ export function ProductBrainView() {
                   ? "No memories found"
                   : `${filtered.length} result${filtered.length !== 1 ? "s" : ""} for "${searchQuery}"`}
               </span>
-              <button onClick={() => setSearchQuery("")} className="text-xs hover:text-foreground transition-colors">
-                Clear
-              </button>
+              <button onClick={() => setSearchQuery("")} className="text-xs hover:text-foreground transition-colors">Clear</button>
             </div>
           )}
 
-          {/* Memory Feed */}
           <div className="space-y-3">
-            {filtered.length === 0 ? (
+            {loading && allMemories.length === 0 ? (
+              <div className="py-16 text-center">
+                <Loader2 className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3 animate-spin" />
+                <p className="text-sm text-muted-foreground">Loading memories…</p>
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="py-16 text-center">
                 <Brain className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">No memories match your search.</p>
-                <button
-                  onClick={() => { setSearchQuery(""); setActiveType("all"); }}
-                  className="mt-2 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                >
-                  Clear filters
-                </button>
+                <p className="text-sm text-muted-foreground">
+                  {searchQuery ? "No memories match your search." : "No memories yet. Add your first one."}
+                </p>
+                {(searchQuery || activeType !== "all") && (
+                  <button
+                    onClick={() => { setSearchQuery(""); setActiveType("all"); }}
+                    className="mt-2 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    Clear filters
+                  </button>
+                )}
               </div>
             ) : (
               filtered.map((memory) => (
@@ -703,40 +506,27 @@ export function ProductBrainView() {
                   key={memory.id}
                   memory={memory}
                   expanded={expandedId === memory.id}
-                  onToggleExpand={handleToggleExpand}
+                  onToggleExpand={(id) => setExpandedId((prev) => (prev === id ? null : id))}
                 />
               ))
             )}
           </div>
 
-          {/* Memory Network Preview */}
+          {/* Memory Network */}
           <div className="rounded-xl border border-border/60 bg-card/60 p-5 mt-6">
             <div className="flex items-center gap-2 mb-4">
               <Zap className="h-4 w-4 text-amber-400" />
               <h2 className="text-sm font-semibold text-foreground">Memory Network</h2>
-              <span className="ml-auto text-xs text-muted-foreground/60">34 active connections</span>
+              <span className="ml-auto text-xs text-muted-foreground/60">{allMemories.length} active entries</span>
             </div>
-
-            {/* Central node + cluster grid */}
             <div className="relative flex flex-col items-center gap-4">
-              {/* Central */}
               <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-500/15 border border-violet-500/40 shadow-sm">
                 <Brain className="h-4 w-4 text-violet-400" />
                 <span className="text-sm font-semibold text-violet-300">SPECKULA Core</span>
               </div>
-
-              {/* Connector line visual */}
               <div className="w-px h-4 bg-border/60" />
-
-              {/* Clusters */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 w-full">
-                {[
-                  { label: "Market Intelligence", count: 12, color: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-500/30" },
-                  { label: "Product Decisions", count: 9, color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/30" },
-                  { label: "Growth Experiments", count: 7, color: "text-lime-400", bg: "bg-lime-500/10", border: "border-lime-500/30" },
-                  { label: "Competitor Insights", count: 4, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/30" },
-                  { label: "Strategy Assumptions", count: 3, color: "text-teal-400", bg: "bg-teal-500/10", border: "border-teal-500/30" },
-                ].map((cluster) => (
+                {networkClusters.map((cluster) => (
                   <div
                     key={cluster.label}
                     className={`rounded-lg border ${cluster.border} ${cluster.bg} px-3 py-2.5 text-center hover:shadow-sm transition-all cursor-pointer`}
@@ -752,104 +542,63 @@ export function ProductBrainView() {
 
         {/* ── Right Sidebar ── */}
         <aside className="hidden xl:flex flex-col w-72 flex-shrink-0 border-l border-border/60 bg-card/20 overflow-y-auto px-4 py-5 gap-5">
-          {/* Intelligence Stats */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="h-4 w-4 text-emerald-400" />
-              <h2 className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                Intelligence Growth
-              </h2>
+              <h2 className="text-xs font-semibold text-foreground uppercase tracking-widest">Intelligence Growth</h2>
             </div>
             <div className="rounded-xl border border-border/60 bg-card/80 p-4">
               <Sparkline />
               <div className="mt-3 flex items-center justify-between">
                 <div>
-                  <p className="text-xl font-bold text-foreground">+34</p>
-                  <p className="text-xs text-muted-foreground">new memories this week</p>
+                  <p className="text-xl font-bold text-foreground">{total}</p>
+                  <p className="text-xs text-muted-foreground">total memories</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-emerald-400">+18%</p>
-                  <p className="text-xs text-muted-foreground">vs last week</p>
+                  <p className="text-sm font-semibold text-emerald-400">{highPct}%</p>
+                  <p className="text-xs text-muted-foreground">high confidence</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* AI Synthesis Panel */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="h-4 w-4 text-amber-400" />
-              <h2 className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                AI Synthesis
-              </h2>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-card/80 p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                AI has identified <span className="font-semibold text-foreground">3 critical patterns:</span>
-              </p>
-              {AI_PATTERNS.map((pattern) => {
-                const pc = priorityConfig(pattern.priority);
-                return (
-                  <div
-                    key={pattern.id}
-                    className="rounded-lg border border-border/40 bg-muted/30 p-3 space-y-1"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`h-2 w-2 rounded-full flex-shrink-0 ${pc.dot}`} />
-                      <span className={`text-xs font-semibold ${pc.text}`}>{pc.label}</span>
-                    </div>
-                    <p className="text-xs font-medium text-foreground pl-4">{pattern.label}</p>
-                    <p className="text-xs text-muted-foreground pl-4 leading-relaxed">
-                      {pattern.detail}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Top Tags */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Tag className="h-4 w-4 text-blue-400" />
-              <h2 className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                Top Tags
-              </h2>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-card/80 p-4">
-              <div className="flex flex-wrap gap-1.5">
-                {TOP_TAGS.map((tag) => {
-                  // weight 4-9 → text-xs to text-sm, opacity 60%-100%
-                  const size = tag.weight >= 8 ? "text-sm" : tag.weight >= 6 ? "text-xs" : "text-xs";
-                  const opacity = tag.weight >= 8 ? "opacity-100" : tag.weight >= 6 ? "opacity-80" : "opacity-60";
-                  const fw = tag.weight >= 8 ? "font-semibold" : "font-medium";
-                  return (
-                    <button
-                      key={tag.label}
-                      onClick={() => setSearchQuery(tag.label)}
-                      className={`${size} ${opacity} ${fw} text-muted-foreground hover:text-foreground hover:opacity-100 transition-all px-2 py-0.5 rounded-md hover:bg-muted/60`}
-                    >
-                      #{tag.label}
-                    </button>
-                  );
-                })}
+          {topTags.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Tag className="h-4 w-4 text-blue-400" />
+                <h2 className="text-xs font-semibold text-foreground uppercase tracking-widest">Top Tags</h2>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card/80 p-4">
+                <div className="flex flex-wrap gap-1.5">
+                  {topTags.map(([tag, count]) => {
+                    const size    = count >= 4 ? "text-sm" : "text-xs";
+                    const opacity = count >= 4 ? "opacity-100" : count >= 2 ? "opacity-80" : "opacity-60";
+                    const fw      = count >= 4 ? "font-semibold" : "font-medium";
+                    return (
+                      <button
+                        key={tag}
+                        onClick={() => setSearchQuery(tag)}
+                        className={`${size} ${opacity} ${fw} text-muted-foreground hover:text-foreground hover:opacity-100 transition-all px-2 py-0.5 rounded-md hover:bg-muted/60`}
+                      >
+                        #{tag}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Memory Health */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Shield className="h-4 w-4 text-violet-400" />
-              <h2 className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                Memory Health
-              </h2>
+              <h2 className="text-xs font-semibold text-foreground uppercase tracking-widest">Memory Health</h2>
             </div>
             <div className="rounded-xl border border-border/60 bg-card/80 p-4 space-y-2.5">
               {[
-                { label: "High Confidence", value: 37, color: "bg-emerald-500" },
-                { label: "Medium Confidence", value: 41, color: "bg-amber-500" },
-                { label: "Low Confidence", value: 22, color: "bg-red-500" },
+                { label: "High Confidence",   value: highPct, color: "bg-emerald-500" },
+                { label: "Medium Confidence", value: medPct,  color: "bg-amber-500"   },
+                { label: "Low Confidence",    value: lowPct,  color: "bg-red-500"     },
               ].map((row) => (
                 <div key={row.label} className="space-y-1">
                   <div className="flex items-center justify-between">
@@ -857,10 +606,7 @@ export function ProductBrainView() {
                     <span className="text-xs font-semibold text-foreground">{row.value}%</span>
                   </div>
                   <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${row.color}`}
-                      style={{ width: `${row.value}%` }}
-                    />
+                    <div className={`h-full rounded-full ${row.color}`} style={{ width: `${row.value}%` }} />
                   </div>
                 </div>
               ))}
@@ -870,4 +616,15 @@ export function ProductBrainView() {
       </div>
     </div>
   );
+}
+
+// ─── Debounce hook ────────────────────────────────────────────────────────────
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
 }

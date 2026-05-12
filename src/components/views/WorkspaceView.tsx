@@ -1,44 +1,90 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import {
-  BarChart3, Lightbulb, CheckSquare, Compass, LayoutDashboard,
-  Zap, TrendingUp, Clock, ArrowRight, Brain, Puzzle,
-  FileText, Users, Activity, Plus, ChevronRight,
-  Sparkles, Target, AlertCircle
+  Lightbulb, CheckSquare, Compass, LayoutDashboard,
+  TrendingUp, ArrowRight, Brain, Puzzle,
+  FileText, Activity, Plus, ChevronRight,
+  Sparkles, Target,
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useAppStore } from "@/store/useAppStore";
+import { useApi } from "@/hooks/useApi";
+import { useExtensionPreferences } from "@/hooks/useExtensionPreferences";
 
-// ─── mock data ────────────────────────────────────────────────────────────────
+// ─── types ────────────────────────────────────────────────────────────────────
+
+interface WorkspaceDashboard {
+  totalSignals: number;
+  extensionSignals: number;
+  weeklyCaptures: number;
+  competitorInsights: number;
+  marketSignals: number;
+  productBrainTotal: number;
+  aiJobsCompleted: number;
+  aiJobsFailed: number;
+  topDomains: { domain: string; count: number }[];
+  extension: {
+    connected: boolean;
+    version?: string;
+    browser?: string;
+    lastSeenAt?: string;
+  };
+  realtimeConnections: number;
+  recentActivity: { id: string; type: string; description: string; createdAt: string }[];
+}
+
+interface ActivityItem {
+  id: string;
+  actorId: string;
+  eventType: string;
+  title: string;
+  description?: string;
+  createdAt: string;
+}
+
+// ─── static config ────────────────────────────────────────────────────────────
 
 const QUICK_ACTIONS = [
-  { icon: Lightbulb,      label: "Add Signal",       view: "market-intelligence" as const, color: "text-amber-500",  bg: "bg-amber-500/10"  },
-  { icon: Compass,        label: "Make Decision",    view: "decisions"           as const, color: "text-blue-500",   bg: "bg-blue-500/10"   },
-  { icon: LayoutDashboard, label: "Write Spec",      view: "specifications"      as const, color: "text-green-500",  bg: "bg-green-500/10"  },
-  { icon: CheckSquare,    label: "Create Task",      view: "tasks"     as const, color: "text-purple-500", bg: "bg-purple-500/10" },
+  { icon: Lightbulb,       label: "Add Signal",    view: "market-intelligence" as const, color: "text-amber-500",  bg: "bg-amber-500/10"  },
+  { icon: Compass,         label: "Make Decision", view: "decisions"           as const, color: "text-blue-500",   bg: "bg-blue-500/10"   },
+  { icon: LayoutDashboard, label: "Write Spec",    view: "specifications"      as const, color: "text-green-500",  bg: "bg-green-500/10"  },
+  { icon: CheckSquare,     label: "Create Task",   view: "tasks"               as const, color: "text-purple-500", bg: "bg-purple-500/10" },
 ];
 
-const RECENT_INTELLIGENCE = [
-  { type: "signal",   title: "Users drop off at checkout step 3", time: "2h ago",  tag: "Conversion",  icon: TrendingUp,      color: "text-amber-500"  },
-  { type: "decision", title: "Prioritize mobile checkout redesign", time: "5h ago", tag: "Product",    icon: Compass,         color: "text-blue-500"   },
-  { type: "spec",     title: "Mobile Checkout v2 PRD",             time: "1d ago",  tag: "Spec",       icon: LayoutDashboard, color: "text-green-500"  },
-  { type: "task",     title: "Implement address autofill",         time: "1d ago",  tag: "Engineering", icon: CheckSquare,    color: "text-purple-500" },
+// Brain health phases mapped to real dashboard fields with soft targets for progress bars.
+const PHASE_CONFIG = [
+  { phase: "Signals",      color: "bg-amber-500",  icon: Lightbulb,       field: "weeklyCaptures"    as const, target: 15 },
+  { phase: "Competitors",  color: "bg-blue-500",   icon: TrendingUp,      field: "competitorInsights" as const, target: 10 },
+  { phase: "AI Analyses",  color: "bg-green-500",  icon: LayoutDashboard, field: "aiJobsCompleted"   as const, target: 20 },
+  { phase: "Brain entries",color: "bg-purple-500", icon: Brain,           field: "productBrainTotal" as const, target: 30 },
 ];
 
-const TEAM_ACTIVITY = [
-  { user: "Sarah K.",   avatar: "SK", action: "added signal",   subject: "Payment latency spike",      time: "10m ago", color: "bg-pink-500"   },
-  { user: "James R.",   avatar: "JR", action: "made decision",  subject: "Use Stripe for payments",    time: "1h ago",  color: "bg-blue-500"   },
-  { user: "Priya M.",   avatar: "PM", action: "created spec",   subject: "Checkout Flow Redesign",     time: "3h ago",  color: "bg-emerald-500"},
-  { user: "Alex T.",    avatar: "AT", action: "completed task", subject: "Add form validation",        time: "5h ago",  color: "bg-amber-500"  },
-];
+const AVATAR_COLORS = ["bg-pink-500", "bg-blue-500", "bg-emerald-500", "bg-amber-500", "bg-violet-500"];
 
-const PHASE_HEALTH = [
-  { phase: "Evidence",  count: 12, completeness: 85, color: "bg-amber-500",  icon: Lightbulb      },
-  { phase: "Decisions", count:  8, completeness: 70, color: "bg-blue-500",   icon: Compass        },
-  { phase: "Specs",     count:  3, completeness: 60, color: "bg-green-500",  icon: LayoutDashboard },
-  { phase: "Tasks",     count: 24, completeness: 40, color: "bg-purple-500", icon: CheckSquare    },
-];
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+function eventIcon(type: string): { icon: React.ElementType; color: string } {
+  if (type.includes("signal") || type.includes("market")) return { icon: TrendingUp,      color: "text-amber-500"  };
+  if (type.includes("decision"))                           return { icon: Compass,         color: "text-blue-500"   };
+  if (type.includes("spec") || type.includes("analysis")) return { icon: LayoutDashboard, color: "text-green-500"  };
+  if (type.includes("task") || type.includes("agent"))    return { icon: CheckSquare,     color: "text-purple-500" };
+  return { icon: Activity, color: "text-muted-foreground" };
+}
+
+function avatarColor(actorId: string): string {
+  let h = 0;
+  for (let i = 0; i < actorId.length; i++) h = (h * 31 + actorId.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
@@ -85,7 +131,21 @@ function SectionHeader({ title, action, onAction }: { title: string; action?: st
 export function WorkspaceView() {
   const { user } = useAuth();
   const { setActiveView, documents } = useAppStore();
-  const [extensionConnected] = useState(false);
+  const { preferences } = useExtensionPreferences();
+  const workspaceId = preferences?.activeWorkspaceId;
+
+  const { data: dash } = useApi<WorkspaceDashboard>(
+    `/api/workspaces/${workspaceId ?? ''}/dashboard`,
+    { enabled: !!workspaceId, refreshInterval: 30_000 }
+  );
+
+  const { data: activityData } = useApi<{ items: ActivityItem[] }>(
+    `/api/workspaces/${workspaceId ?? ''}/activity?limit=4`,
+    { enabled: !!workspaceId, refreshInterval: 30_000 }
+  );
+
+  const activityItems = activityData?.items ?? [];
+  const extensionConnected = dash?.extension?.connected ?? false;
 
   const firstName = user?.displayName?.split(" ")[0] ?? "there";
   const hour = new Date().getHours();
@@ -126,10 +186,10 @@ export function WorkspaceView() {
 
         {/* ── Stats row ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Active analyses" value={documents.length || 3} icon={FileText} trend="up" />
-          <StatCard label="Signals captured" value={12} sub="this week" icon={Lightbulb} trend="up" />
-          <StatCard label="Decisions made" value={8} sub="this month" icon={Compass} trend="neutral" />
-          <StatCard label="Tasks completed" value="18/24" sub="75% done" icon={CheckSquare} trend="up" />
+          <StatCard label="Active analyses"    value={documents.length || 0}           icon={FileText}    trend="up"      />
+          <StatCard label="Signals this week"  value={dash?.weeklyCaptures ?? "—"}      icon={Lightbulb}   trend="up"  sub="new captures" />
+          <StatCard label="Competitor insights" value={dash?.competitorInsights ?? "—"} icon={TrendingUp}  trend="neutral" />
+          <StatCard label="Brain entries"       value={dash?.productBrainTotal ?? "—"}  icon={Brain}       trend="up"      />
         </div>
 
         {/* ── Quick actions ── */}
@@ -161,51 +221,64 @@ export function WorkspaceView() {
             <div>
               <SectionHeader title="Recent Intelligence" action="View all" onAction={() => setActiveView("market-intelligence")} />
               <div className="space-y-1.5">
-                {RECENT_INTELLIGENCE.map((item, i) => (
-                  <div
-                    key={i}
-                    className="group flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-card hover:border-border/70 hover:bg-muted/30 transition-all cursor-pointer"
-                  >
-                    <div className={`p-1.5 rounded-md bg-muted shrink-0`}>
-                      <item.icon className={`h-3.5 w-3.5 ${item.color}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{item.title}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{item.tag} · {item.time}</p>
-                    </div>
-                    <ArrowRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 transition-colors" />
+                {dash?.recentActivity?.length ? (
+                  dash.recentActivity.slice(0, 4).map((item) => {
+                    const { icon: Icon, color } = eventIcon(item.type);
+                    return (
+                      <div
+                        key={item.id}
+                        className="group flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-card hover:border-border/70 hover:bg-muted/30 transition-all cursor-pointer"
+                      >
+                        <div className="p-1.5 rounded-md bg-muted shrink-0">
+                          <Icon className={`h-3.5 w-3.5 ${color}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-foreground truncate">{item.description}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{item.type} · {relativeTime(item.createdAt)}</p>
+                        </div>
+                        <ArrowRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 transition-colors" />
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-6 text-center text-xs text-muted-foreground border border-border/40 rounded-lg bg-card">
+                    No recent activity. Start capturing signals to see intelligence here.
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
             {/* Product Brain health */}
             <div>
-              <SectionHeader title="Product Brain Health" />
+              <SectionHeader title="Product Brain Coverage" />
               <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
                 <div className="flex items-center gap-2 mb-1">
                   <Brain className="h-4 w-4 text-primary" />
-                  <span className="text-xs font-medium text-foreground">Phase completeness</span>
-                  <span className="ml-auto text-[10px] text-primary font-mono">64% overall</span>
+                  <span className="text-xs font-medium text-foreground">Data coverage by category</span>
+                  <span className="ml-auto text-[10px] text-primary font-mono">{dash?.productBrainTotal ?? 0} entries</span>
                 </div>
-                {PHASE_HEALTH.map((ph) => (
-                  <div key={ph.phase} className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-1.5">
-                        <ph.icon className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-muted-foreground">{ph.phase}</span>
-                        <span className="text-muted-foreground/50">({ph.count})</span>
+                {PHASE_CONFIG.map((ph) => {
+                  const count = (dash?.[ph.field] as number | undefined) ?? 0;
+                  const completeness = Math.min(100, Math.round((count / ph.target) * 100));
+                  return (
+                    <div key={ph.phase} className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center gap-1.5">
+                          <ph.icon className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-muted-foreground">{ph.phase}</span>
+                          <span className="text-muted-foreground/50">({count})</span>
+                        </div>
+                        <span className="font-mono text-muted-foreground">{completeness}%</span>
                       </div>
-                      <span className="font-mono text-muted-foreground">{ph.completeness}%</span>
+                      <div className="h-1 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${ph.color} transition-all`}
+                          style={{ width: `${completeness}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-1 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${ph.color} transition-all`}
-                        style={{ width: `${ph.completeness}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -217,21 +290,26 @@ export function WorkspaceView() {
             <div>
               <SectionHeader title="Team Activity" action="All activity" onAction={() => setActiveView("activity")} />
               <div className="space-y-1">
-                {TEAM_ACTIVITY.map((item, i) => (
-                  <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-muted/30 transition-colors">
-                    <div className={`w-6 h-6 rounded-full ${item.color} flex items-center justify-center shrink-0 mt-0.5`}>
-                      <span className="text-[9px] font-bold text-white">{item.avatar}</span>
+                {activityItems.length > 0 ? (
+                  activityItems.map((item) => (
+                    <div key={item.id} className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-muted/30 transition-colors">
+                      <div className={`w-6 h-6 rounded-full ${avatarColor(item.actorId)} flex items-center justify-center shrink-0 mt-0.5`}>
+                        <span className="text-[9px] font-bold text-white">{item.actorId.slice(0, 2).toUpperCase()}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] text-foreground leading-snug">
+                          <span className="font-medium">{item.eventType}</span>
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{item.title}</p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/60 shrink-0">{relativeTime(item.createdAt)}</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] text-foreground leading-snug">
-                        <span className="font-medium">{item.user}</span>{" "}
-                        <span className="text-muted-foreground">{item.action}</span>
-                      </p>
-                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{item.subject}</p>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground/60 shrink-0">{item.time}</span>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-xs text-muted-foreground">
+                    No team activity yet.
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
@@ -244,11 +322,18 @@ export function WorkspaceView() {
                   {extensionConnected ? "Connected" : "Not connected"}
                 </span>
               </div>
-              {extensionConnected ? (
+              {extensionConnected && dash?.extension ? (
                 <div className="space-y-1.5 text-[11px] text-muted-foreground">
-                  <div className="flex justify-between"><span>Last sync</span><span className="text-foreground">2m ago</span></div>
-                  <div className="flex justify-between"><span>Pages analyzed</span><span className="text-foreground">47</span></div>
-                  <div className="flex justify-between"><span>Insights captured</span><span className="text-foreground">12</span></div>
+                  {dash.extension.lastSeenAt && (
+                    <div className="flex justify-between"><span>Last seen</span><span className="text-foreground">{relativeTime(dash.extension.lastSeenAt)}</span></div>
+                  )}
+                  {dash.extension.version && (
+                    <div className="flex justify-between"><span>Version</span><span className="text-foreground">{dash.extension.version}</span></div>
+                  )}
+                  {dash.extension.browser && (
+                    <div className="flex justify-between"><span>Browser</span><span className="text-foreground">{dash.extension.browser}</span></div>
+                  )}
+                  <div className="flex justify-between"><span>Captures via extension</span><span className="text-foreground">{dash.extensionSignals}</span></div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -270,7 +355,9 @@ export function WorkspaceView() {
                 <span className="text-xs font-medium text-primary">AI Suggestion</span>
               </div>
               <p className="text-[11px] text-foreground/80 leading-relaxed">
-                You have 4 signals from competitor pricing pages. Consider making a pricing decision before writing your next spec.
+                {dash?.competitorInsights
+                  ? `You have ${dash.competitorInsights} competitor insights captured. Review them to inform your next product decision.`
+                  : "Start capturing signals and making decisions to get AI-powered suggestions."}
               </p>
               <button
                 onClick={() => setActiveView("decisions")}
@@ -282,16 +369,20 @@ export function WorkspaceView() {
           </div>
         </div>
 
-        {/* ── Upcoming / focus ── */}
+        {/* ── Focus Today ── */}
         <div>
           <SectionHeader title="Focus Today" />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[
-              { icon: Target,       label: "3 tasks due today",          sub: "Checkout redesign sprint",      color: "text-red-500",    bg: "bg-red-500/10"    },
-              { icon: AlertCircle,  label: "2 decisions need context",   sub: "Missing evidence for pricing",  color: "text-amber-500",  bg: "bg-amber-500/10"  },
-              { icon: Activity,     label: "Weekly review in 2 days",    sub: "Prepare your spec update",      color: "text-blue-500",   bg: "bg-blue-500/10"   },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-3 p-3.5 rounded-xl border border-border/60 bg-card">
+            {([
+              { icon: Target,      label: `${dash?.weeklyCaptures ?? 0} signals this week`,        sub: "View market intelligence",      color: "text-amber-500",  bg: "bg-amber-500/10",  action: "market-intelligence" },
+              { icon: TrendingUp,  label: `${dash?.competitorInsights ?? 0} competitor insights`,  sub: "Stay ahead of the competition", color: "text-blue-500",   bg: "bg-blue-500/10",   action: "competitors"         },
+              { icon: Brain,       label: `${dash?.productBrainTotal ?? 0} brain entries`,         sub: "Explore your product knowledge", color: "text-purple-500", bg: "bg-purple-500/10", action: "product-brain"       },
+            ] as const).map((item) => (
+              <div
+                key={item.label}
+                onClick={() => setActiveView(item.action as Parameters<typeof setActiveView>[0])}
+                className="flex items-center gap-3 p-3.5 rounded-xl border border-border/60 bg-card cursor-pointer hover:bg-muted/30 transition-colors"
+              >
                 <div className={`p-2 rounded-lg ${item.bg} shrink-0`}>
                   <item.icon className={`h-4 w-4 ${item.color}`} />
                 </div>
