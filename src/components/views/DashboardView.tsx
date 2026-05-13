@@ -29,6 +29,7 @@ import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 import { useAgents, useAgentJobs, type AgentJob } from "@/hooks/useAgents";
 import { useMarketSignals, type MarketSignalData } from "@/hooks/useMarketSignals";
 import { useCompetitors, type CompetitorSummary } from "@/hooks/useCompetitors";
+import { useExperiments, type ExperimentSummary } from "@/hooks/useExperiments";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -459,6 +460,7 @@ export function DashboardView() {
   const { data: jobsData } = useAgentJobs();
   const { data: signalsData } = useMarketSignals();
   const { data: competitorsData } = useCompetitors();
+  const { data: experimentsData } = useExperiments();
 
   // ── Local state ──────────────────────────────────────────────────────────
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
@@ -790,25 +792,58 @@ export function DashboardView() {
             <div>
               <SectionHeader title="Recent Decisions" />
               <div className="space-y-2.5">
-                {MOCK_DECISIONS.map((decision) => (
-                  <div
-                    key={decision.id}
-                    className="bg-card border border-border rounded-xl p-4 flex items-start gap-3"
-                  >
-                    <ScoreRing score={decision.score} />
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <p className="text-[12.5px] font-medium text-foreground leading-snug">
-                        {decision.title}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <PriorityBadge priority={decision.priority} />
-                        <span className="text-[10px] text-muted-foreground">
-                          {decision.ago}
-                        </span>
+                {(experimentsData?.experiments ?? MOCK_DECISIONS.slice(0, 3))
+                  .slice(0, 3)
+                  .map((item: ExperimentSummary | Decision) => {
+                    const isExperiment = 'status' in item && 'verdict' in item;
+                    if (isExperiment) {
+                      const exp = item as ExperimentSummary;
+                      const score = exp.verdict === 'winner_found' ? 92 : exp.verdict === 'inconclusive' ? 65 : 78;
+                      const priority: Decision['priority'] =
+                        exp.verdict === 'winner_found' ? 'Critical' : exp.verdict === 'inconclusive' ? 'Low' : 'High';
+                      return (
+                        <div
+                          key={exp.id}
+                          className="bg-card border border-border rounded-xl p-4 flex items-start gap-3"
+                        >
+                          <ScoreRing score={score} />
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <p className="text-[12.5px] font-medium text-foreground leading-snug">
+                              {exp.title}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <PriorityBadge priority={priority} />
+                              <span className="text-[10px] text-muted-foreground">
+                                {exp.startedAt
+                                  ? `${Math.floor((Date.now() - new Date(exp.startedAt).getTime()) / 86_400_000)}d ago`
+                                  : `${Math.floor((Date.now() - new Date(exp.createdAt).getTime()) / 3_600_000)}h ago`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    const decision = item as Decision;
+                    return (
+                      <div
+                        key={decision.id}
+                        className="bg-card border border-border rounded-xl p-4 flex items-start gap-3"
+                      >
+                        <ScoreRing score={decision.score} />
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <p className="text-[12.5px] font-medium text-foreground leading-snug">
+                            {decision.title}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <PriorityBadge priority={decision.priority} />
+                            <span className="text-[10px] text-muted-foreground">
+                              {decision.ago}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
               </div>
             </div>
 
@@ -864,58 +899,58 @@ export function DashboardView() {
           <div className="flex items-center gap-2 mb-4">
             <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Startup Metrics
+              Intelligence Metrics
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {/* WAU */}
+            {/* Total Signals */}
             <div className="space-y-1">
               <div className="flex items-baseline gap-2">
                 <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
-                  1,247
+                  {overview?.totalSignals ?? '—'}
                 </span>
                 <span className="text-[11px] font-medium text-emerald-500 flex items-center gap-0.5">
                   <ArrowUpRight className="h-2.5 w-2.5" />
-                  18%
+                  {overview?.totalSignals ? '↑' : ''}
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Weekly Active Users</p>
+              <p className="text-[11px] text-muted-foreground">Signals Captured</p>
             </div>
-            {/* Avg session */}
+            {/* Weekly Captures */}
             <div className="space-y-1">
               <div className="flex items-baseline gap-2">
                 <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
-                  24<span className="text-[14px] font-semibold">min</span>
+                  {overview?.weeklyCaptures ?? '—'}
                 </span>
                 <span className="text-[11px] font-medium text-emerald-500 flex items-center gap-0.5">
                   <ArrowUpRight className="h-2.5 w-2.5" />
-                  8%
+                  new
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Avg Session</p>
+              <p className="text-[11px] text-muted-foreground">This Week</p>
             </div>
-            {/* Extension installs */}
+            {/* Competitor Insights */}
             <div className="space-y-1">
               <div className="flex items-baseline gap-2">
                 <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
-                  892
+                  {overview?.competitorInsights ?? '—'}
                 </span>
                 <span className="text-[11px] font-medium text-emerald-500 flex items-center gap-0.5">
                   <ArrowUpRight className="h-2.5 w-2.5" />
-                  31%
+                  {overview?.competitorInsights ? 'tracked' : ''}
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Extension Installs</p>
+              <p className="text-[11px] text-muted-foreground">Competitors</p>
             </div>
-            {/* AI requests */}
+            {/* AI Jobs */}
             <div className="space-y-1">
               <div className="flex items-baseline gap-2">
                 <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
-                  3,441
+                  {overview?.aiJobsCompleted ?? '—'}
                 </span>
                 <PulseDot color="bg-blue-500" />
               </div>
-              <p className="text-[11px] text-muted-foreground">AI Requests Today</p>
+              <p className="text-[11px] text-muted-foreground">AI Jobs Run</p>
             </div>
           </div>
         </div>
