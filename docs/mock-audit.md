@@ -189,7 +189,7 @@ These sources were replaced with real data before the playbook began:
 - [x] Phase 3e: AgentsView — already wired with `useAgents`/`useAgentJobs`; guards retain mock as fallback until backend confirms real agent types
 - [x] Phase 3f: CompetitorsView — already wired with `useCompetitors`/`useCompetitorChanges`; fixed `trackedCount` double-count; guards retain mock as reference data
 - [ ] Phase 5: Groq grounding (AI calls use DB evidence, not in-memory fixtures)
-- [ ] Phase 6: Cleanup (remove dead mock constants, final `tsc --noEmit`)
+- [x] Phase 6: Cleanup — `MOCK_FEED_ITEMS` removed; unused icon imports (`Globe`, `MessageSquare`, `FlaskConical`) dropped; feed falls back to `[]` (honest empty state); final `tsc --noEmit` passes clean on both frontend and backend
 
 ---
 

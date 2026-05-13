@@ -8,14 +8,11 @@ import {
   Cpu,
   Users,
   Zap,
-  Globe,
   BarChart2,
   Target,
   Brain,
   Search,
-  MessageSquare,
   Layers,
-  FlaskConical,
   CheckCircle2,
   AlertTriangle,
   Clock,
@@ -91,79 +88,6 @@ interface Competitor {
 // ---------------------------------------------------------------------------
 // Static mock data  (kept as permanent fallback)
 // ---------------------------------------------------------------------------
-
-const MOCK_FEED_ITEMS: FeedItem[] = [
-  {
-    id: 1,
-    icon: Globe,
-    description: "Notion raised prices on Business plan by 15%",
-    timeAgo: "2m ago",
-    category: "competitor",
-  },
-  {
-    id: 2,
-    icon: MessageSquare,
-    description: "Reddit: 47 complaints about Linear's new pricing",
-    timeAgo: "8m ago",
-    category: "market",
-  },
-  {
-    id: 3,
-    icon: Brain,
-    description: "AI analysis complete: Figma competitor positioning",
-    timeAgo: "12m ago",
-    category: "ai",
-  },
-  {
-    id: 4,
-    icon: TrendingUp,
-    description: "New trend detected: 'AI project management' +340% search volume",
-    timeAgo: "23m ago",
-    category: "trend",
-  },
-  {
-    id: 5,
-    icon: Layers,
-    description: "Extension captured: productboard.com pricing page",
-    timeAgo: "31m ago",
-    category: "capture",
-  },
-  {
-    id: 6,
-    icon: Target,
-    description: "Decision scored: Launch freemium tier — 87/100",
-    timeAgo: "45m ago",
-    category: "decision",
-  },
-  {
-    id: 7,
-    icon: Zap,
-    description: "Competitor update: Linear shipped timeline view",
-    timeAgo: "1h ago",
-    category: "competitor",
-  },
-  {
-    id: 8,
-    icon: Users,
-    description: "Market signal: 23 YC founders discussing PM tools on Twitter",
-    timeAgo: "1h ago",
-    category: "market",
-  },
-  {
-    id: 9,
-    icon: Radio,
-    description: "Agent: Weekly digest compiled — 3 high-priority insights",
-    timeAgo: "2h ago",
-    category: "agent",
-  },
-  {
-    id: 10,
-    icon: FlaskConical,
-    description: "Experiment result: Onboarding A/B test — Variant B +23% activation",
-    timeAgo: "3h ago",
-    category: "experiment",
-  },
-];
 
 const MOCK_ANALYSES: Analysis[] = [
   {
@@ -542,7 +466,7 @@ export function DashboardView() {
 
   // Live WebSocket events prepended to the feed (max 5 live items shown)
   const [liveItems, setLiveItems] = useState<FeedItem[]>([]);
-  const liveIdRef = useRef(-1); // negative IDs to avoid collisions with mock data
+  const liveIdRef = useRef(-1); // negative IDs to avoid collisions with API data IDs
 
   // ── Rotate highlighted row in the feed ───────────────────────────────────
   const feedItems: FeedItem[] = [
@@ -571,7 +495,7 @@ export function DashboardView() {
             category: (a.category as CategoryKey | undefined) ?? eventTypeToCategory(a.type ?? ""),
           })
         )
-      : MOCK_FEED_ITEMS),
+      : []),
   ];
 
   useEffect(() => {
