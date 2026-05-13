@@ -55,3 +55,28 @@ export function useMarketTrends() {
 
   return { data, loading, error, refetch };
 }
+
+export interface MarketOpportunityData {
+  id: string;
+  entryType: string; // 'pm_insight' | 'strategic_decision'
+  title: string;
+  content: string;
+  confidence: number; // 0-1
+  sourceUrl: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MarketOpportunitiesResponse {
+  opportunities: MarketOpportunityData[];
+}
+
+export function useMarketOpportunities() {
+  const { data, loading, error, refetch } = useApi<MarketOpportunitiesResponse>(
+    '/api/market/opportunities',
+    { refreshInterval: 5 * 60_000 },
+  );
+
+  return { data, loading, error, refetch };
+}

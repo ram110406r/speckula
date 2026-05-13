@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useMarketSignals, useMarketTrends } from "@/hooks/useMarketSignals";
+import { useMarketSignals, useMarketTrends, useMarketOpportunities, type MarketOpportunityData } from "@/hooks/useMarketSignals";
 import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -65,160 +65,6 @@ interface Opportunity {
   category: OpportunityCategory;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mock Data
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SIGNALS: Signal[] = [
-  {
-    id: "1",
-    source: "Reddit r/startups",
-    category: "pain_point",
-    sentiment: "negative",
-    title: "Why do all PM tools feel like enterprise bloatware?",
-    excerpt:
-      "I've tried Jira, Linear, Productboard — they're all built for 500-person teams. Where's the tool for early-stage startups?",
-    votes: 847,
-    comments: 234,
-    timeAgo: "2h",
-    trend: "rising",
-    urgency: "high",
-  },
-  {
-    id: "2",
-    source: "Reddit r/ProductManagement",
-    category: "complaint",
-    sentiment: "negative",
-    title: "Notion AI is disappointing — feels like ChatGPT with extra steps",
-    excerpt:
-      "Expected deep product intelligence but got generic summaries. AI should understand your product context, not just summarize text.",
-    votes: 512,
-    comments: 89,
-    timeAgo: "4h",
-    trend: "rising",
-    urgency: "high",
-  },
-  {
-    id: "3",
-    source: "Twitter/X",
-    category: "trend",
-    sentiment: "positive",
-    title: '"AI-native PM tools" trending among YC W26 founders',
-    excerpt:
-      "23 YC founders discussing the need for an AI-native startup OS this week. Key themes: context, memory, autonomous research.",
-    votes: 1240,
-    comments: 156,
-    timeAgo: "6h",
-    trend: "viral",
-    urgency: "high",
-  },
-  {
-    id: "4",
-    source: "Reddit r/SaaS",
-    category: "opportunity",
-    sentiment: "neutral",
-    title: "Market gap: No tool connects market research to product decisions",
-    excerpt:
-      "I collect signals from Reddit, Twitter, customer interviews — then manually copy-paste into my PRDs. This workflow is broken.",
-    votes: 634,
-    comments: 178,
-    timeAgo: "8h",
-    trend: "rising",
-    urgency: "medium",
-  },
-  {
-    id: "5",
-    source: "HackerNews",
-    category: "trend",
-    sentiment: "positive",
-    title: "Show HN: We automated our competitor monitoring with GPT-4",
-    excerpt:
-      "3000+ upvotes on a DIY competitor monitoring script. Clear demand signal for automated competitive intelligence.",
-    votes: 3241,
-    comments: 412,
-    timeAgo: "12h",
-    trend: "viral",
-    urgency: "high",
-  },
-  {
-    id: "6",
-    source: "Reddit r/Entrepreneur",
-    category: "pain_point",
-    sentiment: "negative",
-    title: "How do you actually track what your competitors are doing?",
-    excerpt:
-      "I check their website manually every week. There has to be a better way. LinkedIn alerts are useless.",
-    votes: 289,
-    comments: 67,
-    timeAgo: "1d",
-    trend: "stable",
-    urgency: "medium",
-  },
-  {
-    id: "7",
-    source: "ProductHunt",
-    category: "launch",
-    sentiment: "neutral",
-    title: "Launched: Competitive intelligence tool for startups — 847 upvotes",
-    excerpt:
-      'Strong interest in automated competitive tracking. Top comment: "Needs to connect to my PM workflow"',
-    votes: 847,
-    comments: 123,
-    timeAgo: "1d",
-    trend: "stable",
-    urgency: "medium",
-  },
-  {
-    id: "8",
-    source: "Twitter/X",
-    category: "complaint",
-    sentiment: "negative",
-    title: "Productboard pricing increase is killing early-stage startups",
-    excerpt:
-      "Just got the email. $75/mo per seat is not early-stage friendly. Switching to something else ASAP.",
-    votes: 456,
-    comments: 89,
-    timeAgo: "2d",
-    trend: "falling",
-    urgency: "low",
-  },
-];
-
-const TRENDS: Trend[] = [
-  { name: "AI-native PM tools", growth: "+512%", volume: "34K mentions", category: "category_creation", momentum: 95 },
-  { name: "Startup memory/context", growth: "+340%", volume: "18K mentions", category: "feature_demand", momentum: 88 },
-  { name: "PM tool switching", growth: "+127%", volume: "9K mentions", category: "churn_signal", momentum: 72 },
-  { name: "Notion alternative", growth: "+89%", volume: "52K mentions", category: "competitor_weakness", momentum: 67 },
-  { name: "Autonomous research", growth: "+445%", volume: "12K mentions", category: "feature_demand", momentum: 91 },
-  { name: "PM + AI workflow", growth: "+278%", volume: "23K mentions", category: "category_creation", momentum: 83 },
-];
-
-const OPPORTUNITIES: Opportunity[] = [
-  {
-    title: "AI-native startup OS",
-    description: "No tool connects market research → decisions → execution. 34K mentions, no clear leader.",
-    strength: 95,
-    category: "market_gap",
-  },
-  {
-    title: "Automated competitor monitoring",
-    description: "3K+ upvotes on DIY solution. Massive demand for automated competitive tracking integrated with PM workflow.",
-    strength: 88,
-    category: "feature_demand",
-  },
-  {
-    title: "Early-stage PM tooling",
-    description: "All major tools target enterprise. Productboard at $75/mo is losing early-stage customers fast.",
-    strength: 82,
-    category: "pricing_opportunity",
-  },
-  {
-    title: "Startup memory layer",
-    description: '"Context amnesia" — founders repeatedly mention losing institutional knowledge as teams grow.',
-    strength: 79,
-    category: "market_gap",
-  },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers & Config
@@ -532,6 +378,7 @@ export function InsightsView() {
     activeFilter !== "all" ? activeFilter : undefined
   );
   const { data: trendsData } = useMarketTrends();
+  const { data: opportunitiesData } = useMarketOpportunities();
   const { lastEvent } = useSpecklaBus();
 
   // Simulate live-update pulse every 30 seconds
@@ -572,8 +419,8 @@ export function InsightsView() {
   // Map real signals to UI format
   const hasRealSignals = signalsData?.signals && signalsData.signals.length > 0;
 
-  const realSignals: Signal[] = hasRealSignals
-    ? signalsData!.signals.map((s) => {
+  const mergedSignals: Signal[] = hasRealSignals
+    ? signalsData!.signals.slice(0, 15).map((s) => {
         let hostname = "SPECKULA AI";
         if (s.sourceUrl) {
           try {
@@ -598,12 +445,6 @@ export function InsightsView() {
       })
     : [];
 
-  // Merge: real signals first, then mock fill-in (deduplicated by title)
-  const mergedSignals: Signal[] = [
-    ...realSignals,
-    ...SIGNALS.filter((m) => !realSignals.find((r) => r.title === m.title)),
-  ].slice(0, 15);
-
   const filteredSignals = mergedSignals.filter((s) => {
     const matchesFilter = activeFilter === "all" || s.category === activeFilter;
     const matchesSearch =
@@ -614,7 +455,7 @@ export function InsightsView() {
     return matchesFilter && matchesSearch;
   });
 
-  // Map real trends data to UI Trend[] format, fallback to mock
+  // Map real trends data to UI Trend[] format (empty array when no data)
   const hasRealTrends = trendsData?.byType && trendsData.byType.length > 0;
 
   const displayTrends: Trend[] = hasRealTrends
@@ -625,7 +466,19 @@ export function InsightsView() {
         category: mapSignalTypeToTrendCategory(entry.type),
         momentum: Math.round(entry.avgStrength * 100),
       }))
-    : TRENDS;
+    : [];
+
+  // Map real opportunities data to UI Opportunity[] format (empty array when no data)
+  const hasRealOpportunities = opportunitiesData?.opportunities && opportunitiesData.opportunities.length > 0;
+
+  const displayOpportunities: Opportunity[] = hasRealOpportunities
+    ? opportunitiesData!.opportunities.slice(0, 4).map((o: MarketOpportunityData) => ({
+        title: o.title,
+        description: o.content.substring(0, 200),
+        strength: Math.round(o.confidence * 100),
+        category: o.entryType === "strategic_decision" ? "market_gap" : "feature_demand" as OpportunityCategory,
+      }))
+    : [];
 
   const highUrgencyCount = mergedSignals.filter((s) => s.urgency === "high").length;
   const viralCount = mergedSignals.filter((s) => s.trend === "viral").length;
@@ -694,8 +547,8 @@ export function InsightsView() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricCard
               label="Signals Today"
-              value={hasRealSignals ? String(signalsData!.total) : "47"}
-              sub={hasRealSignals ? "from live sources" : "↑ 23% from yesterday"}
+              value={hasRealSignals ? String(signalsData!.total) : "0"}
+              sub={hasRealSignals ? "from live sources" : "capture signals to populate"}
               icon={<Zap className="h-3.5 w-3.5 text-amber-400" />}
               accent="bg-amber-500/10"
             />
@@ -708,7 +561,7 @@ export function InsightsView() {
             />
             <MetricCard
               label="Opportunities"
-              value="4"
+              value={String(displayOpportunities.length)}
               sub={`${highUrgencyCount} high-priority signals`}
               icon={<Target className="h-3.5 w-3.5 text-emerald-400" />}
               accent="bg-emerald-500/10"
@@ -806,6 +659,12 @@ export function InsightsView() {
                 </div>
 
                 <div className="flex flex-col gap-2">
+                  {displayTrends.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-28 rounded-xl border-2 border-dashed border-border text-center p-4">
+                      <TrendingUp className="h-5 w-5 text-muted-foreground/40 mb-2" />
+                      <p className="text-[12px] text-muted-foreground">No trend data yet.</p>
+                    </div>
+                  )}
                   {displayTrends.map((trend) => {
                     const badge = getTrendCategoryBadge(trend.category);
                     return (
@@ -854,7 +713,13 @@ export function InsightsView() {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  {OPPORTUNITIES.map((opp) => {
+                  {displayOpportunities.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed border-border text-center p-4">
+                      <Target className="h-5 w-5 text-muted-foreground/40 mb-2" />
+                      <p className="text-[12px] text-muted-foreground">No opportunities detected yet.</p>
+                      <p className="text-[11px] text-muted-foreground/60 mt-1">Capture more signals to surface opportunities.</p>
+                    </div>
+                  ) : displayOpportunities.map((opp) => {
                     const badge = getOpportunityCategoryBadge(opp.category);
                     return (
                       <div

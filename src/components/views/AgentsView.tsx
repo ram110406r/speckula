@@ -56,141 +56,6 @@ interface ExecutionLogEntry {
   status: LogStatus;
 }
 
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
-
-const AGENTS: Agent[] = [
-  {
-    id: "market-scanner",
-    name: "Market Scanner",
-    description: "Monitors Reddit, HN, Twitter for market signals",
-    status: "running",
-    type: "intelligence",
-    lastRun: "2m ago",
-    nextRun: "Continuous",
-    tasksCompleted: 1247,
-    successRate: 97,
-    currentTask: "Scanning r/startups for PM tool discussions",
-    uptime: "99.2%",
-  },
-  {
-    id: "competitor-watcher",
-    name: "Competitor Watcher",
-    description: "Tracks pricing, features, and positioning changes",
-    status: "running",
-    type: "intelligence",
-    lastRun: "8m ago",
-    nextRun: "Every 15m",
-    tasksCompleted: 892,
-    successRate: 99,
-    currentTask: "Analyzing notion.so pricing page changes",
-    uptime: "98.7%",
-  },
-  {
-    id: "insight-synthesizer",
-    name: "Insight Synthesizer",
-    description: "Synthesizes signals into actionable PM insights",
-    status: "running",
-    type: "synthesis",
-    lastRun: "23m ago",
-    nextRun: "Every 1h",
-    tasksCompleted: 234,
-    successRate: 94,
-    currentTask: "Generating weekly intelligence digest",
-    uptime: "97.1%",
-  },
-  {
-    id: "decision-scorer",
-    name: "Decision Scorer",
-    description: "Scores and validates strategic decisions",
-    status: "idle",
-    type: "analysis",
-    lastRun: "2h ago",
-    nextRun: "On trigger",
-    tasksCompleted: 67,
-    successRate: 91,
-    currentTask: null,
-    uptime: "100%",
-  },
-  {
-    id: "experiment-analyzer",
-    name: "Experiment Analyzer",
-    description: "Monitors A/B tests and extracts learnings",
-    status: "running",
-    type: "analysis",
-    lastRun: "45m ago",
-    nextRun: "Every 4h",
-    tasksCompleted: 34,
-    successRate: 88,
-    currentTask: "Processing onboarding A/B test results",
-    uptime: "96.4%",
-  },
-  {
-    id: "weekly-digest",
-    name: "Weekly Digest",
-    description: "Compiles and sends weekly intelligence summaries",
-    status: "scheduled",
-    type: "delivery",
-    lastRun: "3d ago",
-    nextRun: "Monday 9am",
-    tasksCompleted: 12,
-    successRate: 100,
-    currentTask: null,
-    uptime: "100%",
-  },
-];
-
-const EXECUTION_LOG: ExecutionLogEntry[] = [
-  {
-    id: "1",
-    agent: "Market Scanner",
-    action: "Signal detected",
-    detail: '47 mentions of "PM tool switching" on Reddit r/startups',
-    time: "2m ago",
-    status: "success",
-  },
-  {
-    id: "2",
-    agent: "Competitor Watcher",
-    action: "Change detected",
-    detail: "Notion.so updated pricing page — Business plan +$3/mo",
-    time: "8m ago",
-    status: "alert",
-  },
-  {
-    id: "3",
-    agent: "Insight Synthesizer",
-    action: "Insight generated",
-    detail: '"AI-native tools" category growing 512% — high opportunity',
-    time: "23m ago",
-    status: "success",
-  },
-  {
-    id: "4",
-    agent: "Market Scanner",
-    action: "Viral signal",
-    detail: "HackerNews: DIY competitor monitoring — 3K upvotes",
-    time: "35m ago",
-    status: "success",
-  },
-  {
-    id: "5",
-    agent: "Experiment Analyzer",
-    action: "Result updated",
-    detail: "Onboarding B +23% activation at n=234",
-    time: "45m ago",
-    status: "success",
-  },
-  {
-    id: "6",
-    agent: "Decision Scorer",
-    action: "Score updated",
-    detail: 'Decision "Launch freemium" scored 91/100',
-    time: "2h ago",
-    status: "success",
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -440,6 +305,11 @@ function ExecutionLog({ entries, isLive }: { entries: ExecutionLogEntry[]; isLiv
           )}
         </div>
       </div>
+      {entries.length === 0 && (
+        <div className="flex items-center justify-center h-20 px-5">
+          <span className="text-[12px] text-muted-foreground">No execution history yet</span>
+        </div>
+      )}
       <ul>
         {entries.map((entry, idx) => (
           <li
@@ -522,7 +392,7 @@ export function AgentsView() {
     }
   }, [lastEvent]);
 
-  // Map real agent data → UI Agent[] format, falling back to mock
+  // Map real agent data → UI Agent[] format
   const hasRealAgents = agentsData?.agents && agentsData.agents.length > 0;
 
   const displayAgents: Agent[] = hasRealAgents
@@ -542,12 +412,9 @@ export function AgentsView() {
         currentTask: a.status === "running" ? "Processing analysis queue..." : null,
         uptime: "99.0%",
       }))
-    : AGENTS.map((a) => ({
-        ...a,
-        status: (agentOverrides[a.id] ?? a.status) as AgentStatus,
-      }));
+    : [];
 
-  // Map real jobs → execution log format, falling back to mock
+  // Map real jobs → execution log format
   const hasRealJobs = jobsData?.jobs && jobsData.jobs.length > 0;
 
   const displayLog: ExecutionLogEntry[] = hasRealJobs
@@ -571,7 +438,7 @@ export function AgentsView() {
             ? "error"
             : "info",
       }))
-    : EXECUTION_LOG;
+    : [];
 
   const handleToggle = (id: string) => {
     setAgentOverrides((prev) => {
@@ -634,6 +501,14 @@ export function AgentsView() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {agentsLoading && !hasRealAgents
               ? Array.from({ length: 4 }).map((_, i) => <AgentCardSkeleton key={i} />)
+              : agents.length === 0
+              ? (
+                <div className="col-span-2 flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed border-border text-center p-6">
+                  <Bot className="h-6 w-6 text-muted-foreground/40 mb-2" />
+                  <p className="text-sm text-muted-foreground">No agents running</p>
+                  <p className="text-[11px] text-muted-foreground/60 mt-1">Agents will appear here once activated.</p>
+                </div>
+              )
               : agents.map((agent) => (
                   <AgentCard
                     key={agent.id}

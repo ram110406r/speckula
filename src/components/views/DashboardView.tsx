@@ -86,81 +86,6 @@ interface Competitor {
   stale: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Static mock data  (kept as permanent fallback)
-// ---------------------------------------------------------------------------
-
-const MOCK_ANALYSES: Analysis[] = [
-  {
-    id: 1,
-    title: "Competitor Positioning Analysis — Figma vs Speckula",
-    progress: 67,
-    startedAgo: "8m ago",
-    color: "bg-blue-500",
-  },
-  {
-    id: 2,
-    title: "Reddit Sentiment Scan — PM Tools subreddit",
-    progress: 34,
-    startedAgo: "23m ago",
-    color: "bg-purple-500",
-  },
-  {
-    id: 3,
-    title: "Market trend synthesis — Q2 2026 signals",
-    progress: 89,
-    startedAgo: "2m ago",
-    color: "bg-emerald-500",
-  },
-];
-
-const MOCK_MARKET_SIGNALS: MarketSignal[] = [
-  { id: 1, label: "AI-native tools adoption", change: 340, up: true },
-  { id: 2, label: "PM tool switching intent", change: 127, up: true },
-  { id: 3, label: '"Notion alternative" searches', change: 89, up: true },
-  { id: 4, label: "Linear enterprise churn", change: 34, up: true },
-  { id: 5, label: "Startup OS category", change: 512, up: true },
-];
-
-const MOCK_DECISIONS: Decision[] = [
-  {
-    id: 1,
-    title: "Launch freemium tier",
-    score: 87,
-    priority: "High",
-    ago: "2 days ago",
-  },
-  {
-    id: 2,
-    title: "Ship browser extension v2",
-    score: 91,
-    priority: "Critical",
-    ago: "1 day ago",
-  },
-  {
-    id: 3,
-    title: "Expand competitor monitoring",
-    score: 74,
-    priority: "Medium",
-    ago: "3 days ago",
-  },
-];
-
-const MOCK_COMPETITORS: Competitor[] = [
-  { id: 1, name: "Notion", initial: "N", color: "bg-zinc-700", updatedAgo: "2h ago", stale: false },
-  { id: 2, name: "Linear", initial: "L", color: "bg-indigo-700", updatedAgo: "5h ago", stale: false },
-  { id: 3, name: "Productboard", initial: "P", color: "bg-violet-700", updatedAgo: "1d ago", stale: false },
-  { id: 4, name: "Figma", initial: "F", color: "bg-rose-700", updatedAgo: "3h ago", stale: false },
-  { id: 5, name: "Jira", initial: "J", color: "bg-blue-800", updatedAgo: "2d ago", stale: true },
-];
-
-const MOCK_METRICS = {
-  totalSignals: "847",
-  weeklyCaptures: "34",
-  aiJobsRunning: "12",
-  competitorDomains: "6",
-  activeAgents: "3",
-};
 
 // ---------------------------------------------------------------------------
 // Category badge config
@@ -531,42 +456,30 @@ export function DashboardView() {
     setLiveItems((prev) => [newItem, ...prev].slice(0, 5));
   }, [lastEvent]);
 
-  // ── Derive metrics (real data ?? mock fallback) ───────────────────────────
+  // ── Derive metrics from real data (show "—" when unavailable) ────────────
   const isMetricsLoading = loading && overview === null;
 
   const metrics = {
-    totalSignals: overview?.totalSignals != null
-      ? String(overview.totalSignals)
-      : MOCK_METRICS.totalSignals,
-    weeklyCaptures: overview?.weeklyCaptures != null
-      ? String(overview.weeklyCaptures)
-      : MOCK_METRICS.weeklyCaptures,
-    aiJobsRunning: overview?.realtimeConnections != null
-      ? String(overview.realtimeConnections)
-      : MOCK_METRICS.aiJobsRunning,
-    competitorDomains: overview?.competitorInsights != null
-      ? String(overview.competitorInsights)
-      : MOCK_METRICS.competitorDomains,
-    activeAgents: agentsData?.summary.running != null
-      ? String(agentsData.summary.running)
-      : "—",
+    totalSignals: overview?.totalSignals != null ? String(overview.totalSignals) : "—",
+    weeklyCaptures: overview?.weeklyCaptures != null ? String(overview.weeklyCaptures) : "—",
+    aiJobsRunning: overview?.realtimeConnections != null ? String(overview.realtimeConnections) : "—",
+    competitorDomains: overview?.competitorInsights != null ? String(overview.competitorInsights) : "—",
+    activeAgents: agentsData?.summary.running != null ? String(agentsData.summary.running) : "—",
   };
 
-  // ── Real data arrays (fall back to mock when empty) ───────────────────────
+  // ── Real data arrays ───────────────────────────────────────────────────────
   const activeJobs = (jobsData?.jobs ?? [])
     .filter((j) => j.status === "queued" || j.status === "processing")
     .slice(0, 3);
-  const analyses: Analysis[] = activeJobs.length > 0
-    ? activeJobs.map(mapJob)
-    : MOCK_ANALYSES;
+  const analyses: Analysis[] = activeJobs.map(mapJob);
 
   const marketSignals: MarketSignal[] = signalsData?.signals?.length
     ? signalsData.signals.slice(0, 5).map(mapSignal)
-    : MOCK_MARKET_SIGNALS;
+    : [];
 
   const competitors: Competitor[] = competitorsData?.competitors?.length
     ? competitorsData.competitors.slice(0, 5).map(mapCompetitor)
-    : MOCK_COMPETITORS;
+    : [];
 
   // ── Extension status ──────────────────────────────────────────────────────
   const extensionConnected = overview?.extension?.connected === true;
@@ -718,6 +631,11 @@ export function DashboardView() {
                 }
               />
               <div className="space-y-3">
+                {analyses.length === 0 && (
+                  <div className="bg-card border border-dashed border-border rounded-xl p-4 flex items-center justify-center h-20">
+                    <span className="text-[12px] text-muted-foreground">No active analyses</span>
+                  </div>
+                )}
                 {analyses.map((analysis) => (
                   <div
                     key={analysis.id}
@@ -759,6 +677,11 @@ export function DashboardView() {
                   Market Signals
                 </span>
               </div>
+              {marketSignals.length === 0 && (
+                <div className="flex items-center justify-center h-16 px-4">
+                  <span className="text-[12px] text-muted-foreground">No market signals yet</span>
+                </div>
+              )}
               <ul>
                 {marketSignals.map((signal) => (
                   <li
@@ -792,52 +715,33 @@ export function DashboardView() {
             <div>
               <SectionHeader title="Recent Decisions" />
               <div className="space-y-2.5">
-                {(experimentsData?.experiments ?? MOCK_DECISIONS.slice(0, 3))
+                {!experimentsData?.experiments?.length && (
+                  <div className="bg-card border border-dashed border-border rounded-xl p-4 flex items-center justify-center h-20">
+                    <span className="text-[12px] text-muted-foreground">No recent decisions</span>
+                  </div>
+                )}
+                {(experimentsData?.experiments ?? [])
                   .slice(0, 3)
-                  .map((item: ExperimentSummary | Decision) => {
-                    const isExperiment = 'status' in item && 'verdict' in item;
-                    if (isExperiment) {
-                      const exp = item as ExperimentSummary;
-                      const score = exp.verdict === 'winner_found' ? 92 : exp.verdict === 'inconclusive' ? 65 : 78;
-                      const priority: Decision['priority'] =
-                        exp.verdict === 'winner_found' ? 'Critical' : exp.verdict === 'inconclusive' ? 'Low' : 'High';
-                      return (
-                        <div
-                          key={exp.id}
-                          className="bg-card border border-border rounded-xl p-4 flex items-start gap-3"
-                        >
-                          <ScoreRing score={score} />
-                          <div className="flex-1 min-w-0 space-y-1.5">
-                            <p className="text-[12.5px] font-medium text-foreground leading-snug">
-                              {exp.title}
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <PriorityBadge priority={priority} />
-                              <span className="text-[10px] text-muted-foreground">
-                                {exp.startedAt
-                                  ? `${Math.floor((Date.now() - new Date(exp.startedAt).getTime()) / 86_400_000)}d ago`
-                                  : `${Math.floor((Date.now() - new Date(exp.createdAt).getTime()) / 3_600_000)}h ago`}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    const decision = item as Decision;
+                  .map((exp: ExperimentSummary) => {
+                    const score = exp.verdict === 'winner_found' ? 92 : exp.verdict === 'inconclusive' ? 65 : 78;
+                    const priority: Decision['priority'] =
+                      exp.verdict === 'winner_found' ? 'Critical' : exp.verdict === 'inconclusive' ? 'Low' : 'High';
                     return (
                       <div
-                        key={decision.id}
+                        key={exp.id}
                         className="bg-card border border-border rounded-xl p-4 flex items-start gap-3"
                       >
-                        <ScoreRing score={decision.score} />
+                        <ScoreRing score={score} />
                         <div className="flex-1 min-w-0 space-y-1.5">
                           <p className="text-[12.5px] font-medium text-foreground leading-snug">
-                            {decision.title}
+                            {exp.title}
                           </p>
                           <div className="flex items-center gap-2">
-                            <PriorityBadge priority={decision.priority} />
+                            <PriorityBadge priority={priority} />
                             <span className="text-[10px] text-muted-foreground">
-                              {decision.ago}
+                              {exp.startedAt
+                                ? `${Math.floor((Date.now() - new Date(exp.startedAt).getTime()) / 86_400_000)}d ago`
+                                : `${Math.floor((Date.now() - new Date(exp.createdAt).getTime()) / 3_600_000)}h ago`}
                             </span>
                           </div>
                         </div>
@@ -855,6 +759,11 @@ export function DashboardView() {
                 </span>
                 <Shield className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
+              {competitors.length === 0 && (
+                <div className="flex items-center justify-center h-16 px-4">
+                  <span className="text-[12px] text-muted-foreground">No competitors tracked yet</span>
+                </div>
+              )}
               <ul>
                 {competitors.map((comp) => (
                   <li
