@@ -116,24 +116,18 @@ export const generateLearningInsight = async (ctx: OutcomeContext): Promise<Lear
     data:  { status: 'analyzed', confidenceDelta: confidenceShift },
   });
 
-  // Update any ProductBrainEntries tagged with this decisionId.
-  const brainEntries = await db.productBrainEntry.findMany({
-    where: { userId: ctx.userId, entryType: 'strategic_decision' },
-    select: { id: true, confidence: true, metadata: true },
+  // Update the ProductBrainEntry for this decision using the indexed decisionId
+  // column — avoids scanning the full table and parsing JSON metadata.
+  const brainEntry = await db.productBrainEntry.findFirst({
+    where: { userId: ctx.userId, decisionId: ctx.decisionId },
+    select: { id: true, confidence: true },
   });
-
-  for (const entry of brainEntries) {
-    try {
-      const meta = JSON.parse(entry.metadata ?? '{}') as Record<string, unknown>;
-      if (meta.decisionId !== ctx.decisionId) continue;
-      const nextConfidence = Math.min(1, Math.max(0, entry.confidence + confidenceShift));
-      await db.productBrainEntry.update({
-        where: { id: entry.id },
-        data:  { confidence: nextConfidence },
-      });
-    } catch {
-      // Non-parseable metadata — skip.
-    }
+  if (brainEntry) {
+    const nextConfidence = Math.min(1, Math.max(0, brainEntry.confidence + confidenceShift));
+    await db.productBrainEntry.update({
+      where: { id: brainEntry.id },
+      data:  { confidence: nextConfidence },
+    });
   }
 
   // Publish realtime events.

@@ -32,6 +32,11 @@ export class ViewErrorBoundary extends React.Component<Props, State> {
       error,
       info.componentStack
     );
+    // Report to Sentry when available. Dynamic import keeps the bundle
+    // unchanged in environments where @sentry/nextjs is not installed.
+    import('@sentry/nextjs').then(({ captureException }) => {
+      captureException(error, { extra: { viewName: this.props.viewName, componentStack: info.componentStack } });
+    }).catch(() => undefined);
   }
 
   render() {

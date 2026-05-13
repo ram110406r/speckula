@@ -29,6 +29,7 @@ export interface ProductBrainInput {
   sourceJobId?: string | null;
   confidence?: number;
   tags?: string[];
+  decisionId?: string | null;
 }
 
 export const productBrainService = {
@@ -46,6 +47,7 @@ export const productBrainService = {
         sourceJobId: input.sourceJobId ?? null,
         confidence:  input.confidence ?? 0.7,
         tags:        input.tags ? JSON.stringify(input.tags) : undefined,
+        decisionId:  input.decisionId ?? null,
       },
     });
 
@@ -260,16 +262,30 @@ export const productBrainService = {
     }).catch(() => undefined);
   },
 
-  // Internal: embed an entry and update its embeddingId.
+  // Internal: embed an entry and update its embeddingId + embeddingStatus.
   async embedEntry(entryId: string, title: string, content: string): Promise<void> {
-    const text = `${title}\n\n${content}`;
-    const embedding = await generateEmbedding(text);
-    if (!embedding) return;
-    const embeddingId = await saveEmbedding(entryId, embedding);
-    if (embeddingId) {
+    try {
+      const text = `${title}\n\n${content}`;
+      const embedding = await generateEmbedding(text);
+      if (!embedding) {
+        await db.productBrainEntry.update({
+          where: { id: entryId },
+          data: { embeddingStatus: 'failed' },
+        }).catch(() => undefined);
+        return;
+      }
+      const embeddingId = await saveEmbedding(entryId, embedding);
       await db.productBrainEntry.update({
         where: { id: entryId },
-        data: { embeddingId },
+        data: {
+          embeddingId: embeddingId ?? undefined,
+          embeddingStatus: embeddingId ? 'done' : 'failed',
+        },
+      }).catch(() => undefined);
+    } catch {
+      await db.productBrainEntry.update({
+        where: { id: entryId },
+        data: { embeddingStatus: 'failed' },
       }).catch(() => undefined);
     }
   },
