@@ -3,8 +3,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../lib/db.js';
-import { getGroqClient } from '../services/groqService.js';
+import { groqService } from '../services/groqService.js';
 import { publishEvent } from '../services/eventBus.js';
+import { getWorkspaceEvidence } from '../services/aiGroundingService.js';
 
 const requireUserId = (req: FastifyRequest, reply: FastifyReply): string | null => {
   const uid = req.userId;
@@ -31,9 +32,11 @@ const GenerateSchema = z.object({
   workspaceId: z.string().optional(),
 });
 
-const AI_ROADMAP_PROMPT = (quarter: string, context: string) => `
+const AI_ROADMAP_PROMPT = (quarter: string, context: string, workspaceEvidence: string) => `
 You are SPECKULA's Roadmap AI. Generate a prioritized roadmap for ${quarter}.
 Strategic context: ${context}
+
+${workspaceEvidence ? `${workspaceEvidence}\n` : ''}
 
 Respond ONLY with valid JSON:
 {
@@ -118,14 +121,15 @@ export default async function roadmapRoutes(fastify: FastifyInstance) {
     }> = [];
 
     try {
-      const response = await getGroqClient().chat.completions.create({
-        model:           'llama-3.3-70b-versatile',
-        messages:        [{ role: 'user', content: AI_ROADMAP_PROMPT(body.data.quarter, body.data.context) }],
-        response_format: { type: 'json_object' },
-        temperature:     0.4,
-        max_tokens:      1500,
-      });
-      const raw = JSON.parse(response.choices[0]?.message?.content ?? '{}') as { items?: typeof generated };
+      const workspaceEvidence = await getWorkspaceEvidence({ userId, workspaceId: body.data.workspaceId ?? null });
+      const prompt = AI_ROADMAP_PROMPT(body.data.quarter, body.data.context, workspaceEvidence);
+      const response = await groqService.callGroq(
+        prompt,
+        { model: 'reasoning', jsonMode: true, temperature: 0.4, maxTokens: 1500 },
+        userId,
+        body.data.workspaceId ?? 'roadmaps'
+      );
+      const raw = JSON.parse(response.content ?? '{}') as { items?: typeof generated };
       generated = raw.items ?? [];
     } catch (err) {
       fastify.log.error({ err }, '[roadmaps] AI generation failed');

@@ -4,8 +4,9 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../lib/db.js';
 import { analyseExperiment, experimentVerdict } from '../services/statisticsService.js';
-import { getGroqClient } from '../services/groqService.js';
+import { groqService } from '../services/groqService.js';
 import { publishEvent } from '../services/eventBus.js';
+import { getWorkspaceEvidence } from '../services/aiGroundingService.js';
 
 const requireUserId = (req: FastifyRequest, reply: FastifyReply): string | null => {
   const uid = req.userId;
@@ -33,7 +34,8 @@ const UpdateVariantSchema = z.object({
 const AI_INSIGHT_PROMPT = (
   title: string, hypothesis: string, metric: string,
   stats: ReturnType<typeof analyseExperiment>,
-  verdict: string
+  verdict: string,
+  workspaceEvidence: string
 ) => `
 You are SPECKULA's Experiment Analyst. An A/B test has concluded.
 
@@ -48,7 +50,10 @@ ${stats.map((s) =>
   `(${(s.conversionRate * 100).toFixed(2)}%)${s.lift !== null ? `, lift ${s.lift.toFixed(1)}%` : ''}${s.significant ? ' ✓ significant' : ''}`
 ).join('\n')}
 
+${workspaceEvidence ? `${workspaceEvidence}\n` : ''}
+
 Write a 2-3 sentence PM insight explaining what happened and what to do next.
+Ground recommendations in the variant stats. If workspace evidence is provided, reference it only when relevant; do not invent competitors/signals not present in the evidence.
 Respond with plain text only — no JSON, no markdown.
 `.trim();
 
@@ -148,19 +153,21 @@ export default async function experimentRoutes(fastify: FastifyInstance) {
 
     if (body.data.status === 'completed') {
       // Generate AI insight on completion (fire-and-forget).
-      db.experiment.findFirst({ where: { id }, include: { variants: true } }).then(async (exp: { id: string; title: string; hypothesis: string; targetMetric: string; variants: { id: string; name: string; isControl: boolean; impressions: number; conversions: number }[] } | null) => {
+      db.experiment.findFirst({ where: { id }, include: { variants: true } }).then(async (exp: { id: string; title: string; hypothesis: string; targetMetric: string; workspaceId: string | null; variants: { id: string; name: string; isControl: boolean; impressions: number; conversions: number }[] } | null) => {
         if (!exp) return;
         const stats   = analyseExperiment(exp.variants);
         const verdict = experimentVerdict(stats);
 
         try {
-          const response = await getGroqClient().chat.completions.create({
-            model:       'llama-3.3-70b-versatile',
-            messages:    [{ role: 'user', content: AI_INSIGHT_PROMPT(exp.title, exp.hypothesis, exp.targetMetric, stats, verdict) }],
-            temperature: 0.3,
-            max_tokens:  200,
-          });
-          const aiInsight = response.choices[0]?.message?.content?.trim() ?? '';
+          const workspaceEvidence = await getWorkspaceEvidence({ userId, workspaceId: exp.workspaceId });
+          const prompt = AI_INSIGHT_PROMPT(exp.title, exp.hypothesis, exp.targetMetric, stats, verdict, workspaceEvidence);
+          const response = await groqService.callGroq(
+            prompt,
+            { model: 'reasoning', temperature: 0.3, maxTokens: 200 },
+            userId,
+            exp.workspaceId ?? 'experiments'
+          );
+          const aiInsight = response.content.trim();
           await db.experiment.update({ where: { id }, data: { aiInsight } });
         } catch {
           // Non-critical — experiment is still usable without AI insight.
