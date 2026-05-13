@@ -198,7 +198,6 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
 
     const since7d   = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000);
     const since30d  = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const since90s  = new Date(Date.now() - 90_000);
 
     const runningStatuses = ['queued', 'extracting', 'classifying', 'generating_insights', 'embedding', 'saving'];
 

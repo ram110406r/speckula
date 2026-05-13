@@ -39,8 +39,6 @@ const chatSchema = z.object({
 });
 
 // Use centralized Groq client from groqService to prevent duplicate initialization
-const getGroq = () => getGroqClient();
-
 const DEFAULT_SYSTEM = `You are Speckula AI, a senior product management assistant.
 Your goal is to help product managers discover insights, define product strategy, and build PRDs.
 Be concise, structured, and professional. Use markdown for all responses.

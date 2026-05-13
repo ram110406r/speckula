@@ -524,7 +524,7 @@ export default async function importRoutes(fastify: FastifyInstance) {
         const sender = msg.user ? `@user_${msg.user.slice(-4)}` : 'unknown';
         const decoded = decodeSlackMarkup(rawText);
         // eslint-disable-next-line no-control-regex
-        const sanitized = decoded.replace(/[ -	-]/g, '');
+        const sanitized = decoded.replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '');
         const line = `[${timestamp}] ${sender}: ${sanitized}`;
         const lineBytes = Buffer.byteLength(line, 'utf-8') + 1;
 
