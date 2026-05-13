@@ -137,6 +137,7 @@ export default async function outcomeRoutes(fastify: FastifyInstance) {
     generateLearningInsight({
       outcomeId:      id,
       userId,
+      workspaceId:    outcome.workspaceId ?? null,
       decisionId:     outcome.decisionId,
       decisionTitle:  outcome.decisionTitle,
       expectedMetric: outcome.expectedMetric,

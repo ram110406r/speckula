@@ -87,7 +87,7 @@ const breakerCheck = () => {
       `Groq AI service is temporarily unavailable (circuit open). ` +
       `Retry in ${Math.ceil((BREAKER.HALF_OPEN_DELAY_MS - elapsed) / 1000)}s.`
     );
-    (err as NodeJS.ErrnoException & { status?: number }).status = 503;
+    (err as Error & { status?: number }).status = 503;
     throw err;
   }
   // half-open: allow through (the next success/failure will transition state)
@@ -284,7 +284,7 @@ export const groqService = {
       const err = new Error(
         `Daily token quota of ${quota.toLocaleString()} tokens reached. Usage resets at UTC midnight.`
       );
-      (err as NodeJS.ErrnoException & { status?: number }).status = 429;
+      (err as Error & { status?: number }).status = 429;
       throw err;
     }
 
@@ -871,7 +871,7 @@ ${content}`;
       .catch(() => null);
     if (todayUsage && todayUsage.totalTokens >= quota) {
       const err = new Error(`Daily token quota of ${quota.toLocaleString()} tokens reached.`);
-      (err as NodeJS.ErrnoException & { status?: number }).status = 429;
+      (err as Error & { status?: number }).status = 429;
       throw err;
     }
 
