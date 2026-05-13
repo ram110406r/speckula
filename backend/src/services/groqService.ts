@@ -51,13 +51,13 @@ const breakerOnSuccess = () => {
 };
 
 const breakerOnFailure = (err: unknown) => {
-  // Only count non-retriable errors (not 429 rate-limits or transient 5xx).
+  // Only count 4xx auth/validation failures (401, 400, 422) toward the breaker.
+  // 429 is a quota limit — not an outage. 5xx errors are transient model/infra
+  // blips that the retry loop already handles; counting them would open the
+  // breaker during brief Groq instability and shut down all AI for 60 s.
   const status = (err as { status?: number; statusCode?: number })?.status
     ?? (err as { status?: number; statusCode?: number })?.statusCode;
-  if (typeof status === 'number' && status === 429) return;  // quota, not outage
-  if (typeof status === 'number' && status >= 500) {
-    // Transient 5xx — still count toward breaker since repeated 5xx = outage.
-  }
+  if (typeof status === 'number' && (status === 429 || status >= 500)) return;
 
   BREAKER.failures += 1;
   BREAKER.lastFailureAt = Date.now();

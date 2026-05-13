@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import dotenv from 'dotenv';
 import createServer from './app';
 import { disconnectDb } from './lib/db';
@@ -5,8 +6,18 @@ import { getFirebaseApp } from './lib/firebaseAdmin';
 import { validateEnv } from './lib/env';
 import { sweepExpiredRecords } from './scripts/retentionSweeper';
 
-// Load environment variables
+// Load environment variables before Sentry so DSN is available.
 dotenv.config();
+
+// Initialize Sentry as early as possible. Skipped gracefully when SENTRY_DSN
+// is unset (dev environments) — never crashes the server on missing config.
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? 'development',
+    tracesSampleRate: 0.1,
+  });
+}
 
 let env: ReturnType<typeof validateEnv>;
 try {
