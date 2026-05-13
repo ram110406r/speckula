@@ -21,7 +21,7 @@ export function useExperiments() {
   const activeWorkspaceId = preferences?.activeWorkspaceId ?? null;
 
   const url = activeWorkspaceId
-    ? `/api/workspaces/${activeWorkspaceId}/experiments`
+    ? `/api/experiments?workspaceId=${encodeURIComponent(activeWorkspaceId)}`
     : '/api/experiments';
 
   const { data, loading, error, refetch } = useApi<ExperimentsResponse>(url, {

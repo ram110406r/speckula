@@ -59,14 +59,19 @@ Respond with plain text only — no JSON, no markdown.
 
 export default async function experimentRoutes(fastify: FastifyInstance) {
 
-  // GET /experiments — list experiments.
+  // GET /experiments — list experiments, optionally filtered by status/workspaceId.
   fastify.get('/', async (req, reply) => {
     const userId = requireUserId(req, reply);
     if (!userId) return;
-    const { status } = req.query as { status?: string };
+    const { status, workspaceId } = req.query as { status?: string; workspaceId?: string };
 
     const experiments = await db.experiment.findMany({
-      where:   { userId, deletedAt: null, ...(status ? { status } : {}) },
+      where: {
+        userId,
+        deletedAt: null,
+        ...(status      ? { status }      : {}),
+        ...(workspaceId ? { workspaceId } : {}),
+      },
       include: { variants: true },
       orderBy: { createdAt: 'desc' },
     });

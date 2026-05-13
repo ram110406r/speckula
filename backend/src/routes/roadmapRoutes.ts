@@ -56,20 +56,31 @@ Generate 4-6 items. Score reflects strategic alignment. High priority = score > 
 
 export default async function roadmapRoutes(fastify: FastifyInstance) {
 
-  // GET /roadmaps — list roadmap items, optionally filtered by quarter/status.
+  // GET /roadmaps — list roadmap items, optionally filtered by quarter/status/workspaceId.
   fastify.get('/', async (req, reply) => {
     const userId = requireUserId(req, reply);
     if (!userId) return;
-    const { quarter, status } = req.query as { quarter?: string; status?: string };
+    const { quarter, status, workspaceId } = req.query as {
+      quarter?: string; status?: string; workspaceId?: string;
+    };
 
-    const items = await db.roadmapItem.findMany({
+    const rawItems = await db.roadmapItem.findMany({
       where: {
         userId,
         deletedAt: null,
-        ...(quarter ? { quarter } : {}),
-        ...(status  ? { status  } : {}),
+        ...(quarter     ? { quarter }     : {}),
+        ...(status      ? { status }      : {}),
+        ...(workspaceId ? { workspaceId } : {}),
       },
-      orderBy: [{ quarter: 'asc' }, { priority: 'asc' }, { createdAt: 'desc' }],
+      // Fetch without priority sort — we sort in-memory with semantic ordering below.
+      orderBy: [{ quarter: 'asc' }, { createdAt: 'desc' }],
+    });
+
+    // Sort by semantic priority (high → medium → low), not alphabetical.
+    const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const items = rawItems.sort((a, b) => {
+      if (a.quarter !== b.quarter) return a.quarter.localeCompare(b.quarter);
+      return (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1);
     });
 
     // Group by quarter for the frontend view.

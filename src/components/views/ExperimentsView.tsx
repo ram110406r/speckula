@@ -14,7 +14,8 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-type ExperimentStatus = "running" | "completed" | "paused" | "abandoned";
+// "planned" is the Prisma default for newly created experiments.
+type ExperimentStatus = "planned" | "running" | "completed" | "paused" | "abandoned";
 
 interface ApiVariantStat {
   id: string;
@@ -113,6 +114,7 @@ function mapExperiment(api: ApiExperiment): Experiment {
 // ─── config ───────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<ExperimentStatus, { label: string; color: string; bg: string; dotClass: string; pulse: boolean }> = {
+  planned:   { label: "Planned",   color: "text-purple-400",       bg: "bg-purple-500/10 border-purple-500/20",  dotClass: "bg-purple-500",          pulse: false },
   running:   { label: "Running",   color: "text-emerald-500",      bg: "bg-emerald-500/10 border-emerald-500/20", dotClass: "bg-emerald-500",       pulse: true  },
   completed: { label: "Completed", color: "text-blue-400",         bg: "bg-blue-500/10 border-blue-500/20",       dotClass: "bg-blue-500",           pulse: false },
   paused:    { label: "Paused",    color: "text-amber-400",        bg: "bg-amber-500/10 border-amber-500/20",     dotClass: "bg-amber-500",          pulse: false },
@@ -404,6 +406,7 @@ export function ExperimentsView() {
     }
   }, [user, refetch]);
 
+  const planned   = experiments.filter((e) => e.status === "planned").length;
   const running   = experiments.filter((e) => e.status === "running").length;
   const completed = experiments.filter((e) => e.status === "completed").length;
   const paused    = experiments.filter((e) => e.status === "paused").length;
@@ -421,8 +424,18 @@ export function ExperimentsView() {
     ? experiments
     : experiments.filter((e) => e.status === filter);
 
+  const COUNTS: Record<ExperimentStatus | "all", number> = {
+    all:       experiments.length,
+    planned,
+    running,
+    completed,
+    paused,
+    abandoned: experiments.filter((e) => e.status === "abandoned").length,
+  };
+
   const filterOptions: Array<{ id: ExperimentStatus | "all"; label: string }> = [
     { id: "all",       label: "All"       },
+    { id: "planned",   label: "Planned"   },
     { id: "running",   label: "Running"   },
     { id: "completed", label: "Completed" },
     { id: "paused",    label: "Paused"    },
@@ -465,29 +478,41 @@ export function ExperimentsView() {
 
         {/* Metrics row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <MetricCard label="Planned"         value={planned}                                                           sub="queued"            />
           <MetricCard label="Running"         value={running}                                                           sub="active tests"      />
           <MetricCard label="Completed"       value={completed}                                                         sub="with results"      />
-          <MetricCard label="Paused"          value={paused}                                                            sub="on hold"           />
           <MetricCard label="Avg Improvement" value={avgImprovement > 0 ? `+${avgImprovement}%` : "—"}                 sub="positive variants" positive={avgImprovement > 0} />
         </div>
 
         {/* Filter bar */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1 rounded-full border border-border bg-card p-1">
-            {filterOptions.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setFilter(opt.id)}
-                className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
-                  filter === opt.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+            {filterOptions.map((opt) => {
+              const count = COUNTS[opt.id];
+              // Hide filter options with zero items (except "all" and active filter)
+              if (count === 0 && opt.id !== "all" && filter !== opt.id) return null;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setFilter(opt.id)}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
+                    filter === opt.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  {opt.label}
+                  {count > 0 && (
+                    <span className={`text-[10px] font-bold tabular-nums rounded-full px-1 min-w-[16px] text-center leading-4 ${
+                      filter === opt.id ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           <span className="text-[11px] text-muted-foreground ml-2">
             {filteredExperiments.length} experiment{filteredExperiments.length !== 1 ? "s" : ""}
@@ -582,19 +607,19 @@ export function ExperimentsView() {
           </Button>
         </div>
 
-        {/* Planned / not-started experiments (0 impressions, not running) */}
-        {experiments.filter((e) => e.n === 0 && e.status !== "running").length > 0 && (
+        {/* Planned / not-started experiments */}
+        {experiments.filter((e) => e.status === "planned" || (e.n === 0 && e.status !== "running")).length > 0 && (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-3.5 border-b border-border flex items-center gap-2">
               <Target className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-[13px] font-semibold text-foreground">Not Yet Started</span>
               <span className="text-[11px] text-muted-foreground ml-1">
-                — {experiments.filter((e) => e.n === 0 && e.status !== "running").length} queued
+                — {experiments.filter((e) => e.status === "planned" || (e.n === 0 && e.status !== "running")).length} queued
               </span>
             </div>
             <ul>
               {experiments
-                .filter((e) => e.n === 0 && e.status !== "running")
+                .filter((e) => e.status === "planned" || (e.n === 0 && e.status !== "running"))
                 .map((exp, idx, arr) => (
                   <li
                     key={exp.id}
