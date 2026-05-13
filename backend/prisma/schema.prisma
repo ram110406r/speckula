@@ -237,14 +237,20 @@ model ProductBrainEntry {
   tags         String?  // JSON: string[]
   // Vector embedding stored in Postgres via raw SQL (pgvector).
   // Prisma cannot manage vector columns directly — added via migration.
-  embeddingId  String?  @unique  // FK to SemanticEmbedding.id
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  embeddingId     String?  @unique  // FK to SemanticEmbedding.id
+  // decisionId enables O(1) indexed confidence updates in the learning loop
+  // instead of a full table scan + JSON parse on every outcome analysis.
+  decisionId      String?
+  // pending | done | failed — lets background jobs retry silent embedding failures.
+  embeddingStatus String   @default("pending")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([userId])
   @@index([workspaceId])
   @@index([entryType])
   @@index([createdAt])
+  @@index([userId, decisionId])
 }
 
 /// pgvector embedding store — one row per ProductBrainEntry with an embedding.

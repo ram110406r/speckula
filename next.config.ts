@@ -37,7 +37,8 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https://lh3.googleusercontent.com https://*.googleusercontent.com",
               // identitytoolkit + securetoken: Firebase Auth REST calls
-              "connect-src 'self' https://*.googleapis.com https://*.google.com https://*.firebase.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://slack.com wss://*.firebaseio.com",
+              // *.sentry.io: Sentry error ingest
+              "connect-src 'self' https://*.googleapis.com https://*.google.com https://*.firebase.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://slack.com wss://*.firebaseio.com https://*.sentry.io",
               "font-src 'self'",
               // firebaseapp.com: redirect-result iframe; accounts.google.com: OAuth
               "frame-src https://accounts.google.com https://*.firebaseapp.com https://*.web.app",
