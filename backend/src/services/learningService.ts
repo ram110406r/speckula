@@ -2,12 +2,14 @@
 // Product Brain confidence scores. Called by the learningWorker and outcomeRoutes.
 
 import { db } from '../lib/db.js';
-import { getGroqClient } from './groqService.js';
+import { groqService } from './groqService.js';
 import { publishEvent } from './eventBus.js';
+import { getWorkspaceEvidence } from './aiGroundingService.js';
 
 interface OutcomeContext {
   outcomeId: string;
   userId: string;
+  workspaceId?: string | null;
   decisionId: string;
   decisionTitle: string;
   expectedMetric: string;
@@ -38,7 +40,7 @@ const computeConfidenceShift = (verdict: string, deviationPct: number): number =
   }
 };
 
-const LEARNING_PROMPT = (ctx: OutcomeContext) => `
+const LEARNING_PROMPT = (ctx: OutcomeContext, workspaceEvidence: string) => `
 You are SPECKULA's Learning Engine. A product decision has a recorded outcome.
 Analyse the delta between expected and actual, then produce a concise learning insight.
 
@@ -47,6 +49,8 @@ Expected: ${ctx.expectedValue} ${ctx.expectedMetric}
 Actual: ${ctx.actualValue} ${ctx.expectedMetric}
 Deviation: ${ctx.deviationPct > 0 ? '+' : ''}${ctx.deviationPct.toFixed(1)}%
 Verdict: ${ctx.verdict.toUpperCase().replace('_', ' ')}
+
+${workspaceEvidence ? `${workspaceEvidence}\n` : ''}
 
 Respond ONLY with valid JSON matching this schema:
 {
@@ -60,7 +64,8 @@ Respond ONLY with valid JSON matching this schema:
 export const generateLearningInsight = async (ctx: OutcomeContext): Promise<LearningResult> => {
   const confidenceShift = computeConfidenceShift(ctx.verdict, ctx.deviationPct);
 
-  const prompt = LEARNING_PROMPT(ctx);
+  const workspaceEvidence = await getWorkspaceEvidence({ userId: ctx.userId, workspaceId: ctx.workspaceId ?? null });
+  const prompt = LEARNING_PROMPT(ctx, workspaceEvidence);
 
   // Use Groq for fast, cheap insight generation.
   let parsed: { insight: string; rootCause: string; actionableNext: string; tags: string[] };
@@ -68,16 +73,16 @@ export const generateLearningInsight = async (ctx: OutcomeContext): Promise<Lear
   let tokensUsed = 0;
 
   try {
-    const response = await getGroqClient().chat.completions.create({
-      model: modelUsed,
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-      max_tokens: 500,
-    });
-    const raw = response.choices[0]?.message?.content ?? '{}';
+    const response = await groqService.callGroq(
+      prompt,
+      { model: 'reasoning', jsonMode: true, temperature: 0.3, maxTokens: 500 },
+      ctx.userId,
+      ctx.workspaceId ?? 'learning'
+    );
+    const raw = response.content ?? '{}';
     parsed = JSON.parse(raw);
-    tokensUsed = response.usage?.total_tokens ?? 0;
+    tokensUsed = response.tokensUsed ?? 0;
+    modelUsed = response.modelUsed;
   } catch {
     // Fallback: rule-based insight when AI fails.
     parsed = {
