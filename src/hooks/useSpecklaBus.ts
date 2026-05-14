@@ -16,17 +16,20 @@ import { getAuth } from "firebase/auth";
 import { getExtensionPreferences } from "@/lib/firebase/db";
 
 export type SpeckulaEvent =
-  | { type: "extension.connected";    userId: string; data: { connectionId: string } }
-  | { type: "extension.disconnected"; userId: string; data: { connectionId: string } }
-  | { type: "analysis.queued";        userId: string; data: { jobId: string } }
-  | { type: "analysis.progress";      userId: string; data: { jobId: string; status?: string; stage?: string; progress: number } }
-  | { type: "analysis.completed";     userId: string; data: { jobId: string; result?: unknown } }
-  | { type: "analysis.failed";        userId: string; data: { jobId: string; error: string } }
-  | { type: "insight.created";        userId: string; data: { entryId: string; entryType: string; title?: string } }
-  | { type: "notification.created";   userId: string; data: { notificationId: string; title: string } }
-  | { type: "connected";              connectionId: string; userId: string; workspaceId?: string | null; serverTime: string }
-  | { type: "pong";                   serverTime: string }
-  | { type: "error";                  code: string; message: string };
+  | { type: "extension.connected";          userId: string; data: { connectionId: string } }
+  | { type: "extension.disconnected";       userId: string; data: { connectionId: string } }
+  | { type: "analysis.queued";              userId: string; data: { jobId: string } }
+  | { type: "analysis.progress";            userId: string; data: { jobId: string; status?: string; stage?: string; progress: number } }
+  | { type: "analysis.completed";           userId: string; data: { jobId: string; result?: unknown } }
+  | { type: "analysis.failed";              userId: string; data: { jobId: string; error: string } }
+  | { type: "insight.created";              userId: string; data: { entryId: string; entryType: string; title?: string } }
+  | { type: "competitor.insight.created";   userId: string; data: { domain: string; insightType: string; title?: string } }
+  | { type: "competitor.updated";           userId: string; data: { domain: string; insightType: string } }
+  | { type: "competitor.added";             userId: string; data: { domain: string } }
+  | { type: "notification.created";         userId: string; data: { notificationId: string; title: string } }
+  | { type: "connected";                    connectionId: string; userId: string; workspaceId?: string | null; serverTime: string }
+  | { type: "pong";                         serverTime: string }
+  | { type: "error";                        code: string; message: string };
 
 type AnyEvent = { type: string; [key: string]: unknown };
 

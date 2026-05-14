@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Target,
   AlertTriangle,
   Zap,
   Brain,
-  TrendingDown,
   ChevronDown,
   ChevronUp,
   X,
@@ -18,461 +17,475 @@ import {
   Shield,
   Lightbulb,
   Database,
+  Plus,
+  Clock,
+  Loader2,
+  WifiOff,
+  Quote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useCompetitors, useCompetitorChanges } from "@/hooks/useCompetitors";
+import {
+  useCompetitors,
+  useCompetitorChanges,
+  useAddCompetitor,
+  parseEvidence,
+  type CompetitorSummary,
+  type CompetitorInsight,
+} from "@/hooks/useCompetitors";
 import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ThreatLevel = "high" | "medium" | "low";
-type CompetitorStatus = "active" | "stale";
+type FilterTab = "all" | "recent-updates" | "pricing-changes";
 
-interface Pricing {
-  free: string;
-  pro: string;
-  business: string;
-  enterprise: string;
-}
-
-interface Competitor {
-  id: string;
-  name: string;
-  domain: string;
-  category: string;
-  lastUpdate: string;
-  status: CompetitorStatus;
-  threat: ThreatLevel;
-  pricing: Pricing;
-  recentChanges: string[];
-  positioning: string;
-  weaknesses: string[];
-  userComplaints: string[];
-  features: string[];
-  score: number;
-}
-
-type FilterTab = "all" | "high-threat" | "recent-updates" | "pricing-changes";
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const COMPETITORS: Competitor[] = [
-  {
-    id: "notion",
-    name: "Notion",
-    domain: "notion.so",
-    category: "Workspace & PM",
-    lastUpdate: "2h ago",
-    status: "active",
-    threat: "high",
-    pricing: { free: "$0", pro: "$12/mo", business: "$18/mo", enterprise: "Custom" },
-    recentChanges: ["Raised Business plan by 15%", "Launched Notion AI v2", "Added Q&A feature"],
-    positioning: "All-in-one workspace for notes, docs, and wikis",
-    weaknesses: ["Complex onboarding", "Performance on large docs", "No realtime collaboration"],
-    userComplaints: ["Too slow for large databases", "Pricing increase frustrating", "AI feels bolted on"],
-    features: ["Docs", "Database", "AI", "Templates", "API", "Integrations"],
-    score: 78,
-  },
-  {
-    id: "linear",
-    name: "Linear",
-    domain: "linear.app",
-    category: "Issue Tracking",
-    lastUpdate: "5h ago",
-    status: "active",
-    threat: "medium",
-    pricing: { free: "$0", pro: "$8/mo", business: "$14/mo", enterprise: "Custom" },
-    recentChanges: ["Shipped timeline view", "Added AI issue generation", "New keyboard shortcuts"],
-    positioning: "The issue tracking tool built for modern software teams",
-    weaknesses: ["No PM workflow", "Limited AI features", "No market intelligence"],
-    userComplaints: ["Missing roadmap features", "Hard to link strategy to execution", "No customer insights"],
-    features: ["Issues", "Cycles", "Projects", "Roadmaps", "AI", "Integrations"],
-    score: 65,
-  },
-  {
-    id: "productboard",
-    name: "Productboard",
-    domain: "productboard.com",
-    category: "Product Management",
-    lastUpdate: "1d ago",
-    status: "active",
-    threat: "high",
-    pricing: { free: "Trial", pro: "$25/mo", business: "$75/mo", enterprise: "Custom" },
-    recentChanges: ["Added AI feature prioritization", "New insights module", "Jira sync improved"],
-    positioning: "Product management platform that helps teams build the right products",
-    weaknesses: ["Expensive at scale", "Slow UI", "Complex setup"],
-    userComplaints: ["Too expensive for early-stage", "Not intuitive", "AI features are shallow"],
-    features: ["Insights", "Prioritization", "Roadmaps", "Portal", "Integrations", "AI"],
-    score: 71,
-  },
-  {
-    id: "figma",
-    name: "Figma",
-    domain: "figma.com",
-    category: "Design & Collaboration",
-    lastUpdate: "3h ago",
-    status: "active",
-    threat: "low",
-    pricing: { free: "$0", pro: "$12/mo", business: "$45/mo", enterprise: "Custom" },
-    recentChanges: ["Launched Figma AI", "New variables system", "Dev Mode GA"],
-    positioning: "The collaborative design platform powering the future",
-    weaknesses: ["Not for PM workflows", "Performance in complex files", "Limited prototyping"],
-    userComplaints: ["Offline mode needed", "Heavy on battery", "Font rendering issues"],
-    features: ["Design", "Prototyping", "Dev Mode", "AI", "Plugins", "Comments"],
-    score: 45,
-  },
-  {
-    id: "jira",
-    name: "Jira",
-    domain: "atlassian.com",
-    category: "Project Management",
-    lastUpdate: "2d ago",
-    status: "stale",
-    threat: "medium",
-    pricing: { free: "$0", pro: "$7.75/mo", business: "$15.25/mo", enterprise: "Custom" },
-    recentChanges: ["New AI summary feature", "Performance improvements", "Updated roadmap view"],
-    positioning: "Plan, track, and release great software",
-    weaknesses: ["Complex configuration", "Slow performance", "Overwhelming UI"],
-    userComplaints: ["Way too complex", "Slowest tool in stack", "Too many clicks", "Dated UI"],
-    features: ["Issues", "Agile", "Roadmaps", "Reports", "Automation", "Integrations"],
-    score: 52,
-  },
-];
-
-const RECENT_ALERTS = [
-  {
-    id: "a1",
-    icon: AlertTriangle,
-    description: "Notion: Business plan price increase detected",
-    time: "2h ago",
-    competitor: "Notion",
-    type: "pricing",
-  },
-  {
-    id: "a2",
-    icon: Zap,
-    description: "Linear: New feature shipped (Timeline)",
-    time: "5h ago",
-    competitor: "Linear",
-    type: "feature",
-  },
-  {
-    id: "a3",
-    icon: Brain,
-    description: "Productboard: Launched AI prioritization",
-    time: "1d ago",
-    competitor: "Productboard",
-    type: "feature",
-  },
-  {
-    id: "a4",
-    icon: DollarSign,
-    description: "Figma: Dev Mode moved to paid tier",
-    time: "1d ago",
-    competitor: "Figma",
-    type: "pricing",
-  },
-  {
-    id: "a5",
-    icon: Zap,
-    description: "Jira: AI summary feature now in beta",
-    time: "2d ago",
-    competitor: "Jira",
-    type: "feature",
-  },
-];
-
-// ─── Comparison Matrix Data ───────────────────────────────────────────────────
+// ─── Static Demo Data (shown only when no real data exists, clearly labelled) ──
 
 type MatrixValue = "yes" | "partial" | "no";
-
 interface MatrixRow {
-  feature: string;
-  speckula: MatrixValue;
-  notion: MatrixValue;
-  linear: MatrixValue;
+  feature:      string;
+  speckula:     MatrixValue;
+  notion:       MatrixValue;
+  linear:       MatrixValue;
   productboard: MatrixValue;
-  figma: MatrixValue;
-  jira: MatrixValue;
+  figma:        MatrixValue;
+  jira:         MatrixValue;
 }
 
-const MATRIX_ROWS: MatrixRow[] = [
-  { feature: "AI Intelligence",        speckula: "yes", notion: "partial", linear: "partial", productboard: "partial", figma: "partial", jira: "partial" },
-  { feature: "Market Monitoring",      speckula: "yes", notion: "no",      linear: "no",      productboard: "partial", figma: "no",      jira: "no"      },
-  { feature: "Competitor Tracking",    speckula: "yes", notion: "no",      linear: "no",      productboard: "no",      figma: "no",      jira: "no"      },
-  { feature: "PM Workflow",            speckula: "yes", notion: "partial", linear: "no",      productboard: "yes",     figma: "no",      jira: "yes"     },
-  { feature: "Browser Extension",      speckula: "yes", notion: "no",      linear: "no",      productboard: "no",      figma: "no",      jira: "no"      },
-  { feature: "Startup Memory",         speckula: "yes", notion: "no",      linear: "no",      productboard: "no",      figma: "no",      jira: "no"      },
+const DEMO_MATRIX_ROWS: MatrixRow[] = [
+  { feature: "AI Intelligence",     speckula: "yes", notion: "partial", linear: "partial", productboard: "partial", figma: "partial", jira: "partial" },
+  { feature: "Market Monitoring",   speckula: "yes", notion: "no",      linear: "no",      productboard: "partial", figma: "no",      jira: "no"      },
+  { feature: "Competitor Tracking", speckula: "yes", notion: "no",      linear: "no",      productboard: "no",      figma: "no",      jira: "no"      },
+  { feature: "PM Workflow",         speckula: "yes", notion: "partial", linear: "no",      productboard: "yes",     figma: "no",      jira: "yes"     },
+  { feature: "Browser Extension",   speckula: "yes", notion: "no",      linear: "no",      productboard: "no",      figma: "no",      jira: "no"      },
+  { feature: "Startup Memory",      speckula: "yes", notion: "no",      linear: "no",      productboard: "no",      figma: "no",      jira: "no"      },
 ];
+
+const DEMO_COLUMNS = ["Notion", "Linear", "Productboard", "Figma", "Jira"];
 
 // ─── Helper to format relative time ──────────────────────────────────────────
 
-function formatTimeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
+function formatTimeAgo(iso: string | null | undefined): string {
+  if (!iso) return "–";
+  const diffMs  = Date.now() - new Date(iso).getTime();
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return "just now";
+  if (diffSec < 60)  return "just now";
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
+  if (diffMin < 60)  return `${diffMin}m ago`;
+  const diffH   = Math.floor(diffMin / 60);
+  if (diffH < 24)    return `${diffH}h ago`;
   return `${Math.floor(diffH / 24)}d ago`;
 }
 
 // ─── Helper Components ────────────────────────────────────────────────────────
 
-function ThreatBadge({ level }: { level: ThreatLevel }) {
-  const styles: Record<ThreatLevel, string> = {
-    high: "bg-red-500/10 text-red-400 border border-red-500/20",
-    medium: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-    low: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-  };
+function DataSourceBadge({ isLive, lastUpdated }: { isLive: boolean; lastUpdated?: string }) {
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${styles[level]}`}>
-      <Shield className="w-3 h-3" />
-      {level.charAt(0).toUpperCase() + level.slice(1)} Threat
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+      isLive
+        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+        : "bg-muted/30 border-border text-muted-foreground/60"
+    }`}>
+      <Database className="h-2.5 w-2.5" />
+      {isLive ? (lastUpdated ? `Live · ${lastUpdated}` : "Live data") : "No live data"}
+    </span>
+  );
+}
+
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const pct = Math.round(confidence * 100);
+  const color =
+    pct >= 80 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+    pct >= 60 ? "bg-amber-500/10  text-amber-400  border-amber-500/20"  :
+                "bg-muted/20       text-muted-foreground/60 border-border";
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${color}`}>
+      {pct}% conf.
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: CompetitorSummary["status"] }) {
+  if (status === "queued") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-muted/30 border border-border text-muted-foreground/70">
+        <Clock className="w-2.5 h-2.5" /> Queued
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-red-500/10 border border-red-500/20 text-red-400">
+        <XCircle className="w-2.5 h-2.5" /> Failed
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+      <CheckCircle2 className="w-2.5 h-2.5" /> Monitored
     </span>
   );
 }
 
 function MatrixCell({ value, highlight }: { value: MatrixValue; highlight?: boolean }) {
-  if (value === "yes") return <CheckCircle2 className={`w-4 h-4 mx-auto ${highlight ? "text-emerald-400" : "text-emerald-500/70"}`} />;
+  if (value === "yes")     return <CheckCircle2 className={`w-4 h-4 mx-auto ${highlight ? "text-emerald-400" : "text-emerald-500/70"}`} />;
   if (value === "partial") return <Circle className="w-4 h-4 mx-auto text-amber-500/60" />;
   return <XCircle className="w-4 h-4 mx-auto text-muted-foreground/30" />;
 }
 
-function ScoreBar({ score, threat }: { score: number; threat: ThreatLevel }) {
-  const color: Record<ThreatLevel, string> = {
-    high: "bg-red-500",
-    medium: "bg-amber-500",
-    low: "bg-emerald-500",
-  };
+// ─── Skeleton Loader ──────────────────────────────────────────────────────────
+
+function CardSkeleton() {
   return (
-    <div className="flex items-center gap-2 w-full">
-      <div className="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
-        <div
-          className={`h-full rounded-full ${color[threat]} transition-all`}
-          style={{ width: `${score}%` }}
-        />
+    <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3 animate-pulse">
+      <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-2">
+          <div className="h-4 w-32 rounded bg-muted/40" />
+          <div className="h-3 w-20 rounded bg-muted/30" />
+        </div>
+        <div className="h-5 w-20 rounded bg-muted/30" />
       </div>
-      <span className="text-[11px] text-muted-foreground tabular-nums w-7 text-right">{score}</span>
+      <div className="h-3 w-full rounded bg-muted/20" />
+      <div className="h-3 w-3/4 rounded bg-muted/20" />
+      <div className="flex gap-1.5 mt-1">
+        {[1, 2, 3].map((i) => <div key={i} className="h-5 w-16 rounded-md bg-muted/30" />)}
+      </div>
     </div>
   );
 }
 
-function DataSourceBadge({ isLive, lastUpdated }: { isLive: boolean; lastUpdated?: string }) {
+// ─── Empty State ──────────────────────────────────────────────────────────────
+
+function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
-        isLive
-          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-          : "bg-muted/30 border-border text-muted-foreground/60"
-      }`}
-    >
-      <Database className="h-2.5 w-2.5" />
-      {isLive ? (lastUpdated ? `Live · ${lastUpdated}` : "Live data") : "Demo data"}
-    </span>
+    <div className="flex flex-col items-center justify-center py-16 px-6 text-center bg-card border border-dashed border-border rounded-xl">
+      <div className="w-12 h-12 rounded-xl bg-muted/20 border border-border flex items-center justify-center mb-4">
+        <Target className="w-5 h-5 text-muted-foreground/50" />
+      </div>
+      <p className="text-sm font-medium text-foreground mb-1">No competitors tracked yet</p>
+      <p className="text-[12px] text-muted-foreground mb-4 max-w-xs">
+        Add a competitor URL to start monitoring. Insights appear automatically when you visit their pages with the browser extension.
+      </p>
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={onAdd}>
+        <Plus className="w-3.5 h-3.5" />
+        Add Competitor
+      </Button>
+    </div>
   );
 }
 
-// ─── Competitor Card ──────────────────────────────────────────────────────────
+// ─── Add Competitor Modal ─────────────────────────────────────────────────────
 
-function CompetitorCard({
-  competitor,
-  expanded,
-  onToggleExpand,
+function AddCompetitorModal({
+  onClose,
+  onSuccess,
 }: {
-  competitor: Competitor;
-  expanded: boolean;
-  onToggleExpand: () => void;
+  onClose:   () => void;
+  onSuccess: (alreadyTracking: boolean) => void;
 }) {
-  const categoryColors: Record<string, string> = {
-    "Workspace & PM": "bg-violet-500/10 text-violet-400 border-violet-500/20",
-    "Issue Tracking": "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    "Product Management": "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-    "Design & Collaboration": "bg-pink-500/10 text-pink-400 border-pink-500/20",
-    "Project Management": "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  const [url, setUrl]       = useState("");
+  const { add, loading, error, clearError } = useAddCompetitor();
+  const inputRef            = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // Close on Escape.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const handleSubmit = async () => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    const result = await add(trimmed);
+    if (result.ok) onSuccess(result.alreadyTracking ?? false);
   };
 
-  const catStyle = categoryColors[competitor.category] ?? "bg-muted/20 text-muted-foreground border-border";
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleSubmit();
+  };
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5 hover:border-border/80 transition-colors flex flex-col gap-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Add Competitor</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Enter the competitor&apos;s website URL to start monitoring.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <input
+            ref={inputRef}
+            type="url"
+            value={url}
+            onChange={(e) => { setUrl(e.target.value); if (error) clearError(); }}
+            onKeyDown={handleKeyDown}
+            placeholder="https://competitor.com"
+            className="w-full px-3 py-2 rounded-lg bg-muted/20 border border-border text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
+          />
+
+          {error && (
+            <p className="text-[11px] text-red-400 px-1">{error}</p>
+          )}
+
+          <p className="text-[10px] text-muted-foreground/50 px-1">
+            Insights are captured automatically when you visit this page with the Speckula browser extension.
+          </p>
+
+          <div className="flex gap-2 justify-end pt-1">
+            <Button variant="ghost" size="sm" className="text-[12px]" onClick={onClose} disabled={loading}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="text-[12px] gap-1.5"
+              onClick={handleSubmit}
+              disabled={loading || !url.trim()}
+            >
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Target className="w-3.5 h-3.5" />}
+              {loading ? "Adding…" : "Add Competitor"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Real Competitor Card ─────────────────────────────────────────────────────
+
+function RealCompetitorCard({ competitor }: { competitor: CompetitorSummary }) {
+  const [expanded, setExpanded] = useState(false);
+  const insight   = competitor.latestInsight;
+  const evidence  = parseEvidence(insight?.evidence);
+  const isQueued  = competitor.status === "queued";
+
+  return (
+    <div className={`bg-card border rounded-xl p-5 flex flex-col gap-3 transition-colors ${
+      isQueued
+        ? "border-muted-foreground/20 opacity-80"
+        : "border-emerald-500/20 hover:border-emerald-500/40"
+    }`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-semibold text-foreground tracking-tight">{competitor.name}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${catStyle}`}>
-              {competitor.category}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-foreground tracking-tight">
+              {competitor.competitorName ?? competitor.domain}
             </span>
+            <StatusBadge status={competitor.status} />
           </div>
           <span className="text-[11px] text-muted-foreground">{competitor.domain}</span>
         </div>
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <ThreatBadge level={competitor.threat} />
-          <span className="text-[10px] text-muted-foreground/60">{competitor.lastUpdate}</span>
-        </div>
-      </div>
-
-      {/* Pricing */}
-      <div>
-        <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">Pricing</p>
-        <div className="flex gap-2 flex-wrap">
-          {(["free", "pro", "business", "enterprise"] as const).map((tier) => (
-            <span
-              key={tier}
-              className="inline-flex flex-col items-center px-2.5 py-1.5 bg-muted/20 border border-border rounded-lg"
-            >
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 leading-none mb-0.5">
-                {tier}
-              </span>
-              <span className="text-[11px] font-medium text-foreground">{competitor.pricing[tier]}</span>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent Changes */}
-      <div>
-        <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">Recent Changes</p>
-        <ul className="flex flex-col gap-1">
-          {competitor.recentChanges.map((change, i) => (
-            <li key={i} className="flex items-start gap-2">
-              <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/40 shrink-0" />
-              <span className="text-[12px] text-muted-foreground">{change}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Positioning */}
-      <div>
-        <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-1.5">Positioning</p>
-        <p className="text-[12px] italic text-muted-foreground/80 border-l-2 border-border pl-3">
-          &ldquo;{competitor.positioning}&rdquo;
-        </p>
-      </div>
-
-      {/* Weaknesses / Opportunities */}
-      <div>
-        <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">
-          Weaknesses{" "}
-          <span className="normal-case text-emerald-500/60 ml-1">= Speckula Opportunities</span>
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {competitor.weaknesses.map((w, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/5 border border-emerald-500/15 text-emerald-400 text-[11px]"
-            >
-              <TrendingDown className="w-3 h-3" />
-              {w}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* User Complaints */}
-      <div>
-        <button
-          className="w-full flex items-center justify-between group"
-          onClick={onToggleExpand}
-        >
-          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60">
-            User Complaints
-          </p>
-          {expanded ? (
-            <ChevronUp className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-          ) : (
-            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-          )}
-        </button>
-        <div className="mt-2 flex flex-col gap-1">
-          {competitor.userComplaints.slice(0, expanded ? undefined : 2).map((c, i) => (
-            <div
-              key={i}
-              className="flex items-start gap-2 text-[11px] text-muted-foreground/70"
-            >
-              <X className="w-3 h-3 mt-0.5 text-red-400/60 shrink-0" />
-              {c}
-            </div>
-          ))}
-          {!expanded && competitor.userComplaints.length > 2 && (
-            <button
-              className="text-[11px] text-muted-foreground/40 hover:text-muted-foreground text-left mt-0.5 transition-colors"
-              onClick={onToggleExpand}
-            >
-              +{competitor.userComplaints.length - 2} more
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Feature Tags */}
-      <div>
-        <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">Features</p>
-        <div className="flex flex-wrap gap-1.5">
-          {competitor.features.map((f) => (
-            <span
-              key={f}
-              className="px-2 py-0.5 rounded-md bg-muted/30 border border-border text-[11px] text-muted-foreground"
-            >
-              {f}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Bottom: Score + CTA */}
-      <div className="flex items-center gap-3 pt-1 border-t border-border/50">
-        <div className="flex-1">
-          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-1.5">Threat Score</p>
-          <ScoreBar score={competitor.score} threat={competitor.threat} />
-        </div>
-        <Button variant="outline" size="sm" className="shrink-0 text-[11px] h-7 px-3">
-          View Full Analysis
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Real competitor card (simplified for live data) ─────────────────────────
-
-function RealCompetitorCard({ competitor }: { competitor: { domain: string; competitorName: string; insightTypes: string[]; totalInsights: number; lastCapturedAt: string } }) {
-  return (
-    <div className="bg-card border border-emerald-500/20 rounded-xl p-5 flex flex-col gap-3 hover:border-emerald-500/40 transition-colors">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-base font-semibold text-foreground tracking-tight">{competitor.competitorName}</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded border bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-medium">
-              Live
-            </span>
-          </div>
-          <span className="text-[11px] text-muted-foreground">{competitor.domain}</span>
-        </div>
-        <span className="text-[10px] text-muted-foreground/60 shrink-0">
+        <span className="text-[10px] text-muted-foreground/60 shrink-0 whitespace-nowrap">
           {formatTimeAgo(competitor.lastCapturedAt)}
         </span>
       </div>
 
-      <div>
-        <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">Tracked Insight Types</p>
-        <div className="flex flex-wrap gap-1.5">
-          {competitor.insightTypes.map((t) => (
-            <span key={t} className="px-2 py-0.5 rounded-md bg-muted/30 border border-border text-[11px] text-muted-foreground capitalize">
-              {t.replace(/_/g, " ")}
+      {/* Queued state */}
+      {isQueued && (
+        <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-muted/20 border border-border">
+          <Clock className="w-3.5 h-3.5 text-muted-foreground/50 mt-0.5 shrink-0" />
+          <p className="text-[11px] text-muted-foreground/70">
+            Visit this competitor&apos;s site with the Speckula extension to capture intelligence.
+          </p>
+        </div>
+      )}
+
+      {/* Insight types */}
+      {competitor.insightTypes.length > 0 && (
+        <div>
+          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-1.5">Tracked Intelligence</p>
+          <div className="flex flex-wrap gap-1.5">
+            {competitor.insightTypes.map((t) => (
+              <span key={t} className="px-2 py-0.5 rounded-md bg-muted/30 border border-border text-[11px] text-muted-foreground capitalize">
+                {t.replace(/_/g, " ")}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Latest insight with confidence + evidence */}
+      {insight && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60">Latest Insight</p>
+            <ConfidenceBadge confidence={insight.confidence} />
+          </div>
+          <div className="bg-muted/10 border border-border rounded-lg p-3 flex flex-col gap-2">
+            <p className="text-[12px] font-medium text-foreground leading-snug">{insight.title}</p>
+
+            {/* Expandable: full content */}
+            {expanded && (
+              <p className="text-[11px] text-muted-foreground leading-relaxed">{insight.content}</p>
+            )}
+
+            {/* Evidence quotes */}
+            {evidence.length > 0 && expanded && (
+              <div className="flex flex-col gap-1.5 mt-1">
+                {evidence.slice(0, 2).map((quote, i) => (
+                  <div key={i} className="flex items-start gap-1.5">
+                    <Quote className="w-3 h-3 text-muted-foreground/30 mt-0.5 shrink-0" />
+                    <span className="text-[11px] text-muted-foreground/70 italic">{quote}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground flex items-center gap-1 transition-colors self-start"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            {expanded ? "Less detail" : `More${evidence.length > 0 ? ` · ${evidence.length} quote${evidence.length !== 1 ? "s" : ""}` : ""}`}
+          </button>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center justify-between pt-1 border-t border-border/50 text-[11px] text-muted-foreground">
+        <span>{competitor.totalInsights} insight{competitor.totalInsights !== 1 ? "s" : ""} captured</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sample Intelligence Matrix ───────────────────────────────────────────────
+
+function SampleMatrix() {
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60">Feature Matrix</p>
+            <span className="text-[9px] px-1.5 py-0.5 rounded border bg-amber-500/10 border-amber-500/20 text-amber-400 font-medium uppercase tracking-wide">
+              Sample Intelligence
             </span>
-          ))}
+          </div>
+          <h2 className="text-sm font-semibold text-foreground">Competitive Comparison</h2>
         </div>
       </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left px-5 py-3 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide w-44">
+                Capability
+              </th>
+              <th className="text-center px-4 py-3 text-[11px] font-semibold text-emerald-400 uppercase tracking-wide bg-emerald-500/5 border-x border-emerald-500/10 w-28">
+                Speckula
+              </th>
+              {DEMO_COLUMNS.map((name) => (
+                <th key={name} className="text-center px-4 py-3 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide w-28">
+                  {name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {DEMO_MATRIX_ROWS.map((row, i) => (
+              <tr key={row.feature} className={`border-b border-border/50 ${i % 2 === 0 ? "bg-muted/5" : ""}`}>
+                <td className="px-5 py-3 text-[12px] font-medium text-foreground/80">{row.feature}</td>
+                <td className="px-4 py-3 bg-emerald-500/5 border-x border-emerald-500/10">
+                  <MatrixCell value={row.speckula} highlight />
+                </td>
+                <td className="px-4 py-3"><MatrixCell value={row.notion} /></td>
+                <td className="px-4 py-3"><MatrixCell value={row.linear} /></td>
+                <td className="px-4 py-3"><MatrixCell value={row.productboard} /></td>
+                <td className="px-4 py-3"><MatrixCell value={row.figma} /></td>
+                <td className="px-4 py-3"><MatrixCell value={row.jira} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-5 py-3 border-t border-border/50 flex items-center gap-5">
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/70" /> Full support
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+          <Circle className="w-3.5 h-3.5 text-amber-500/60" /> Partial
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+          <XCircle className="w-3.5 h-3.5 text-muted-foreground/30" /> Not available
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      <div className="flex items-center justify-between pt-1 border-t border-border/50 text-[11px] text-muted-foreground">
-        <span>{competitor.totalInsights} insights captured</span>
-        <Button variant="outline" size="sm" className="text-[11px] h-7 px-3">
-          View Analysis
-        </Button>
+// ─── Alerts Feed ──────────────────────────────────────────────────────────────
+
+function AlertsFeed({ changes }: { changes: CompetitorInsight[] }) {
+  if (changes.length === 0) {
+    return (
+      <div className="bg-card border border-border rounded-xl">
+        <div className="px-5 py-4 border-b border-border">
+          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-0.5">Live Feed</p>
+          <h2 className="text-sm font-semibold text-foreground">Recent Competitor Alerts</h2>
+        </div>
+        <div className="px-5 py-10 flex flex-col items-center gap-2 text-center">
+          <Bell className="w-6 h-6 text-muted-foreground/20" />
+          <p className="text-[12px] text-muted-foreground/60">No recent alerts. Visit competitor pages with the extension to capture insights.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-xl">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div>
+          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-0.5">Live Feed</p>
+          <h2 className="text-sm font-semibold text-foreground">Recent Competitor Alerts</h2>
+        </div>
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          LIVE
+        </span>
+      </div>
+      <div className="divide-y divide-border/50">
+        {changes.slice(0, 7).map((ch) => {
+          const isPricing = ch.insightType?.includes("pric") || ch.insightType === "monetization";
+          const Icon      = isPricing ? DollarSign : ch.insightType === "positioning" ? Brain : Zap;
+          const iconColor = isPricing
+            ? "text-amber-400 bg-amber-500/10"
+            : "text-blue-400 bg-blue-500/10";
+          return (
+            <div key={ch.id} className="flex items-center gap-4 px-5 py-3.5">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${iconColor}`}>
+                <Icon className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] text-foreground/90 truncate">
+                  {ch.competitorName ? `${ch.competitorName}: ` : ""}{ch.title}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <ConfidenceBadge confidence={ch.confidence} />
+                <span className="text-[11px] text-muted-foreground/50 w-10 text-right">
+                  {formatTimeAgo(ch.capturedAt)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -481,96 +494,104 @@ function RealCompetitorCard({ competitor }: { competitor: { domain: string; comp
 // ─── Main View ────────────────────────────────────────────────────────────────
 
 export function CompetitorsView() {
-  const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [activeFilter,    setActiveFilter]    = useState<FilterTab>("all");
+  const [showModal,       setShowModal]       = useState(false);
   const [newInsightFlash, setNewInsightFlash] = useState(false);
+  const [toast,           setToast]           = useState<string | null>(null);
 
-  // Real data
-  const { data: competitorsData, loading } = useCompetitors();
-  const { data: changesData } = useCompetitorChanges();
-  const { lastEvent } = useSpecklaBus();
+  const { data: competitorsData, loading, error } = useCompetitors();
+  const { data: changesData }                     = useCompetitorChanges();
+  const { connected, lastEvent }                  = useSpecklaBus();
 
-  // Flash when a new insight arrives via WS
+  // Flash on competitor-scoped events only.
   useEffect(() => {
     if (!lastEvent) return;
-    if (lastEvent.type === "insight.created") {
+    if (
+      lastEvent.type === "competitor.insight.created" ||
+      lastEvent.type === "competitor.updated"
+    ) {
       setNewInsightFlash(true);
       const t = setTimeout(() => setNewInsightFlash(false), 3000);
       return () => clearTimeout(t);
     }
   }, [lastEvent]);
 
-  const hasRealData = competitorsData?.competitors && competitorsData.competitors.length > 0;
-  const hasRealChanges = changesData?.changes && changesData.changes.length > 0;
+  // Auto-dismiss toast.
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
-  // Most recent change time for "Last updated" badge
-  const lastUpdatedTime = hasRealChanges
-    ? formatTimeAgo(changesData!.changes[0].capturedAt)
-    : undefined;
+  const handleAddSuccess = (alreadyTracking: boolean) => {
+    setShowModal(false);
+    setToast(alreadyTracking ? "Already tracking this competitor." : "Competitor added. Visit their site with the extension to capture intelligence.");
+  };
 
-  const filterTabs: { id: FilterTab; label: string }[] = [
-    { id: "all", label: "All" },
-    { id: "high-threat", label: "High Threat" },
-    { id: "recent-updates", label: "Recent Updates" },
-    { id: "pricing-changes", label: "Pricing Changes" },
-  ];
+  const competitors = competitorsData?.competitors ?? [];
+  const changes     = changesData?.changes ?? [];
+  const hasData     = competitors.length > 0;
 
-  const filteredCompetitors = COMPETITORS.filter((c) => {
+  const lastUpdatedTime = changes.length > 0 ? formatTimeAgo(changes[0].capturedAt) : undefined;
+
+  // Filter for the grid (only non-queued competitors can be filtered meaningfully).
+  const filtered = competitors.filter((c) => {
     if (activeFilter === "all") return true;
-    if (activeFilter === "high-threat") return c.threat === "high";
-    if (activeFilter === "recent-updates") return c.lastUpdate.includes("h");
-    if (activeFilter === "pricing-changes")
-      return c.recentChanges.some(
-        (ch) =>
-          ch.toLowerCase().includes("pric") ||
-          ch.toLowerCase().includes("plan") ||
-          ch.toLowerCase().includes("cost")
-      );
+    if (activeFilter === "recent-updates") {
+      if (!c.lastCapturedAt) return false;
+      const diffH = (Date.now() - new Date(c.lastCapturedAt).getTime()) / 3_600_000;
+      return diffH <= 24;
+    }
+    if (activeFilter === "pricing-changes") {
+      return c.insightTypes.some((t) => t === "pricing" || t === "monetization");
+    }
     return true;
   });
 
-  // Build the alerts feed: prepend real changes first, then mock
-  const realAlerts = hasRealChanges
-    ? changesData!.changes.slice(0, 5).map((ch) => ({
-        id: ch.id,
-        icon: ch.insightType?.includes("pric") ? DollarSign : Zap,
-        description: `${ch.competitorName}: ${ch.title}`,
-        time: formatTimeAgo(ch.capturedAt),
-        competitor: ch.competitorName,
-        type: ch.insightType?.includes("pric") ? "pricing" : "feature",
-      }))
-    : [];
+  // Summary counts from real data only.
+  const totalTracked   = competitors.length;
+  const totalInsights  = changes.length;
+  const queuedCount    = competitors.filter((c) => c.status === "queued").length;
 
-  const displayAlerts = [
-    ...realAlerts,
-    ...RECENT_ALERTS.filter((a) => !realAlerts.find((r) => r.competitor === a.competitor)),
-  ].slice(0, 7);
-
-  // Summary metrics
-  const trackedCount = hasRealData
-    ? competitorsData!.competitors.length
-    : COMPETITORS.length;
+  const filterTabs: { id: FilterTab; label: string }[] = [
+    { id: "all",              label: "All" },
+    { id: "recent-updates",   label: "Recent Updates" },
+    { id: "pricing-changes",  label: "Pricing Changes" },
+  ];
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-[1400px] mx-auto">
       {/* ── Page Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-foreground tracking-tight">
-            Competitor Intelligence
-          </h1>
+          <h1 className="text-xl font-semibold text-foreground tracking-tight">Competitor Intelligence</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Monitoring {trackedCount} competitors across 4+ categories
+            {hasData
+              ? `Monitoring ${totalTracked} competitor${totalTracked !== 1 ? "s" : ""}${queuedCount > 0 ? ` · ${queuedCount} queued` : ""}`
+              : "Add competitors to start monitoring"}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <DataSourceBadge isLive={hasRealData ?? false} lastUpdated={lastUpdatedTime} />
-          <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
-            <Target className="w-3.5 h-3.5" />
+          {!connected && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted/30 border border-border text-muted-foreground/60">
+              <WifiOff className="h-2.5 w-2.5" /> Offline
+            </span>
+          )}
+          <DataSourceBadge isLive={hasData && connected} lastUpdated={lastUpdatedTime} />
+          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => setShowModal(true)}>
+            <Plus className="w-3.5 h-3.5" />
             Add Competitor
           </Button>
         </div>
       </div>
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-card border border-border text-[12px] text-foreground/80 shadow-md">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          {toast}
+        </div>
+      )}
 
       {/* ── New insight flash banner ── */}
       {newInsightFlash && (
@@ -580,67 +601,69 @@ export function CompetitorsView() {
         </div>
       )}
 
-      {/* ── Summary Metrics ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">
-            Competitors Tracked
-          </p>
-          <p className="text-2xl font-bold text-foreground tabular-nums">{trackedCount}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">Across 4+ categories</p>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">
-            Alerts This Week
-          </p>
-          <div className="flex items-end gap-1">
-            <p className="text-2xl font-bold text-foreground tabular-nums">
-              {hasRealChanges ? changesData!.total : 12}
-            </p>
-            <Bell className="w-4 h-4 text-amber-400 mb-1" />
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            {hasRealChanges ? "From live monitoring" : "3 pricing · 9 feature"}
-          </p>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">
-            High Threat
-          </p>
-          <div className="flex items-end gap-1">
-            <p className="text-2xl font-bold text-red-400 tabular-nums">2</p>
-            <AlertTriangle className="w-4 h-4 text-red-400/70 mb-1" />
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">Notion · Productboard</p>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">
-            Opportunities
-          </p>
-          <div className="flex items-end gap-1">
-            <p className="text-2xl font-bold text-emerald-400 tabular-nums">7</p>
-            <Lightbulb className="w-4 h-4 text-emerald-400/70 mb-1" />
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">From competitor weaknesses</p>
-        </div>
-      </div>
-
-      {/* ── Live competitors (real data) ── */}
-      {hasRealData && (
-        <div>
-          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-3">
-            Live-Monitored Competitors
-          </p>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {competitorsData!.competitors.map((c) => (
-              <RealCompetitorCard key={c.domain} competitor={c} />
-            ))}
-          </div>
+      {/* ── Error state ── */}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-[12px]">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          Could not load competitor data: {error}
         </div>
       )}
 
-      {/* ── Filter Tabs ── */}
-      {!loading && (
+      {/* ── Summary Metrics ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">Competitors Tracked</p>
+          <p className="text-2xl font-bold text-foreground tabular-nums">{totalTracked || "–"}</p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {totalTracked > 0 ? `${competitors.filter((c) => c.status === "completed").length} active` : "None yet"}
+          </p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">Insights Captured</p>
+          <div className="flex items-end gap-1">
+            <p className="text-2xl font-bold text-foreground tabular-nums">{totalInsights || "–"}</p>
+            <Bell className="w-4 h-4 text-amber-400 mb-1" />
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {totalInsights > 0 ? "Last 30 days" : "Visit competitor sites"}
+          </p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">Pricing Intelligence</p>
+          <div className="flex items-end gap-1">
+            <p className="text-2xl font-bold text-amber-400 tabular-nums">
+              {changes.filter((c) => c.insightType === "pricing" || c.insightType === "monetization").length || "–"}
+            </p>
+            <DollarSign className="w-4 h-4 text-amber-400/70 mb-1" />
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">Pricing observations</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-2">Opportunities</p>
+          <div className="flex items-end gap-1">
+            <p className="text-2xl font-bold text-emerald-400 tabular-nums">
+              {changes.filter((c) => c.insightType === "ux" || c.insightType === "positioning").length || "–"}
+            </p>
+            <Lightbulb className="w-4 h-4 text-emerald-400/70 mb-1" />
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">UX & positioning gaps</p>
+        </div>
+      </div>
+
+      {/* ── Loading skeletons ── */}
+      {loading && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}
+        </div>
+      )}
+
+      {/* ── Empty state (no data, not loading) ── */}
+      {!loading && !error && !hasData && (
+        <EmptyState onAdd={() => setShowModal(true)} />
+      )}
+
+      {/* ── Competitor Grid ── */}
+      {!loading && hasData && (
         <>
           <div className="flex items-center gap-1 bg-muted/20 border border-border rounded-lg p-1 w-fit">
             {filterTabs.map((tab) => (
@@ -658,141 +681,33 @@ export function CompetitorsView() {
             ))}
           </div>
 
-          {/* ── Competitor Cards Grid (mock / reference data) ── */}
-          <div>
-            {hasRealData && (
-              <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-3">
-                Reference Competitors
-              </p>
-            )}
+          {filtered.length === 0 ? (
+            <div className="py-10 text-center text-[12px] text-muted-foreground/60 bg-card border border-dashed border-border rounded-xl">
+              No competitors match this filter.
+            </div>
+          ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {filteredCompetitors.map((competitor) => (
-                <CompetitorCard
-                  key={competitor.id}
-                  competitor={competitor}
-                  expanded={expandedId === competitor.id}
-                  onToggleExpand={() =>
-                    setExpandedId(expandedId === competitor.id ? null : competitor.id)
-                  }
-                />
+              {filtered.map((c) => (
+                <RealCompetitorCard key={c.domain} competitor={c} />
               ))}
             </div>
-          </div>
+          )}
         </>
       )}
 
-      {/* Loading skeletons */}
-      {loading && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-5 h-64 animate-pulse" />
-          ))}
-        </div>
+      {/* ── Alerts Feed (real data only) ── */}
+      {!loading && <AlertsFeed changes={changes} />}
+
+      {/* ── Sample Intelligence Matrix (always shown, clearly labelled) ── */}
+      <SampleMatrix />
+
+      {/* ── Add Competitor Modal ── */}
+      {showModal && (
+        <AddCompetitorModal
+          onClose={() => setShowModal(false)}
+          onSuccess={handleAddSuccess}
+        />
       )}
-
-      {/* ── Comparison Matrix ── */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-border">
-          <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-0.5">
-            Feature Matrix
-          </p>
-          <h2 className="text-sm font-semibold text-foreground">Competitive Comparison</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left px-5 py-3 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide w-44">
-                  Capability
-                </th>
-                <th className="text-center px-4 py-3 text-[11px] font-semibold text-emerald-400 uppercase tracking-wide bg-emerald-500/5 border-x border-emerald-500/10 w-28">
-                  Speckula
-                </th>
-                {COMPETITORS.map((c) => (
-                  <th
-                    key={c.id}
-                    className="text-center px-4 py-3 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide w-28"
-                  >
-                    {c.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {MATRIX_ROWS.map((row, i) => (
-                <tr
-                  key={row.feature}
-                  className={`border-b border-border/50 ${i % 2 === 0 ? "bg-muted/5" : ""}`}
-                >
-                  <td className="px-5 py-3 text-[12px] font-medium text-foreground/80">
-                    {row.feature}
-                  </td>
-                  <td className="px-4 py-3 bg-emerald-500/5 border-x border-emerald-500/10">
-                    <MatrixCell value={row.speckula} highlight />
-                  </td>
-                  <td className="px-4 py-3"><MatrixCell value={row.notion} /></td>
-                  <td className="px-4 py-3"><MatrixCell value={row.linear} /></td>
-                  <td className="px-4 py-3"><MatrixCell value={row.productboard} /></td>
-                  <td className="px-4 py-3"><MatrixCell value={row.figma} /></td>
-                  <td className="px-4 py-3"><MatrixCell value={row.jira} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-5 py-3 border-t border-border/50 flex items-center gap-5">
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/70" /> Full support
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-            <Circle className="w-3.5 h-3.5 text-amber-500/60" /> Partial
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-            <XCircle className="w-3.5 h-3.5 text-muted-foreground/30" /> Not available
-          </div>
-        </div>
-      </div>
-
-      {/* ── Recent Alerts Feed ── */}
-      <div className="bg-card border border-border rounded-xl">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <div>
-            <p className="uppercase tracking-wide text-[10px] text-muted-foreground/60 mb-0.5">
-              Live Feed
-            </p>
-            <h2 className="text-sm font-semibold text-foreground">Recent Competitor Alerts</h2>
-          </div>
-          {hasRealChanges && (
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              LIVE
-            </span>
-          )}
-        </div>
-        <div className="divide-y divide-border/50">
-          {displayAlerts.map((alert) => {
-            const Icon = alert.icon;
-            const iconColor =
-              alert.type === "pricing" ? "text-amber-400 bg-amber-500/10" : "text-blue-400 bg-blue-500/10";
-            return (
-              <div key={alert.id} className="flex items-center gap-4 px-5 py-3.5">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${iconColor}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] text-foreground/90 truncate">{alert.description}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="px-2 py-0.5 rounded-md bg-muted/30 border border-border text-[10px] text-muted-foreground">
-                    {alert.competitor}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground/50 w-10 text-right">{alert.time}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }

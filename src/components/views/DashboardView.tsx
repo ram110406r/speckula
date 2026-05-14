@@ -166,9 +166,10 @@ function competitorColor(domain: string): string {
 
 function mapCompetitor(c: CompetitorSummary, idx: number): Competitor {
   const staleMs = 2 * 24 * 60 * 60 * 1000;
-  const stale = Date.now() - new Date(c.lastCapturedAt).getTime() > staleMs;
-  const diff = Date.now() - new Date(c.lastCapturedAt).getTime();
-  const updatedAgo =
+  const capturedTs = c.lastCapturedAt ? new Date(c.lastCapturedAt).getTime() : 0;
+  const stale = capturedTs === 0 || Date.now() - capturedTs > staleMs;
+  const diff = capturedTs ? Date.now() - capturedTs : 0;
+  const updatedAgo = capturedTs === 0 ? "–" :
     diff < 3_600_000 ? `${Math.floor(diff / 60_000)}m ago` :
     diff < 86_400_000 ? `${Math.floor(diff / 3_600_000)}h ago` :
     `${Math.floor(diff / 86_400_000)}d ago`;
