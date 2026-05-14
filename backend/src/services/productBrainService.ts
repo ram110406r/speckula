@@ -85,6 +85,7 @@ export const productBrainService = {
   },
 
   // Store a competitor insight and save it to the Product Brain.
+  // Skips insert if an identical insight (same domain + type + title) exists within 24 h.
   async saveCompetitorInsight(
     userId: string,
     data: {
@@ -100,6 +101,22 @@ export const productBrainService = {
       workspaceId?: string;
     }
   ): Promise<string> {
+    // Deduplication — skip near-identical insights captured in the last 24 hours.
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const duplicate = await db.competitorInsight.findFirst({
+      where: {
+        userId,
+        domain:      data.domain,
+        insightType: data.insightType,
+        title:       data.title,
+        capturedAt:  { gte: since24h },
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      return duplicate.id;
+    }
+
     const insight = await db.competitorInsight.create({
       data: {
         userId,
@@ -109,7 +126,7 @@ export const productBrainService = {
         insightType:    data.insightType,
         title:          data.title,
         content:        data.content,
-        evidence:       data.evidence ? JSON.stringify(data.evidence) : undefined,
+        evidence:       data.evidence && data.evidence.length > 0 ? JSON.stringify(data.evidence) : undefined,
         sourceUrl:      data.sourceUrl ?? null,
         confidence:     data.confidence ?? 0.7,
         sourceJobId:    data.sourceJobId ?? null,
@@ -130,6 +147,13 @@ export const productBrainService = {
       tags:         [data.domain, data.insightType],
     });
 
+    // Scoped competitor event so the frontend only refetches on actual competitor data.
+    publishEvent({
+      type: 'competitor.insight.created',
+      userId,
+      data: { domain: data.domain, insightType: data.insightType, title: data.title },
+    }).catch(() => undefined);
+
     publishEvent({
       type: 'competitor.updated',
       userId,
@@ -137,6 +161,13 @@ export const productBrainService = {
     }).catch(() => undefined);
 
     if (data.workspaceId) {
+      publishWorkspaceEvent({
+        type: 'competitor.insight.created',
+        workspaceId: data.workspaceId,
+        userId,
+        data: { domain: data.domain, insightType: data.insightType, title: data.title },
+      }).catch(() => undefined);
+
       publishWorkspaceEvent({
         type: 'competitor.updated',
         workspaceId: data.workspaceId,

@@ -291,6 +291,25 @@ model CompetitorInsight {
   @@index([capturedAt])
 }
 
+/// Tracks domains the user has explicitly registered for competitor monitoring.
+/// Created via POST /competitors. Status updated by the analysis worker on insight capture.
+model CompetitorMonitor {
+  id          String   @id @default(uuid())
+  userId      String
+  workspaceId String?
+  domain      String
+  addedUrl    String
+  status      String   @default("queued")
+  // queued | completed | failed
+  lastJobId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, domain])
+  @@index([userId])
+  @@index([workspaceId])
+}
+
 /// Market signal — trend, competitor move, or customer feedback worth tracking.
 model MarketSignal {
   id          String   @id @default(uuid())
