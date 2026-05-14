@@ -2,12 +2,9 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  GitBranch,
   MessageSquare,
-  FileText,
   AlertTriangle,
   Zap,
-  BarChart3,
   RefreshCw,
   Settings,
   Plus,
@@ -19,8 +16,6 @@ import {
   Database,
   Loader2,
   ChevronRight,
-  TrendingUp,
-  GitPullRequest,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,17 +80,6 @@ interface BackendActivityItem {
 
 const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
   {
-    id: "github",
-    name: "GitHub",
-    description: "Sync repositories, pull requests, issues, and releases to your product intelligence feed.",
-    category: "Development",
-    icon: "⚡",
-    color: "slate",
-    features: ["PR tracking", "Issue sync", "Release monitoring", "Code activity"],
-    syncFrequency: "Real-time",
-    permissions: ["repo:read", "issues:read", "pull_requests:read"],
-  },
-  {
     id: "slack",
     name: "Slack",
     description: "Receive intelligence alerts and weekly digests directly in your team channels.",
@@ -106,78 +90,9 @@ const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     syncFrequency: "On trigger",
     permissions: ["channels:write", "chat:write"],
   },
-  {
-    id: "notion",
-    name: "Notion",
-    description: "Sync decisions, PRDs, and insights bidirectionally with your Notion workspace.",
-    category: "Productivity",
-    icon: "📝",
-    color: "zinc",
-    features: ["Decision sync", "PRD export", "Research import", "Database sync"],
-    syncFrequency: "Every 15 min",
-    permissions: ["pages:read", "pages:write", "databases:read"],
-  },
-  {
-    id: "jira",
-    name: "Jira",
-    description: "Push tasks from SPECKULA decisions to Jira issues and track execution progress.",
-    category: "Project Management",
-    icon: "🔵",
-    color: "blue",
-    features: ["Issue creation", "Sprint sync", "Status tracking", "Epic mapping"],
-    syncFrequency: "Every 30 min",
-    permissions: ["issues:write", "projects:read"],
-  },
-  {
-    id: "figma",
-    name: "Figma",
-    description: "Import design files and prototypes as product intelligence signals.",
-    category: "Design",
-    icon: "🎨",
-    color: "violet",
-    features: ["File import", "Design signals", "Component tracking", "Prototype links"],
-    syncFrequency: "On demand",
-    permissions: ["files:read"],
-  },
-  {
-    id: "posthog",
-    name: "PostHog",
-    description: "Connect product analytics to close the feedback loop between decisions and outcomes.",
-    category: "Analytics",
-    icon: "📊",
-    color: "amber",
-    features: ["Event tracking", "Cohort data", "Funnel analysis", "Feature flags"],
-    syncFrequency: "Real-time",
-    permissions: ["events:read", "cohorts:read"],
-  },
-  {
-    id: "mixpanel",
-    name: "Mixpanel",
-    description: "Pull user behavior data to validate product decisions with real usage patterns.",
-    category: "Analytics",
-    icon: "📈",
-    color: "indigo",
-    features: ["User journeys", "Retention data", "Event data", "A/B results"],
-    syncFrequency: "Every 1h",
-    permissions: ["data:read"],
-  },
-  {
-    id: "linear",
-    name: "Linear",
-    description: "Sync issues and roadmap items between SPECKULA and your Linear workspace.",
-    category: "Project Management",
-    icon: "⭕",
-    color: "cyan",
-    features: ["Issue sync", "Cycle tracking", "Project mapping", "Roadmap sync"],
-    syncFrequency: "Real-time",
-    permissions: ["issues:read", "issues:write", "projects:read"],
-  },
 ];
 
-const CATEGORIES = [
-  "All", "Development", "Communication", "Productivity",
-  "Analytics", "Project Management", "Design",
-];
+const CATEGORIES = ["All", "Communication"];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -194,9 +109,6 @@ function formatRelativeTime(isoStr: string): string {
 function inferIntegrationName(eventType: string, title: string): string {
   const lower = (eventType + " " + title).toLowerCase();
   if (lower.includes("slack") || lower.includes("digest") || lower.includes("alert")) return "Slack";
-  if (lower.includes("github") || lower.includes("pr ") || lower.includes("issue") || lower.includes("analysis")) return "GitHub";
-  if (lower.includes("notion") || lower.includes("spec") || lower.includes("prd")) return "Notion";
-  if (lower.includes("jira")) return "Jira";
   return "SPECKULA";
 }
 
@@ -234,25 +146,13 @@ function mergeIntegrations(
 // ---------------------------------------------------------------------------
 
 function getIntegrationIcon(id: string) {
-  switch (id) {
-    case "github":   return <GitBranch className="h-5 w-5" />;
-    case "slack":    return <MessageSquare className="h-5 w-5" />;
-    case "notion":   return <FileText className="h-5 w-5" />;
-    case "jira":     return <GitPullRequest className="h-5 w-5" />;
-    case "posthog":
-    case "mixpanel": return <BarChart3 className="h-5 w-5" />;
-    case "linear":   return <TrendingUp className="h-5 w-5" />;
-    default:         return <Zap className="h-5 w-5" />;
-  }
+  if (id === "slack") return <MessageSquare className="h-5 w-5" />;
+  return <Zap className="h-5 w-5" />;
 }
 
 function getActivityIcon(integration: string) {
-  switch (integration) {
-    case "GitHub": return <GitBranch className="h-3.5 w-3.5" />;
-    case "Slack":  return <MessageSquare className="h-3.5 w-3.5" />;
-    case "Notion": return <FileText className="h-3.5 w-3.5" />;
-    default:       return <Activity className="h-3.5 w-3.5" />;
-  }
+  if (integration === "Slack") return <MessageSquare className="h-3.5 w-3.5" />;
+  return <Activity className="h-3.5 w-3.5" />;
 }
 
 const COLOR_MAP: Record<IntegrationColor, string> = {
@@ -267,9 +167,7 @@ const COLOR_MAP: Record<IntegrationColor, string> = {
 };
 
 const ACTIVITY_BORDER: Record<string, string> = {
-  GitHub: "border-l-slate-400",
-  Slack:  "border-l-purple-400",
-  Notion: "border-l-zinc-400",
+  Slack: "border-l-purple-400",
 };
 
 function statusLabel(status: IntegrationStatus) {
