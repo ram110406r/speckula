@@ -10,6 +10,7 @@
 // Embedded:   imported from app.ts
 
 import { Worker, type Job } from 'bullmq';
+import { z } from 'zod';
 import { getRedis } from '../lib/redis.js';
 import { QUEUES, moveToDeadLetter, type AnalysisJobData, type AnalysisJobResult } from '../lib/queue.js';
 import { db } from '../lib/db.js';
@@ -17,8 +18,42 @@ import { groqService } from '../services/groqService.js';
 import { productBrainService } from '../services/productBrainService.js';
 import { publishEvent, publishWorkspaceEvent } from '../services/eventBus.js';
 import { workspaceActivityService } from '../services/workspaceActivityService.js';
+import { normalizeDomain } from '../lib/normalizeDomain.js';
 
 const CONCURRENCY = parseInt(process.env.ANALYSIS_WORKER_CONCURRENCY ?? '5', 10);
+
+// ─── Zod schemas for Groq output validation ───────────────────────────────────
+
+const InsightSchema = z.object({
+  type:       z.string().optional().default('competitor_insight'),
+  title:      z.string().min(1),
+  content:    z.string().min(1),
+  confidence: z.number().min(0).max(1).optional().default(0.7),
+  evidence:   z.array(z.string()).optional().default([]),
+});
+
+const CompetitorDataSchema = z.object({
+  domain:         z.string().nullable().optional(),
+  competitorName: z.string().nullable().optional(),
+  insightType:    z.string().nullable().optional(),
+}).nullable().optional();
+
+const MarketSignalSchema = z.object({
+  signalType: z.string().optional().default('trend'),
+  title:      z.string().min(1),
+  content:    z.string().min(1),
+  strength:   z.number().min(0).max(1).optional().default(0.5),
+});
+
+const GroqOutputSchema = z.object({
+  summary:        z.string().optional().default(''),
+  insights:       z.array(InsightSchema).optional().default([]),
+  competitorData: CompetitorDataSchema,
+  marketSignals:  z.array(MarketSignalSchema).optional().default([]),
+  tags:           z.array(z.string()).optional().default([]),
+});
+
+type GroqOutput = z.infer<typeof GroqOutputSchema>;
 
 // Page-type-specific analysis prompts.
 const buildPrompt = (data: AnalysisJobData): string => {
@@ -144,18 +179,18 @@ async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJo
     data.projectId ?? 'extension'
   );
 
-  // Parse structured output.
-  let parsed: {
-    summary?: string;
-    insights?: unknown[];
-    competitorData?: { domain?: string; competitorName?: string; insightType?: string } | null;
-    marketSignals?: unknown[];
-    tags?: string[];
-  } = {};
+  // Parse and validate structured output.
+  let parsed: GroqOutput = { summary: '', insights: [], competitorData: null, marketSignals: [], tags: [] };
 
   try {
     const raw = aiResult.content.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
-    parsed = JSON.parse(raw);
+    const jsonParsed = JSON.parse(raw);
+    const validated  = GroqOutputSchema.safeParse(jsonParsed);
+    if (validated.success) {
+      parsed = validated.data;
+    } else {
+      console.warn(`[analysisWorker] Groq output validation failed for job ${jobId}:`, validated.error.issues.map(i => i.message).join(', '));
+    }
   } catch {
     console.warn(`[analysisWorker] JSON parse failed for job ${jobId}`);
   }
@@ -165,56 +200,68 @@ async function processAnalysisJob(job: Job<AnalysisJobData>): Promise<AnalysisJo
   emitProgress(userId, jobId, 'embedding', 65);
   if (workspaceId) emitWorkspaceProgress(workspaceId, userId, jobId, 'embedding', 65);
 
-  const insights = Array.isArray(parsed.insights) ? parsed.insights : [];
-  const marketSignals = Array.isArray(parsed.marketSignals) ? parsed.marketSignals : [];
+  const insights     = parsed.insights;
+  const marketSignals = parsed.marketSignals;
   let productBrainEntries = 0;
 
   // Persist each insight to the Product Brain.
-  for (const raw of insights) {
-    const item = raw as {
-      type?: string; title?: string; content?: string; confidence?: number; evidence?: string[];
-    };
-    if (!item.title || !item.content) continue;
-    const entryType = item.type as 'pm_insight' || 'pm_insight';
+  for (const item of insights) {
+    const entryType = (item.type ?? 'pm_insight') as Parameters<typeof productBrainService.create>[0]['entryType'];
     await productBrainService.create({
       userId,
       workspaceId,
       entryType,
-      title: item.title,
-      content: item.content,
-      confidence: typeof item.confidence === 'number' ? item.confidence : 0.7,
-      sourceUrl: data.sourceUrl ?? null,
+      title:      item.title,
+      content:    item.content,
+      confidence: item.confidence,
+      sourceUrl:  data.sourceUrl ?? null,
       sourceJobId: jobId,
-      tags: Array.isArray(parsed.tags) ? (parsed.tags as string[]) : [],
+      tags: parsed.tags,
     });
     productBrainEntries += 1;
   }
 
-  // Persist competitor data if detected.
+  // Persist competitor data if detected — normalize domain to prevent duplicates.
   if (parsed.competitorData?.domain) {
+    const domain = normalizeDomain(parsed.competitorData.domain);
+    const evidenceItems = insights.flatMap((i) => i.evidence ?? []);
+
     await productBrainService.saveCompetitorInsight(userId, {
-      workspaceId: workspaceId ?? undefined,
-      domain: parsed.competitorData.domain,
-      competitorName: parsed.competitorData.competitorName,
-      insightType: parsed.competitorData.insightType ?? 'general',
-      title: parsed.summary ?? `Analysis of ${parsed.competitorData.domain}`,
-      content: insights.map((i: any) => i.content).join('\n\n'),
-      sourceUrl: data.sourceUrl ?? undefined,
-      sourceJobId: jobId,
+      workspaceId:    workspaceId ?? undefined,
+      domain,
+      competitorName: parsed.competitorData.competitorName ?? undefined,
+      insightType:    parsed.competitorData.insightType ?? 'general',
+      title:          parsed.summary || `Analysis of ${domain}`,
+      content:        insights.map((i) => i.content).join('\n\n'),
+      evidence:       evidenceItems.length > 0 ? evidenceItems : undefined,
+      sourceUrl:      data.sourceUrl ?? undefined,
+      sourceJobId:    jobId,
     });
+
+    // Mark the monitor as completed (upsert handles domains found via extension too).
+    await db.competitorMonitor.upsert({
+      where:  { userId_domain: { userId, domain } },
+      update: { status: 'completed', lastJobId: jobId },
+      create: {
+        userId,
+        workspaceId: workspaceId ?? null,
+        domain,
+        addedUrl:  data.sourceUrl ?? domain,
+        status:    'completed',
+        lastJobId: jobId,
+      },
+    }).catch(() => undefined);
   }
 
   // Persist market signals.
-  for (const raw of marketSignals) {
-    const sig = raw as { signalType?: string; title?: string; content?: string; strength?: number };
-    if (!sig.title || !sig.content) continue;
+  for (const sig of marketSignals) {
     await productBrainService.saveMarketSignal(userId, {
       workspaceId: workspaceId ?? undefined,
-      signalType: sig.signalType ?? 'trend',
-      title: sig.title,
-      content: sig.content,
-      strength: typeof sig.strength === 'number' ? sig.strength : 0.5,
-      sourceUrl: data.sourceUrl ?? undefined,
+      signalType:  sig.signalType,
+      title:       sig.title,
+      content:     sig.content,
+      strength:    sig.strength,
+      sourceUrl:   data.sourceUrl ?? undefined,
       sourceJobId: jobId,
     });
   }

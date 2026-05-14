@@ -14,9 +14,11 @@ export type SpeckulaEvent =
   | { type: 'analysis.completed';     userId: string; data: { jobId: string; result: unknown } }
   | { type: 'analysis.failed';        userId: string; data: { jobId: string; error: string } }
   // Intelligence
-  | { type: 'insight.created';        userId: string; data: { entryId: string; entryType: string; title: string } }
-  | { type: 'market_signal.detected'; userId: string; data: { signalId: string; signalType: string; title: string } }
-  | { type: 'competitor.updated';     userId: string; data: { domain: string; insightType: string } }
+  | { type: 'insight.created';            userId: string; data: { entryId: string; entryType: string; title: string } }
+  | { type: 'market_signal.detected';     userId: string; data: { signalId: string; signalType: string; title: string } }
+  | { type: 'competitor.updated';         userId: string; data: { domain: string; insightType: string } }
+  | { type: 'competitor.insight.created'; userId: string; data: { domain: string; insightType: string; title: string } }
+  | { type: 'competitor.added';           userId: string; data: { domain: string } }
   // Decisions & outcomes
   | { type: 'decision.created';       userId: string; data: { decisionId: string; title: string; score: number } }
   | { type: 'outcome.recorded';       userId: string; data: { outcomeId: string; decisionId: string; verdict: string } }
