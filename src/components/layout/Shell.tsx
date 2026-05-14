@@ -37,6 +37,7 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 import { LandingPage } from "./LandingPage";
 import { Loader2, Sparkles, ChevronRight, CheckCircle2 } from "lucide-react";
 import type { AppView } from "@/store/useAppStore";
+import { toast } from "@/store/useToastStore";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,23 @@ export function Shell() {
     const onChange = (e: MediaQueryListEvent) => setIsDesktopPanel(e.matches);
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  // Handle Slack OAuth redirect params (?slack=connected|denied|error).
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const slack = params.get("slack");
+    if (!slack) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    setActiveView("integrations");
+    if (slack === "connected") {
+      toast.success("Slack connected", "Your workspace is now syncing to SPECKULA.");
+    } else if (slack === "denied") {
+      toast.warning("Slack connection cancelled", "You can connect Slack any time from the Integrations page.");
+    } else if (slack === "error") {
+      toast.error("Slack connection failed", "Something went wrong. Please try again.");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
