@@ -14,6 +14,10 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
+    // Pooled URL for runtime queries (app + worker).
     url: process.env.DATABASE_URL ?? "postgresql://localhost:5432/buildcase",
+    // Direct (non-pooled) URL required by `prisma migrate` — Neon's pooler blocks DDL.
+    // Falls back to DATABASE_URL for local dev where there is no separate direct endpoint.
+    directUrl: process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL ?? "postgresql://localhost:5432/buildcase",
   },
 });
