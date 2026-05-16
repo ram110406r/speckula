@@ -391,6 +391,126 @@ function LearningLoop({ experiments }: { experiments: Experiment[] }) {
   );
 }
 
+// ─── generate hypotheses modal ───────────────────────────────────────────────
+
+interface GeneratedHypothesis {
+  title: string;
+  hypothesis: string;
+  targetMetric: string;
+  rationale: string;
+}
+
+interface GenerateHypothesesModalProps {
+  onClose: () => void;
+  onUse: (h: GeneratedHypothesis) => void;
+  user: { getIdToken: () => Promise<string> } | null;
+  workspaceId: string | null | undefined;
+}
+
+function GenerateHypothesesModal({ onClose, onUse, user, workspaceId }: GenerateHypothesesModalProps) {
+  const [context, setContext]         = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+  const [results, setResults]         = useState<GeneratedHypothesis[]>([]);
+
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || context.trim().length < 10) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/experiments/hypotheses", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ context: context.trim(), workspaceId: workspaceId ?? null }),
+      });
+      const body = await res.json() as { ok: boolean; data?: { hypotheses: GeneratedHypothesis[] }; error?: string };
+      if (!res.ok || !body.ok) throw new Error(body.error ?? `Request failed: ${res.status}`);
+      setResults(body.data?.hypotheses ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-card border border-border rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <h2 className="text-[14px] font-semibold text-foreground">Generate Hypotheses</h2>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-[12px] text-red-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleGenerate} className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium text-muted-foreground">
+              What are you trying to improve? <span className="text-muted-foreground/60">(min 10 chars)</span>
+            </label>
+            <textarea
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              placeholder="e.g. Our activation rate is low — users sign up but don't complete onboarding. We think the setup flow is too long."
+              rows={3}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none"
+            />
+            <p className="text-[10px] text-muted-foreground text-right tabular-nums">{context.length} / 2000</p>
+          </div>
+          <Button type="submit" size="sm" className="w-full gap-1.5 text-[12px]" disabled={loading || context.trim().length < 10}>
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {loading ? "Generating…" : "Generate 3 Hypotheses"}
+          </Button>
+        </form>
+
+        {results.length > 0 && (
+          <div className="space-y-3 pt-1">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              {results.length} hypotheses generated — pick one to start an experiment
+            </p>
+            {results.map((h, i) => (
+              <div key={i} className="rounded-xl border border-border bg-muted/20 p-4 space-y-2 hover:border-primary/40 transition-colors">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[13px] font-semibold text-foreground leading-snug">{h.title}</p>
+                  <Button
+                    size="sm"
+                    className="shrink-0 h-7 text-[11px] px-2.5 gap-1"
+                    onClick={() => onUse(h)}
+                  >
+                    Use this <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </div>
+                <p className="text-[12px] italic text-muted-foreground leading-relaxed">{h.hypothesis}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                    {h.targetMetric}
+                  </span>
+                  <p className="text-[11px] text-muted-foreground">{h.rationale}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── create experiment modal ──────────────────────────────────────────────────
 
 interface CreateModalProps {
@@ -401,12 +521,13 @@ interface CreateModalProps {
   }) => Promise<void>;
   creating: boolean;
   error: string | null;
+  prefill?: GeneratedHypothesis | null;
 }
 
-function CreateModal({ onClose, onCreate, creating, error }: CreateModalProps) {
-  const [title, setTitle]       = useState("");
-  const [hypothesis, setHypothesis] = useState("");
-  const [metric, setMetric]     = useState("");
+function CreateModal({ onClose, onCreate, creating, error, prefill }: CreateModalProps) {
+  const [title, setTitle]       = useState(prefill?.title ?? "");
+  const [hypothesis, setHypothesis] = useState(prefill?.hypothesis ?? "");
+  const [metric, setMetric]     = useState(prefill?.targetMetric ?? "");
   const [controlName, setControlName]     = useState("Control");
   const [challengerName, setChallengerName] = useState("Challenger");
 
@@ -542,9 +663,11 @@ export function ExperimentsView() {
   const experiments: Experiment[] = (apiData?.experiments ?? []).map(mapExperiment);
 
   const [filter, setFilter] = useState<ExperimentStatus | "all">("all");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [creating, setCreating]               = useState(false);
-  const [createError, setCreateError]         = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal]       = useState(false);
+  const [creating, setCreating]                     = useState(false);
+  const [createError, setCreateError]               = useState<string | null>(null);
+  const [showHypothesesModal, setShowHypothesesModal] = useState(false);
+  const [prefillHypothesis, setPrefillHypothesis]   = useState<GeneratedHypothesis | null>(null);
 
   const handleToggle = useCallback(async (id: string, newStatus: ExperimentStatus) => {
     if (!user) return;
@@ -626,12 +749,26 @@ export function ExperimentsView() {
 
   return (
     <div className="h-full overflow-y-auto bg-background">
+      {showHypothesesModal && (
+        <GenerateHypothesesModal
+          onClose={() => setShowHypothesesModal(false)}
+          onUse={(h) => {
+            setPrefillHypothesis(h);
+            setShowHypothesesModal(false);
+            setCreateError(null);
+            setShowCreateModal(true);
+          }}
+          user={user}
+          workspaceId={workspaceId}
+        />
+      )}
       {showCreateModal && (
         <CreateModal
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => { setShowCreateModal(false); setPrefillHypothesis(null); }}
           onCreate={handleCreate}
           creating={creating}
           error={createError}
+          prefill={prefillHypothesis}
         />
       )}
       <div className="max-w-[900px] mx-auto px-5 py-6 space-y-6">
@@ -794,7 +931,7 @@ export function ExperimentsView() {
               SPECKULA&apos;s AI can generate high-confidence experiment hypotheses from your Product Brain data — competitor signals, user research, and market trends.
             </p>
           </div>
-          <Button size="sm" className="shrink-0 gap-1.5 h-8 text-[11px]">
+          <Button size="sm" className="shrink-0 gap-1.5 h-8 text-[11px]" onClick={() => setShowHypothesesModal(true)}>
             <Lightbulb className="h-3.5 w-3.5" />
             Generate Hypotheses
           </Button>

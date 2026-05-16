@@ -62,7 +62,71 @@ Ground recommendations in the variant stats. If workspace evidence is provided, 
 Respond with plain text only — no JSON, no markdown.
 `.trim();
 
+const GenerateHypothesesSchema = z.object({
+  context:     z.string().min(10).max(2000),
+  workspaceId: z.string().nullish(),
+});
+
+const AI_HYPOTHESES_PROMPT = (context: string, workspaceEvidence: string) => `
+You are SPECKULA's Experiment Strategist. Generate 3 high-quality A/B test hypotheses based on the provided context.
+
+Context: ${context}
+${workspaceEvidence ? `\nWorkspace intelligence:\n${workspaceEvidence}\n` : ''}
+
+Rules:
+- Each hypothesis must follow the IF/THEN/BECAUSE structure
+- Title should be short (max 8 words), action-oriented
+- targetMetric must be a single, measurable KPI (e.g. conversion_rate, activation_rate, DAU, churn_rate)
+- rationale must be 1-2 sentences grounded in the context
+- Do NOT invent data not present in the context or workspace intelligence
+
+Respond ONLY with valid JSON:
+{
+  "hypotheses": [
+    {
+      "title": "Short action-oriented title",
+      "hypothesis": "If we [change], then [metric] will [direction] because [reason].",
+      "targetMetric": "snake_case_metric_name",
+      "rationale": "Why this experiment is worth running."
+    }
+  ]
+}
+`.trim();
+
 export default async function experimentRoutes(fastify: FastifyInstance) {
+
+  // POST /experiments/hypotheses — AI-generate experiment hypotheses from context.
+  // Registered before /:id so Fastify does not treat "hypotheses" as a param.
+  fastify.post('/hypotheses', async (req, reply) => {
+    const userId = requireUserId(req, reply);
+    if (!userId) return;
+
+    const body = GenerateHypothesesSchema.safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, error: body.error.issues[0]?.message });
+
+    try {
+      const workspaceEvidence = await getWorkspaceEvidence({ userId, workspaceId: body.data.workspaceId ?? null });
+      const prompt = AI_HYPOTHESES_PROMPT(body.data.context, workspaceEvidence);
+      const response = await groqService.callGroq(
+        prompt,
+        { model: 'reasoning', jsonMode: true, temperature: 0.5, maxTokens: 800 },
+        userId,
+        body.data.workspaceId ?? 'experiments'
+      );
+
+      const parsed = JSON.parse(response.content ?? '{}') as {
+        hypotheses?: Array<{ title: string; hypothesis: string; targetMetric: string; rationale: string }>;
+      };
+      const hypotheses = (parsed.hypotheses ?? []).filter(
+        (h) => h?.title && h?.hypothesis && h?.targetMetric
+      );
+
+      reply.code(200).send({ ok: true, data: { hypotheses } });
+    } catch (err) {
+      fastify.log.error({ err }, '[experiments] hypothesis generation failed');
+      reply.code(500).send({ ok: false, error: 'Failed to generate hypotheses' });
+    }
+  });
 
   // GET /experiments — list experiments, optionally filtered by status/workspaceId.
   fastify.get('/', async (req, reply) => {
