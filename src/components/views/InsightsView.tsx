@@ -91,15 +91,25 @@ function formatTimeAgo(iso: string): string {
   return `${Math.floor(diffH / 24)}d`;
 }
 
-/** Map a backend signalType to a UI SignalCategory. */
+/** Map a backend signalType to a UI SignalCategory.
+ *  Backend types come from the analysis worker prompt:
+ *  trend | competitor_move | market_shift | customer_feedback | pricing_change | feature_launch
+ */
 function mapSignalTypeToCategory(signalType: string): SignalCategory {
   const t = signalType.toLowerCase();
-  if (t.includes("pain") || t.includes("problem")) return "pain_point";
-  if (t.includes("complaint") || t.includes("frustrat")) return "complaint";
-  if (t.includes("trend") || t.includes("market_shift")) return "trend";
-  if (t.includes("opportun") || t.includes("gap")) return "opportunity";
-  if (t.includes("launch") || t.includes("feature_launch")) return "launch";
-  if (t.includes("competitor")) return "trend";
+  // Exact backend-type matches first (most reliable).
+  if (t === "customer_feedback")       return "complaint";
+  if (t === "pricing_change")          return "opportunity";
+  if (t === "feature_launch")          return "launch";
+  if (t === "trend")                   return "trend";
+  if (t === "competitor_move")         return "trend";
+  if (t === "market_shift")            return "trend";
+  // Substring fallbacks for any future types.
+  if (t.includes("pain") || t.includes("problem"))  return "pain_point";
+  if (t.includes("complaint") || t.includes("feedback") || t.includes("frustrat")) return "complaint";
+  if (t.includes("opportun") || t.includes("pric"))  return "opportunity";
+  if (t.includes("launch"))           return "launch";
+  if (t.includes("trend") || t.includes("market") || t.includes("competitor")) return "trend";
   return "trend";
 }
 
@@ -373,10 +383,9 @@ export function InsightsView() {
   const [newSignalFlash, setNewSignalFlash] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Real data from backend
-  const { data: signalsData, loading: signalsLoading } = useMarketSignals(
-    activeFilter !== "all" ? activeFilter : undefined
-  );
+  // Always fetch all signals — backend signalType != frontend filter category, so
+  // type-based pre-filtering is done client-side via mapSignalTypeToCategory.
+  const { data: signalsData, loading: signalsLoading } = useMarketSignals();
   const { data: trendsData } = useMarketTrends();
   const { data: opportunitiesData } = useMarketOpportunities();
   const { lastEvent } = useSpecklaBus();

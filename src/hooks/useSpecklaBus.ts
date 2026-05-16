@@ -16,20 +16,46 @@ import { getAuth } from "firebase/auth";
 import { getExtensionPreferences } from "@/lib/firebase/db";
 
 export type SpeckulaEvent =
-  | { type: "extension.connected";          userId: string; data: { connectionId: string } }
-  | { type: "extension.disconnected";       userId: string; data: { connectionId: string } }
-  | { type: "analysis.queued";              userId: string; data: { jobId: string } }
-  | { type: "analysis.progress";            userId: string; data: { jobId: string; status?: string; stage?: string; progress: number } }
-  | { type: "analysis.completed";           userId: string; data: { jobId: string; result?: unknown } }
-  | { type: "analysis.failed";              userId: string; data: { jobId: string; error: string } }
-  | { type: "insight.created";              userId: string; data: { entryId: string; entryType: string; title?: string } }
-  | { type: "competitor.insight.created";   userId: string; data: { domain: string; insightType: string; title?: string } }
-  | { type: "competitor.updated";           userId: string; data: { domain: string; insightType: string } }
-  | { type: "competitor.added";             userId: string; data: { domain: string } }
-  | { type: "notification.created";         userId: string; data: { notificationId: string; title: string } }
-  | { type: "connected";                    connectionId: string; userId: string; workspaceId?: string | null; serverTime: string }
-  | { type: "pong";                         serverTime: string }
-  | { type: "error";                        code: string; message: string };
+  // Extension lifecycle
+  | { type: "extension.connected";           userId: string; data: { connectionId: string } }
+  | { type: "extension.disconnected";        userId: string; data: { connectionId: string } }
+  // Analysis job — backend publishes "analysis.started", not "analysis.queued"
+  | { type: "analysis.started";              userId: string; data: { jobId: string } }
+  | { type: "analysis.progress";             userId: string; data: { jobId: string; status?: string; stage?: string; progress: number } }
+  | { type: "analysis.completed";            userId: string; data: { jobId: string; result?: unknown } }
+  | { type: "analysis.failed";               userId: string; data: { jobId: string; error: string } }
+  // Intelligence
+  | { type: "insight.created";               userId: string; data: { entryId: string; entryType: string; title?: string } }
+  | { type: "market_signal.detected";        userId: string; data: { signalId: string; signalType: string; title: string } }
+  | { type: "competitor.insight.created";    userId: string; data: { domain: string; insightType: string; title?: string } }
+  | { type: "competitor.updated";            userId: string; data: { domain: string; insightType: string } }
+  | { type: "competitor.added";              userId: string; data: { domain: string } }
+  // Decisions & outcomes
+  | { type: "decision.created";              userId: string; data: { decisionId: string; title: string; score: number } }
+  | { type: "outcome.recorded";              userId: string; data: { outcomeId: string; decisionId: string; verdict: string } }
+  | { type: "learning.generated";            userId: string; data: { insightId: string; decisionId: string; confidenceShift: number } }
+  // Product Brain
+  | { type: "product_brain.updated";         userId: string; data: { entryId: string; entryType: string; confidence: number } }
+  // Execution
+  | { type: "specification.generated";       userId: string; data: { specId: string; decisionId?: string } }
+  | { type: "roadmap.generated";             userId: string; data: { itemCount: number; quarter: string } }
+  | { type: "experiment.started";            userId: string; data: { experimentId: string; title: string } }
+  | { type: "experiment.completed";          userId: string; data: { experimentId: string; verdict: string } }
+  | { type: "task.created";                  userId: string; data: { taskId: string; title: string } }
+  // Autonomous agent
+  | { type: "agent.started";                 userId: string; data: { runId: string; depth: string } }
+  | { type: "agent.step";                    userId: string; data: { runId: string; step: string; payload?: unknown } }
+  | { type: "agent.completed";               userId: string; data: { runId: string; verdict: string; tokensUsed: number } }
+  | { type: "agent.stopped";                 userId: string; data: { runId: string } }
+  // Platform
+  | { type: "notification.created";          userId: string; data: { notificationId: string; type: string; title: string } }
+  | { type: "auth.expired";                  userId: string; data: Record<string, unknown> }
+  // WebSocket protocol
+  | { type: "connected";                     connectionId: string; userId: string; workspaceId?: string | null; serverTime: string }
+  | { type: "workspace.subscribed";          workspaceId: string }
+  | { type: "workspace.unsubscribed" }
+  | { type: "pong";                          serverTime: string }
+  | { type: "error";                         code: string; message: string };
 
 type AnyEvent = { type: string; [key: string]: unknown };
 

@@ -39,7 +39,12 @@ export function useMarketSignals(type?: string) {
 
   useEffect(() => {
     if (!lastEvent) return;
-    if (lastEvent.type === 'insight.created') {
+    // market_signal.detected is the direct event; insight.created fires when the
+    // ProductBrainEntry mirror is created — both should trigger a refresh.
+    if (
+      lastEvent.type === 'market_signal.detected' ||
+      lastEvent.type === 'insight.created'
+    ) {
       refetch();
     }
   }, [lastEvent, refetch]);
