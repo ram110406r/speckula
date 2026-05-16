@@ -258,7 +258,7 @@ function TopMetricCard({
 }) {
   if (loading) {
     return (
-      <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 min-w-0 animate-pulse">
+      <div className="bg-card border border-border rounded-lg sm:rounded-xl p-3 sm:p-4 flex flex-col gap-2 min-w-0 animate-pulse">
         <div className="h-3 w-24 rounded bg-muted" />
         <div className="h-7 w-16 rounded bg-muted" />
         <div className="h-3 w-20 rounded bg-muted" />
@@ -266,26 +266,26 @@ function TopMetricCard({
     );
   }
   return (
-    <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 min-w-0">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium text-muted-foreground truncate">
+    <div className="bg-card border border-border rounded-lg sm:rounded-xl p-3 sm:p-4 flex flex-col gap-2 min-w-0">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <span className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
           {label}
         </span>
         {live && <PulseDot color={liveColor} />}
       </div>
-      <span className="text-2xl font-bold tracking-tight text-foreground leading-none">
+      <span className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-none">
         {value}
       </span>
       {(trend || trendLabel) && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {trend && (
-            <span className="text-[11px] font-medium text-emerald-500 flex items-center gap-0.5">
+            <span className="text-xs sm:text-sm font-medium text-emerald-500 flex items-center gap-0.5 shrink-0">
               <ArrowUpRight className="h-3 w-3" />
               {trend}
             </span>
           )}
           {trendLabel && (
-            <span className="text-[11px] text-muted-foreground">{trendLabel}</span>
+            <span className="text-xs sm:text-sm text-muted-foreground">{trendLabel}</span>
           )}
         </div>
       )}
@@ -490,26 +490,26 @@ export function DashboardView() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="h-full overflow-y-auto bg-background">
-      <div className="max-w-[1280px] mx-auto px-5 py-6 space-y-5">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-5 lg:space-y-6">
 
         {/* ----------------------------------------------------------------- */}
         {/* Page header                                                        */}
         {/* ----------------------------------------------------------------- */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
               <Activity className="h-4 w-4 text-primary" />
             </div>
-            <div>
-              <h1 className="text-[15px] font-semibold text-foreground leading-tight">
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-semibold text-foreground leading-tight">
                 Command Center
               </h1>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Startup operating intelligence
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             <WsStatusBadge connected={connected} />
             <LiveBadge />
           </div>
@@ -521,9 +521,9 @@ export function DashboardView() {
         )}
 
         {/* ----------------------------------------------------------------- */}
-        {/* Top metrics row (5 cards)                                          */}
+        {/* Top metrics row (5 cards) - Responsive grid                        */}
         {/* ----------------------------------------------------------------- */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-3">
           <TopMetricCard
             label="Signals Captured"
             value={metrics.totalSignals}
@@ -561,18 +561,18 @@ export function DashboardView() {
         </div>
 
         {/* ----------------------------------------------------------------- */}
-        {/* Main 2-column grid                                                 */}
+        {/* Main 2-column grid - Responsive stacking on mobile                 */}
         {/* ----------------------------------------------------------------- */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 sm:gap-5 lg:gap-6 items-start">
 
           {/* =============================================================== */}
           {/* LEFT COLUMN                                                      */}
           {/* =============================================================== */}
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5 lg:space-y-6">
 
             {/* Live Intelligence Feed */}
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="bg-card border border-border rounded-lg sm:rounded-xl overflow-hidden">
+              <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-border flex items-center justify-between gap-2">
                 <SectionHeader title="Live Intelligence Feed" />
                 <LiveBadge />
               </div>
@@ -583,7 +583,7 @@ export function DashboardView() {
                   return (
                     <li
                       key={item.id}
-                      className={`flex items-start gap-3 px-4 py-3 border-b border-border/50 last:border-0 transition-colors duration-500 ${
+                      className={`flex items-start gap-3 px-4 sm:px-5 py-3 sm:py-4 border-b border-border/50 last:border-0 transition-colors duration-500 ${
                         isHighlighted
                           ? "bg-primary/5"
                           : "hover:bg-muted/40"
@@ -593,17 +593,17 @@ export function DashboardView() {
                         <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[12.5px] text-foreground leading-snug">
+                        <p className="text-sm sm:text-base text-foreground leading-snug">
                           {item.description}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <span className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1 shrink-0">
                             <Clock className="h-2.5 w-2.5" />
                             {item.timeAgo}
                           </span>
                           <CategoryBadge category={item.category} />
                           {item.isNew && (
-                            <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded shrink-0">
                               new
                             </span>
                           )}
@@ -625,28 +625,28 @@ export function DashboardView() {
               <SectionHeader
                 title="Active AI Analyses"
                 badge={
-                  <span className="flex items-center gap-1.5 text-[11px] font-medium text-blue-400">
+                  <span className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-blue-400 shrink-0">
                     <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
                     {analyses.length} running
                   </span>
                 }
               />
-              <div className="space-y-3">
+              <div className="space-y-3 sm:space-y-4">
                 {analyses.length === 0 && (
-                  <div className="bg-card border border-dashed border-border rounded-xl p-4 flex items-center justify-center h-20">
-                    <span className="text-[12px] text-muted-foreground">No active analyses</span>
+                  <div className="bg-card border border-dashed border-border rounded-lg sm:rounded-xl p-4 sm:p-5 flex items-center justify-center min-h-20">
+                    <span className="text-xs sm:text-sm text-muted-foreground">No active analyses</span>
                   </div>
                 )}
                 {analyses.map((analysis) => (
                   <div
                     key={analysis.id}
-                    className="bg-card border border-border rounded-xl p-4"
+                    className="bg-card border border-border rounded-lg sm:rounded-xl p-4 sm:p-5"
                   >
                     <div className="flex items-start justify-between gap-3 mb-3">
-                      <p className="text-[12.5px] font-medium text-foreground leading-snug flex-1">
+                      <p className="text-sm sm:text-base font-medium text-foreground leading-snug flex-1 min-w-0">
                         {analysis.title}
                       </p>
-                      <span className="shrink-0 text-[12px] font-bold text-foreground tabular-nums">
+                      <span className="shrink-0 text-xs sm:text-sm font-bold text-foreground tabular-nums">
                         {analysis.progress}%
                       </span>
                     </div>
@@ -656,8 +656,8 @@ export function DashboardView() {
                         style={{ width: `${analysis.progress}%` }}
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
-                      <Clock className="h-2.5 w-2.5" />
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-2 flex items-center gap-1">
+                      <Clock className="h-2.5 w-2.5 shrink-0" />
                       Started {analysis.startedAgo}
                     </p>
                   </div>
@@ -669,34 +669,34 @@ export function DashboardView() {
           {/* =============================================================== */}
           {/* RIGHT COLUMN                                                     */}
           {/* =============================================================== */}
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5 lg:space-y-6">
 
             {/* Market Signals */}
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-border">
-                <span className="text-[13px] font-semibold text-foreground">
+            <div className="bg-card border border-border rounded-lg sm:rounded-xl overflow-hidden">
+              <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-border">
+                <span className="text-sm sm:text-base font-semibold text-foreground">
                   Market Signals
                 </span>
               </div>
               {marketSignals.length === 0 && (
-                <div className="flex items-center justify-center h-16 px-4">
-                  <span className="text-[12px] text-muted-foreground">No market signals yet</span>
+                <div className="flex items-center justify-center min-h-16 px-4">
+                  <span className="text-xs sm:text-sm text-muted-foreground">No market signals yet</span>
                 </div>
               )}
               <ul>
                 {marketSignals.map((signal) => (
                   <li
                     key={signal.id}
-                    className="flex items-center justify-between px-4 py-2.5 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
+                    className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors gap-2"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <Search className="h-3 w-3 text-muted-foreground shrink-0" />
-                      <span className="text-[12px] text-foreground truncate">
+                      <span className="text-xs sm:text-sm text-foreground truncate">
                         {signal.label}
                       </span>
                     </div>
                     <span
-                      className={`shrink-0 flex items-center gap-0.5 text-[12px] font-semibold tabular-nums ml-3 ${
+                      className={`shrink-0 flex items-center gap-0.5 text-xs sm:text-sm font-semibold tabular-nums ${
                         signal.up ? "text-emerald-500" : "text-red-400"
                       }`}
                     >
@@ -715,10 +715,10 @@ export function DashboardView() {
             {/* Recent Decisions */}
             <div>
               <SectionHeader title="Recent Decisions" />
-              <div className="space-y-2.5">
+              <div className="space-y-2.5 sm:space-y-3">
                 {!experimentsData?.experiments?.length && (
-                  <div className="bg-card border border-dashed border-border rounded-xl p-4 flex items-center justify-center h-20">
-                    <span className="text-[12px] text-muted-foreground">No recent decisions</span>
+                  <div className="bg-card border border-dashed border-border rounded-lg sm:rounded-xl p-4 sm:p-5 flex items-center justify-center min-h-20">
+                    <span className="text-xs sm:text-sm text-muted-foreground">No recent decisions</span>
                   </div>
                 )}
                 {(experimentsData?.experiments ?? [])
@@ -730,16 +730,16 @@ export function DashboardView() {
                     return (
                       <div
                         key={exp.id}
-                        className="bg-card border border-border rounded-xl p-4 flex items-start gap-3"
+                        className="bg-card border border-border rounded-lg sm:rounded-xl p-4 sm:p-5 flex items-start gap-3"
                       >
                         <ScoreRing score={score} />
                         <div className="flex-1 min-w-0 space-y-1.5">
-                          <p className="text-[12.5px] font-medium text-foreground leading-snug">
+                          <p className="text-sm sm:text-base font-medium text-foreground leading-snug">
                             {exp.title}
                           </p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <PriorityBadge priority={priority} />
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-xs text-muted-foreground">
                               {exp.startedAt
                                 ? `${Math.floor((Date.now() - new Date(exp.startedAt).getTime()) / 86_400_000)}d ago`
                                 : `${Math.floor((Date.now() - new Date(exp.createdAt).getTime()) / 3_600_000)}h ago`}
@@ -753,23 +753,23 @@ export function DashboardView() {
             </div>
 
             {/* Monitored Competitors */}
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-                <span className="text-[13px] font-semibold text-foreground">
+            <div className="bg-card border border-border rounded-lg sm:rounded-xl overflow-hidden">
+              <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-border flex items-center justify-between gap-2">
+                <span className="text-sm sm:text-base font-semibold text-foreground">
                   Monitored Competitors
                 </span>
-                <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                <Shield className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               </div>
               {competitors.length === 0 && (
-                <div className="flex items-center justify-center h-16 px-4">
-                  <span className="text-[12px] text-muted-foreground">No competitors tracked yet</span>
+                <div className="flex items-center justify-center min-h-16 px-4">
+                  <span className="text-xs sm:text-sm text-muted-foreground">No competitors tracked yet</span>
                 </div>
               )}
               <ul>
                 {competitors.map((comp) => (
                   <li
                     key={comp.id}
-                    className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
+                    className="flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
                   >
                     {/* Favicon placeholder */}
                     <div
@@ -780,10 +780,10 @@ export function DashboardView() {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12.5px] font-medium text-foreground">
+                      <p className="text-xs sm:text-sm font-medium text-foreground">
                         {comp.name}
                       </p>
-                      <p className="text-[10.5px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         Updated {comp.updatedAgo}
                       </p>
                     </div>
@@ -803,64 +803,64 @@ export function DashboardView() {
         </div>
 
         {/* ----------------------------------------------------------------- */}
-        {/* Bottom startup metrics bar                                         */}
+        {/* Bottom startup metrics bar - Responsive grid                       */}
         {/* ----------------------------------------------------------------- */}
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="bg-card border border-border rounded-lg sm:rounded-xl p-4 sm:p-5 lg:p-6">
+          <div className="flex items-center gap-2 mb-4 sm:mb-5">
+            <BarChart2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs sm:text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Intelligence Metrics
             </span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
             {/* Total Signals */}
-            <div className="space-y-1">
+            <div className="space-y-1 sm:space-y-2">
               <div className="flex items-baseline gap-2">
-                <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
+                <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground tabular-nums leading-none">
                   {overview?.totalSignals ?? '—'}
                 </span>
-                <span className="text-[11px] font-medium text-emerald-500 flex items-center gap-0.5">
+                <span className="text-xs sm:text-sm font-medium text-emerald-500 flex items-center gap-0.5 shrink-0">
                   <ArrowUpRight className="h-2.5 w-2.5" />
                   {overview?.totalSignals ? '↑' : ''}
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Signals Captured</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Signals Captured</p>
             </div>
             {/* Weekly Captures */}
-            <div className="space-y-1">
+            <div className="space-y-1 sm:space-y-2">
               <div className="flex items-baseline gap-2">
-                <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
+                <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground tabular-nums leading-none">
                   {overview?.weeklyCaptures ?? '—'}
                 </span>
-                <span className="text-[11px] font-medium text-emerald-500 flex items-center gap-0.5">
+                <span className="text-xs sm:text-sm font-medium text-emerald-500 flex items-center gap-0.5 shrink-0">
                   <ArrowUpRight className="h-2.5 w-2.5" />
                   new
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">This Week</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">This Week</p>
             </div>
             {/* Competitor Insights */}
-            <div className="space-y-1">
+            <div className="space-y-1 sm:space-y-2">
               <div className="flex items-baseline gap-2">
-                <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
+                <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground tabular-nums leading-none">
                   {overview?.competitorInsights ?? '—'}
                 </span>
-                <span className="text-[11px] font-medium text-emerald-500 flex items-center gap-0.5">
+                <span className="text-xs sm:text-sm font-medium text-emerald-500 flex items-center gap-0.5 shrink-0">
                   <ArrowUpRight className="h-2.5 w-2.5" />
                   {overview?.competitorInsights ? 'tracked' : ''}
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Competitors</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Competitors</p>
             </div>
             {/* AI Jobs */}
-            <div className="space-y-1">
+            <div className="space-y-1 sm:space-y-2">
               <div className="flex items-baseline gap-2">
-                <span className="text-[22px] font-bold text-foreground tabular-nums leading-none">
+                <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground tabular-nums leading-none">
                   {overview?.aiJobsCompleted ?? '—'}
                 </span>
                 <PulseDot color="bg-blue-500" />
               </div>
-              <p className="text-[11px] text-muted-foreground">AI Jobs Run</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">AI Jobs Run</p>
             </div>
           </div>
         </div>
