@@ -14,6 +14,11 @@ const requireUserId = (req: FastifyRequest, reply: FastifyReply): string | null 
   return uid;
 };
 
+function parseTags(raw: string | null | undefined): string[] | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as string[]; } catch { return null; }
+}
+
 const CreateExperimentSchema = z.object({
   title:        z.string().min(1).max(200),
   hypothesis:   z.string().min(1).max(1000),
@@ -77,11 +82,10 @@ export default async function experimentRoutes(fastify: FastifyInstance) {
     });
 
     // Attach live stats to each experiment.
-    const enriched = experiments.map((exp) => ({
-      ...exp,
-      stats:   analyseExperiment(exp.variants),
-      verdict: experimentVerdict(analyseExperiment(exp.variants)),
-    }));
+    const enriched = experiments.map((exp) => {
+      const stats = analyseExperiment(exp.variants);
+      return { ...exp, tags: parseTags(exp.tags), stats, verdict: experimentVerdict(stats) };
+    });
 
     reply.code(200).send({ ok: true, data: { experiments: enriched } });
   });
@@ -102,7 +106,7 @@ export default async function experimentRoutes(fastify: FastifyInstance) {
     const stats   = analyseExperiment(experiment.variants);
     const verdict = experimentVerdict(stats);
 
-    reply.code(200).send({ ok: true, data: { experiment: { ...experiment, stats, verdict } } });
+    reply.code(200).send({ ok: true, data: { experiment: { ...experiment, tags: parseTags(experiment.tags), stats, verdict } } });
   });
 
   // POST /experiments — create experiment with variants.
@@ -134,7 +138,7 @@ export default async function experimentRoutes(fastify: FastifyInstance) {
       include: { variants: true },
     });
 
-    reply.code(201).send({ ok: true, data: { experiment } });
+    reply.code(201).send({ ok: true, data: { experiment: { ...experiment, tags: parseTags(experiment.tags) } } });
   });
 
   // PATCH /experiments/:id/status — start, pause, or complete an experiment.
@@ -157,40 +161,40 @@ export default async function experimentRoutes(fastify: FastifyInstance) {
     const updated = await db.experiment.update({ where: { id }, data });
 
     if (body.data.status === 'completed') {
-      // Generate AI insight on completion (fire-and-forget).
-      db.experiment.findFirst({ where: { id }, include: { variants: true } }).then(async (exp: { id: string; title: string; hypothesis: string; targetMetric: string; workspaceId: string | null; variants: { id: string; name: string; isControl: boolean; impressions: number; conversions: number }[] } | null) => {
-        if (!exp) return;
-        const stats   = analyseExperiment(exp.variants);
-        const verdict = experimentVerdict(stats);
+      // Compute verdict immediately from current variant data.
+      const expWithVariants = await db.experiment.findFirst({ where: { id }, include: { variants: true } });
+      const completedStats  = analyseExperiment(expWithVariants?.variants ?? []);
+      const completedVerdict = experimentVerdict(completedStats);
 
-        try {
-          const workspaceEvidence = await getWorkspaceEvidence({ userId, workspaceId: exp.workspaceId });
-          const prompt = AI_INSIGHT_PROMPT(exp.title, exp.hypothesis, exp.targetMetric, stats, verdict, workspaceEvidence);
-          const response = await groqService.callGroq(
-            prompt,
-            { model: 'reasoning', temperature: 0.3, maxTokens: 200 },
-            userId,
-            exp.workspaceId ?? 'experiments'
-          );
-          const aiInsight = response.content.trim();
-          await db.experiment.update({ where: { id }, data: { aiInsight } });
-        } catch {
-          // Non-critical — experiment is still usable without AI insight.
-        }
+      // Notify immediately so the frontend can refresh without waiting for AI.
+      publishEvent({ type: 'experiment.completed', userId, data: { experimentId: id, verdict: completedVerdict } }).catch(() => undefined);
 
-        await publishEvent({
-          type:   'experiment.completed',
-          userId,
-          data:   { experimentId: id, verdict },
-        }).catch(() => undefined);
-      }).catch(() => undefined);
+      // Generate AI insight fire-and-forget.
+      if (expWithVariants) {
+        Promise.resolve().then(async () => {
+          try {
+            const workspaceEvidence = await getWorkspaceEvidence({ userId, workspaceId: expWithVariants.workspaceId });
+            const prompt = AI_INSIGHT_PROMPT(expWithVariants.title, expWithVariants.hypothesis, expWithVariants.targetMetric, completedStats, completedVerdict, workspaceEvidence);
+            const response = await groqService.callGroq(
+              prompt,
+              { model: 'reasoning', temperature: 0.3, maxTokens: 200 },
+              userId,
+              expWithVariants.workspaceId ?? 'experiments'
+            );
+            const aiInsight = response.content?.trim() ?? '';
+            if (aiInsight) await db.experiment.update({ where: { id }, data: { aiInsight } });
+          } catch (err) {
+            fastify.log.warn({ err, experimentId: id }, '[experiments] AI insight generation failed');
+          }
+        });
+      }
     }
 
     if (body.data.status === 'running') {
-      await publishEvent({ type: 'experiment.started', userId, data: { experimentId: id, title: experiment.title } }).catch(() => undefined);
+      publishEvent({ type: 'experiment.started', userId, data: { experimentId: id, title: experiment.title } }).catch(() => undefined);
     }
 
-    reply.code(200).send({ ok: true, data: { experiment: updated } });
+    reply.code(200).send({ ok: true, data: { experiment: { ...updated, tags: parseTags(updated.tags) } } });
   });
 
   // PUT /experiments/:id/variants/:variantId — update impressions/conversions.
@@ -209,11 +213,9 @@ export default async function experimentRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ ok: false, error: 'conversions cannot exceed impressions' });
     }
 
-    const rate = body.data.impressions > 0 ? body.data.conversions / body.data.impressions : 0;
-
-    const variant = await db.experimentVariant.update({
+    await db.experimentVariant.update({
       where: { id: variantId },
-      data:  { impressions: body.data.impressions, conversions: body.data.conversions, conversionRate: rate },
+      data:  { impressions: body.data.impressions, conversions: body.data.conversions },
     });
 
     // Re-compute stats for all variants in this experiment.
@@ -230,7 +232,7 @@ export default async function experimentRoutes(fastify: FastifyInstance) {
       )
     );
 
-    reply.code(200).send({ ok: true, data: { variant, stats } });
+    reply.code(200).send({ ok: true, data: { stats } });
   });
 
   // DELETE /experiments/:id — soft-delete.

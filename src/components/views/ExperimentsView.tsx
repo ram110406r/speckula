@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   FlaskConical, Brain, CheckCircle2, Clock, Pause, Play,
   ChevronRight, TrendingUp, TrendingDown, ArrowUpRight,
   Users, BarChart2, Lightbulb, AlertTriangle, BookOpen,
-  Sparkles, Target, Zap, Loader2,
+  Sparkles, Target, Zap, Loader2, Plus, X, StopCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/useApi";
 import { useExtensionPreferences } from "@/hooks/useExtensionPreferences";
 import { useAuth } from "@/lib/firebase/AuthProvider";
+import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -276,21 +277,36 @@ function ExperimentCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
-          <Button size="sm" variant="ghost" className="h-8 text-[11px] px-2.5 gap-1 border border-border/50">
-            View Details <ChevronRight className="h-3 w-3" />
-          </Button>
-          {experiment.status === "running" && (
-            <Button size="sm" variant="outline" className="h-8 text-[11px] px-2.5 gap-1" onClick={() => onToggle(experiment.id, "paused")}>
-              <Pause className="h-3 w-3" /> Pause
+        <div className="flex items-center gap-2 pt-1 flex-wrap">
+          {experiment.status === "planned" && (
+            <Button size="sm" className="h-8 text-[11px] px-2.5 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={() => onToggle(experiment.id, "running")}>
+              <Play className="h-3 w-3" /> Launch
             </Button>
+          )}
+          {experiment.status === "running" && (
+            <>
+              <Button size="sm" variant="outline" className="h-8 text-[11px] px-2.5 gap-1" onClick={() => onToggle(experiment.id, "paused")}>
+                <Pause className="h-3 w-3" /> Pause
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-[11px] px-2.5 gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10" onClick={() => onToggle(experiment.id, "completed")}>
+                <CheckCircle2 className="h-3 w-3" /> Complete
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 text-[11px] px-2.5 gap-1 text-muted-foreground hover:text-red-400" onClick={() => onToggle(experiment.id, "abandoned")}>
+                <StopCircle className="h-3 w-3" /> Abandon
+              </Button>
+            </>
           )}
           {experiment.status === "paused" && (
-            <Button size="sm" variant="outline" className="h-8 text-[11px] px-2.5 gap-1" onClick={() => onToggle(experiment.id, "running")}>
-              <Play className="h-3 w-3" /> Resume
-            </Button>
+            <>
+              <Button size="sm" variant="outline" className="h-8 text-[11px] px-2.5 gap-1" onClick={() => onToggle(experiment.id, "running")}>
+                <Play className="h-3 w-3" /> Resume
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-[11px] px-2.5 gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10" onClick={() => onToggle(experiment.id, "completed")}>
+                <CheckCircle2 className="h-3 w-3" /> Complete
+              </Button>
+            </>
           )}
-          {(experiment.status === "completed" || (experiment.confidence !== null && experiment.confidence >= 90)) && (
+          {experiment.status === "completed" && (
             <Button size="sm" className="h-8 text-[11px] px-3 gap-1.5 ml-auto bg-emerald-600 hover:bg-emerald-700 text-white border-0">
               <Zap className="h-3 w-3" /> Implement Winner
             </Button>
@@ -375,6 +391,134 @@ function LearningLoop({ experiments }: { experiments: Experiment[] }) {
   );
 }
 
+// ─── create experiment modal ──────────────────────────────────────────────────
+
+interface CreateModalProps {
+  onClose: () => void;
+  onCreate: (payload: {
+    title: string; hypothesis: string; targetMetric: string;
+    variants: { name: string; isControl: boolean }[];
+  }) => Promise<void>;
+  creating: boolean;
+  error: string | null;
+}
+
+function CreateModal({ onClose, onCreate, creating, error }: CreateModalProps) {
+  const [title, setTitle]       = useState("");
+  const [hypothesis, setHypothesis] = useState("");
+  const [metric, setMetric]     = useState("");
+  const [controlName, setControlName]     = useState("Control");
+  const [challengerName, setChallengerName] = useState("Challenger");
+
+  const canSubmit = title.trim() && hypothesis.trim() && metric.trim() && controlName.trim() && challengerName.trim();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    await onCreate({
+      title:        title.trim(),
+      hypothesis:   hypothesis.trim(),
+      targetMetric: metric.trim(),
+      variants: [
+        { name: controlName.trim(),    isControl: true  },
+        { name: challengerName.trim(), isControl: false },
+      ],
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FlaskConical className="h-4 w-4 text-primary" />
+            <h2 className="text-[14px] font-semibold text-foreground">New Experiment</h2>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-[12px] text-red-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium text-muted-foreground">Title</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. New onboarding CTA test"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium text-muted-foreground">Hypothesis</label>
+            <textarea
+              value={hypothesis}
+              onChange={(e) => setHypothesis(e.target.value)}
+              placeholder="If we change X, then Y will improve because Z."
+              rows={2}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium text-muted-foreground">Target Metric</label>
+            <input
+              type="text"
+              value={metric}
+              onChange={(e) => setMetric(e.target.value)}
+              placeholder="e.g. conversion_rate, DAU, signup_rate"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">Control (A)</label>
+              <input
+                type="text"
+                value={controlName}
+                onChange={(e) => setControlName(e.target.value)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">Challenger (B)</label>
+              <input
+                type="text"
+                value={challengerName}
+                onChange={(e) => setChallengerName(e.target.value)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <Button type="button" variant="outline" size="sm" className="flex-1 text-[12px]" onClick={onClose} disabled={creating}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" className="flex-1 text-[12px] gap-1.5" disabled={creating || !canSubmit}>
+              {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              {creating ? "Creating…" : "Create"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 export function ExperimentsView() {
@@ -387,9 +531,20 @@ export function ExperimentsView() {
     { refreshInterval: 15_000 }
   );
 
+  const { lastEvent } = useSpecklaBus();
+  useEffect(() => {
+    if (!lastEvent) return;
+    if (lastEvent.type === "experiment.started" || lastEvent.type === "experiment.completed") {
+      refetch();
+    }
+  }, [lastEvent, refetch]);
+
   const experiments: Experiment[] = (apiData?.experiments ?? []).map(mapExperiment);
 
   const [filter, setFilter] = useState<ExperimentStatus | "all">("all");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating]               = useState(false);
+  const [createError, setCreateError]         = useState<string | null>(null);
 
   const handleToggle = useCallback(async (id: string, newStatus: ExperimentStatus) => {
     if (!user) return;
@@ -405,6 +560,33 @@ export function ExperimentsView() {
       // non-fatal
     }
   }, [user, refetch]);
+
+  const handleCreate = useCallback(async (payload: {
+    title: string; hypothesis: string; targetMetric: string;
+    variants: { name: string; isControl: boolean }[];
+  }) => {
+    if (!user) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/experiments", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, workspaceId: workspaceId ?? null }),
+      });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        throw new Error(body.error ?? `Request failed: ${res.status}`);
+      }
+      setShowCreateModal(false);
+      refetch();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create experiment");
+    } finally {
+      setCreating(false);
+    }
+  }, [user, workspaceId, refetch]);
 
   const planned   = experiments.filter((e) => e.status === "planned").length;
   const running   = experiments.filter((e) => e.status === "running").length;
@@ -444,6 +626,14 @@ export function ExperimentsView() {
 
   return (
     <div className="h-full overflow-y-auto bg-background">
+      {showCreateModal && (
+        <CreateModal
+          onClose={() => setShowCreateModal(false)}
+          onCreate={handleCreate}
+          creating={creating}
+          error={createError}
+        />
+      )}
       <div className="max-w-[900px] mx-auto px-5 py-6 space-y-6">
 
         {/* Page header */}
@@ -465,6 +655,9 @@ export function ExperimentsView() {
                 {running} running
               </span>
             )}
+            <Button size="sm" className="h-7 text-[11px] gap-1 px-2.5" onClick={() => { setCreateError(null); setShowCreateModal(true); }}>
+              <Plus className="h-3 w-3" /> New Experiment
+            </Button>
           </div>
         </div>
 
