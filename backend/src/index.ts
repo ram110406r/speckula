@@ -1,10 +1,11 @@
 import * as Sentry from '@sentry/node';
 import dotenv from 'dotenv';
 import createServer from './app';
-import { disconnectDb } from './lib/db';
+import { db, disconnectDb } from './lib/db';
 import { getFirebaseApp } from './lib/firebaseAdmin';
 import { validateEnv } from './lib/env';
 import { sweepExpiredRecords } from './scripts/retentionSweeper';
+import { sendWeeklyDigest } from './scripts/weeklyDigest';
 
 // Load environment variables before Sentry so DSN is available.
 dotenv.config();
@@ -59,6 +60,20 @@ async function startServer() {
     console.log(`AI backend powered by Groq (llama-3.3-70b-versatile)`);
     console.log(`Environment: ${NODE_ENV}`);
 
+    // Non-fatal DB probe — warns loudly if PostgreSQL is unavailable at startup
+    // without crashing. The lazy db proxy means the server stays up and routes
+    // return 503 individually until connectivity is restored.
+    setTimeout(async () => {
+      try {
+        await db.$queryRaw`SELECT 1`;
+        console.log('[db] PostgreSQL connection verified.');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`\n[db] WARNING: PostgreSQL unavailable at startup — ${msg}`);
+        console.warn('[db] Routes requiring the database will return errors until the connection is restored.\n');
+      }
+    }, 5_000);
+
     // Run an initial sweep 60 s after startup (avoids cold-start DB pressure),
     // then repeat every 6 hours. Failures are logged but never crash the server.
     const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
@@ -72,6 +87,33 @@ async function startServer() {
         );
       }, SIX_HOURS_MS);
     }, 60_000);
+
+    // Schedule the weekly digest email for every Monday at 08:00 UTC.
+    // Silently skips when RESEND_API_KEY is not configured.
+    const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const msUntilNextMonday08utc = (): number => {
+      const now = new Date();
+      const target = new Date(now);
+      target.setUTCHours(8, 0, 0, 0);
+      // Advance to Monday (day 1); (8 - day) % 7 gives 0 when already Monday.
+      target.setUTCDate(target.getUTCDate() + (8 - target.getUTCDay()) % 7);
+      // If the computed time is in the past (Monday already past 08:00), skip to next week.
+      if (target.getTime() <= now.getTime()) target.setUTCDate(target.getUTCDate() + 7);
+      return target.getTime() - now.getTime();
+    };
+    const firstDigestMs = msUntilNextMonday08utc();
+    const nextRun = new Date(Date.now() + firstDigestMs).toUTCString();
+    console.log(`[digest] Next weekly digest scheduled for ${nextRun}`);
+    setTimeout(() => {
+      sendWeeklyDigest().catch((err) =>
+        fastify.log.error({ err }, '[digest] scheduled run failed')
+      );
+      setInterval(() => {
+        sendWeeklyDigest().catch((err) =>
+          fastify.log.error({ err }, '[digest] scheduled run failed')
+        );
+      }, ONE_WEEK_MS);
+    }, firstDigestMs);
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

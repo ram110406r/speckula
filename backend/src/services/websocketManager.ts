@@ -134,6 +134,24 @@ export const wsManager = {
     }).catch(() => undefined);
   },
 
+  // Swap the workspace subscription for an existing connection.
+  // Used when the client sends a workspace.subscribe / workspace.unsubscribe message.
+  updateWorkspaceSubscription(connectionId: string, newWorkspaceId: string | null): void {
+    const entry = connections.get(connectionId);
+    if (!entry) return;
+
+    // Release the old workspace subscription (decrements refcount).
+    entry.unsubscribeWorkspace?.();
+
+    const unsubscribeWorkspace = newWorkspaceId ? ensureWorkspaceSubscription(newWorkspaceId) : undefined;
+    connections.set(connectionId, { ...entry, workspaceId: newWorkspaceId, unsubscribeWorkspace });
+
+    db.webSocketConnection.update({
+      where: { connectionId },
+      data:  { workspaceId: newWorkspaceId },
+    }).catch(() => undefined);
+  },
+
   activeCount(): number {
     return connections.size;
   },

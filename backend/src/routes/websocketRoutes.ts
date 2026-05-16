@@ -80,14 +80,41 @@ export default async function websocketRoutes(fastify: FastifyInstance) {
 
       // ── Message handler ────────────────────────────────────────────────────
       socket.on('message', (raw: Buffer | string) => {
-        let msg: { type?: string; channel?: string } = {};
+        let msg: { type?: string; channel?: string; workspaceId?: string } = {};
         try { msg = JSON.parse(raw.toString()); } catch { return; }
 
         if (msg.type === 'ping') {
           wsManager.ping(connectionId);
           socket.send(JSON.stringify({ type: 'pong', serverTime: new Date().toISOString() }));
+          return;
         }
-        // Future: workspace channel subscriptions, filtered event types, etc.
+
+        // workspace.subscribe — verify membership then switch workspace channel.
+        if (msg.type === 'workspace.subscribe' && msg.workspaceId) {
+          const targetId = msg.workspaceId;
+          db.workspaceMember
+            .findUnique({
+              where: { workspaceId_userId: { workspaceId: targetId, userId } },
+              select: { role: true },
+            })
+            .then((membership) => {
+              if (!membership) {
+                socket.send(JSON.stringify({ type: 'error', code: 'forbidden', message: 'Not a workspace member' }));
+                return;
+              }
+              wsManager.updateWorkspaceSubscription(connectionId, targetId);
+              socket.send(JSON.stringify({ type: 'workspace.subscribed', workspaceId: targetId }));
+            })
+            .catch(() => undefined);
+          return;
+        }
+
+        // workspace.unsubscribe — detach from workspace events.
+        if (msg.type === 'workspace.unsubscribe') {
+          wsManager.updateWorkspaceSubscription(connectionId, null);
+          socket.send(JSON.stringify({ type: 'workspace.unsubscribed' }));
+          return;
+        }
       });
 
       // ── Close handler ──────────────────────────────────────────────────────
