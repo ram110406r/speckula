@@ -1,32 +1,36 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Bell, CheckCheck, Trash2, Lightbulb, Compass,
   LayoutDashboard, CheckSquare, Sparkles, Users,
   Settings, X, Loader2
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
-import {
-  subscribeToNotifications,
-  markNotificationRead,
-  markAllNotificationsRead,
-  dismissNotification,
-  clearAllNotifications,
-  type SpNotification,
-  type NotifType,
-} from "@/lib/firebase/db";
+import { useApi } from "@/hooks/useApi";
+import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
+type NotifType = "ai" | "team" | "signal" | "decision" | "spec" | "task";
 type FilterKey = "all" | NotifType;
 
+interface ApiNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  metadata: unknown | null;
+  read: boolean;
+  createdAt: string;
+}
+
 const TAB_CONFIG: { key: FilterKey; label: string; icon: React.ElementType }[] = [
-  { key: "all",      label: "All",       icon: Bell           },
-  { key: "ai",       label: "AI",        icon: Sparkles       },
-  { key: "team",     label: "Team",      icon: Users          },
-  { key: "signal",   label: "Signals",   icon: Lightbulb      },
-  { key: "decision", label: "Decisions", icon: Compass        },
+  { key: "all",      label: "All",       icon: Bell            },
+  { key: "ai",       label: "AI",        icon: Sparkles        },
+  { key: "team",     label: "Team",      icon: Users           },
+  { key: "signal",   label: "Signals",   icon: Lightbulb       },
+  { key: "decision", label: "Decisions", icon: Compass         },
   { key: "spec",     label: "Specs",     icon: LayoutDashboard },
-  { key: "task",     label: "Tasks",     icon: CheckSquare    },
+  { key: "task",     label: "Tasks",     icon: CheckSquare     },
 ];
 
 const TYPE_STYLES: Record<NotifType, { icon: React.ElementType; color: string; bg: string }> = {
@@ -38,9 +42,27 @@ const TYPE_STYLES: Record<NotifType, { icon: React.ElementType; color: string; b
   task:     { icon: CheckSquare,     color: "text-purple-500", bg: "bg-purple-500/10" },
 };
 
-function timeAgo(ts: SpNotification["createdAt"]): string {
-  if (!ts) return "";
-  const ms = Date.now() - ts.toDate().getTime();
+const BACKEND_TYPE_MAP: Record<string, NotifType> = {
+  analysis_completed:     "ai",
+  job_failed:             "ai",
+  extension_disconnected: "ai",
+  auth_expired:           "ai",
+  competitor_updated:     "signal",
+  pricing_changed:        "signal",
+  market_signal:          "signal",
+  decision_scored:        "decision",
+  learning_generated:     "decision",
+  task_created:           "task",
+  spec_generated:         "spec",
+  roadmap_generated:      "spec",
+};
+
+function toNotifType(backendType: string): NotifType {
+  return BACKEND_TYPE_MAP[backendType] ?? "ai";
+}
+
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
   if (ms < 60_000) return "just now";
   if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
   if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
@@ -49,45 +71,57 @@ function timeAgo(ts: SpNotification["createdAt"]): string {
 
 export function NotificationsView() {
   const { user } = useAuth();
-  const [notifications, setNotifications] = useState<SpNotification[]>([]);
-  const [activeTab, setActiveTab]         = useState<FilterKey>("all");
-  const [loading, setLoading]             = useState(true);
+  const { lastEvent } = useSpecklaBus();
+  const [activeTab, setActiveTab] = useState<FilterKey>("all");
+
+  const { data, loading, refetch } = useApi<{ notifications: ApiNotification[]; unreadCount: number }>(
+    "/api/notifications",
+    { refreshInterval: 30_000 }
+  );
 
   useEffect(() => {
-    if (!user) { setLoading(false); return; }
-    const unsub = subscribeToNotifications(
-      user.uid,
-      (notifs) => { setNotifications(notifs); setLoading(false); },
-      () => setLoading(false)
-    );
-    return unsub;
-  }, [user]);
+    if (lastEvent?.type === "notification.created") refetch();
+  }, [lastEvent, refetch]);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const notifications = data?.notifications ?? [];
+  const unreadCount   = data?.unreadCount ?? 0;
 
-  const filtered = activeTab === "all"
-    ? notifications
-    : notifications.filter((n) => n.type === activeTab);
+  const filtered = notifications.filter((n) =>
+    activeTab === "all" || toNotifType(n.type) === activeTab
+  );
 
-  const handleMarkAllRead = async () => {
+  const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
     if (!user) return;
-    await markAllNotificationsRead(user.uid);
-  };
+    const token = await user.getIdToken();
+    await fetch(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(options.headers ?? {}),
+      },
+    });
+    refetch();
+  }, [user, refetch]);
 
-  const handleMarkRead = async (id: string) => {
-    if (!user || !id) return;
-    await markNotificationRead(user.uid, id);
-  };
+  const handleMarkRead = useCallback(async (id: string) => {
+    await authFetch("/api/notifications/read", {
+      method: "POST",
+      body: JSON.stringify({ ids: [id] }),
+    });
+  }, [authFetch]);
 
-  const handleDismiss = async (id: string) => {
-    if (!user || !id) return;
-    await dismissNotification(user.uid, id);
-  };
+  const handleMarkAllRead = useCallback(async () => {
+    await authFetch("/api/notifications/read-all", { method: "POST" });
+  }, [authFetch]);
 
-  const handleClearAll = async () => {
-    if (!user) return;
-    await clearAllNotifications(user.uid);
-  };
+  const handleDismiss = useCallback(async (id: string) => {
+    await authFetch(`/api/notifications/${id}`, { method: "DELETE" });
+  }, [authFetch]);
+
+  const handleClearAll = useCallback(async () => {
+    await authFetch("/api/notifications", { method: "DELETE" });
+  }, [authFetch]);
 
   return (
     <div className="h-full overflow-y-auto bg-background custom-scrollbar">
@@ -130,8 +164,8 @@ export function NotificationsView() {
         <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-4 custom-scrollbar">
           {TAB_CONFIG.map((tab) => {
             const count = tab.key === "all"
-              ? notifications.filter((n) => !n.read).length
-              : notifications.filter((n) => n.type === tab.key && !n.read).length;
+              ? unreadCount
+              : notifications.filter((n) => toNotifType(n.type) === tab.key && !n.read).length;
             return (
               <button
                 key={tab.key}
@@ -155,7 +189,7 @@ export function NotificationsView() {
         </div>
 
         {/* ── Content ── */}
-        {loading ? (
+        {loading && notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
@@ -170,11 +204,12 @@ export function NotificationsView() {
         ) : (
           <div className="space-y-2">
             {filtered.map((notif) => {
-              const style = TYPE_STYLES[notif.type];
+              const notifType = toNotifType(notif.type);
+              const style = TYPE_STYLES[notifType];
               return (
                 <div
                   key={notif.id}
-                  onClick={() => handleMarkRead(notif.id!)}
+                  onClick={() => handleMarkRead(notif.id)}
                   className={`group relative flex items-start gap-3 p-4 rounded-xl border transition-all cursor-pointer ${
                     notif.read
                       ? "border-border/40 bg-card hover:bg-muted/30"
@@ -194,16 +229,13 @@ export function NotificationsView() {
                       <p className="text-xs font-semibold truncate text-foreground">{notif.title}</p>
                       <span className="text-[10px] text-muted-foreground/60 shrink-0">{timeAgo(notif.createdAt)}</span>
                     </div>
-                    {notif.actor && (
-                      <p className="text-[10px] text-primary/70 mt-0.5">{notif.actor}</p>
-                    )}
                     <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed line-clamp-2">
                       {notif.body}
                     </p>
                   </div>
 
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDismiss(notif.id!); }}
+                    onClick={(e) => { e.stopPropagation(); handleDismiss(notif.id); }}
                     className="absolute top-3.5 right-3.5 p-1 rounded-md opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
                     aria-label="Dismiss"
                   >

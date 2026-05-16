@@ -112,21 +112,43 @@ export function ActivityView() {
       const items = backendActivity?.items ?? [];
       const mapped: ActivityEvent[] = items.map((it) => {
         const type: ActivityEventType =
-          it.eventType.startsWith("analysis.") ? "ai" :
-          it.eventType.includes("signal") || it.eventType.includes("insight") || it.eventType.includes("competitor") ? "signal" :
-          it.eventType.startsWith("workspace.") ? "auth" :
+          it.eventType.startsWith("analysis.") || it.eventType.startsWith("agent.") ||
+          it.eventType === "product_brain.updated" || it.eventType === "experiment.started" ||
+          it.eventType === "experiment.completed" || it.eventType === "notification.created" ? "ai" :
+          it.eventType.includes("signal") || it.eventType.includes("competitor") ? "signal" :
+          it.eventType === "insight.created" ? "signal" :
+          it.eventType === "decision.created" || it.eventType === "outcome.recorded" ||
+          it.eventType === "learning.generated" ? "decision" :
+          it.eventType === "task.created" ? "task" :
+          it.eventType === "specification.generated" || it.eventType === "roadmap.generated" ? "spec" :
+          it.eventType.startsWith("workspace.") || it.eventType.startsWith("auth.") ? "auth" :
           "ai";
 
         const actor = it.actorId === user.uid ? "You" : it.actorId;
         const action =
-          it.eventType === "analysis.queued" ? "queued an analysis" :
-          it.eventType === "analysis.started" ? "started an analysis" :
-          it.eventType === "analysis.completed" ? "completed an analysis" :
-          it.eventType === "analysis.failed" ? "analysis failed" :
-          it.eventType === "insight.created" ? "captured insight" :
-          it.eventType === "market_signal.detected" ? "detected market signal" :
-          it.eventType === "competitor.updated" ? "updated competitor" :
-          it.eventType;
+          it.eventType === "analysis.queued"          ? "queued an analysis" :
+          it.eventType === "analysis.started"         ? "started an analysis" :
+          it.eventType === "analysis.completed"       ? "completed an analysis" :
+          it.eventType === "analysis.failed"          ? "analysis failed" :
+          it.eventType === "insight.created"          ? "captured insight" :
+          it.eventType === "market_signal.detected"   ? "detected a market signal" :
+          it.eventType === "competitor.updated"       ? "updated competitor data" :
+          it.eventType === "competitor.insight.created" ? "added competitor insight" :
+          it.eventType === "competitor.added"         ? "added a competitor" :
+          it.eventType === "decision.created"         ? "created a decision" :
+          it.eventType === "outcome.recorded"         ? "recorded an outcome" :
+          it.eventType === "learning.generated"       ? "generated a learning" :
+          it.eventType === "task.created"             ? "created a task" :
+          it.eventType === "specification.generated"  ? "generated a spec" :
+          it.eventType === "roadmap.generated"        ? "generated a roadmap" :
+          it.eventType === "experiment.started"       ? "started an experiment" :
+          it.eventType === "experiment.completed"     ? "completed an experiment" :
+          it.eventType === "agent.started"            ? "started agent run" :
+          it.eventType === "agent.completed"          ? "completed agent run" :
+          it.eventType === "product_brain.updated"    ? "updated product brain" :
+          it.eventType === "workspace.member.added"   ? "added a member" :
+          it.eventType === "workspace.member.removed" ? "removed a member" :
+          it.eventType.replace(/[._]/g, " ");
 
         return {
           id: it.id,
@@ -154,7 +176,16 @@ export function ActivityView() {
   useEffect(() => {
     if (!activeWorkspaceId) return;
     if (!lastEvent) return;
-    if (lastEvent.type === "activity.created" || lastEvent.type.startsWith("analysis.") || lastEvent.type === "insight.created") {
+    const refetchTypes = new Set([
+      "activity.created", "insight.created",
+      "market_signal.detected", "competitor.updated", "competitor.insight.created", "competitor.added",
+      "decision.created", "outcome.recorded", "learning.generated",
+      "task.created", "specification.generated", "roadmap.generated",
+      "experiment.started", "experiment.completed",
+      "agent.started", "agent.completed",
+      "product_brain.updated",
+    ]);
+    if (refetchTypes.has(lastEvent.type) || lastEvent.type.startsWith("analysis.")) {
       refetchBackend();
     }
   }, [activeWorkspaceId, lastEvent, refetchBackend]);
