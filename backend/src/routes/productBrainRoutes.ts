@@ -28,7 +28,7 @@ const createEntrySchema = z.object({
 const searchSchema = z.object({
   q:           z.string().min(2).max(1000),
   entryType:   z.enum(ENTRY_TYPES as [EntryType, ...EntryType[]]).optional(),
-  workspaceId: z.string().nullish(),
+  workspaceId: z.string().optional(),
   limit:       z.coerce.number().int().min(1).max(50).default(10),
 });
 
