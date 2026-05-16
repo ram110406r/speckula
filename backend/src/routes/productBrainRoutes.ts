@@ -22,13 +22,13 @@ const createEntrySchema = z.object({
   sourceUrl:   z.string().url().optional(),
   confidence:  z.number().min(0).max(1).optional(),
   tags:        z.array(z.string()).max(20).optional(),
-  workspaceId: z.string().optional(),
+  workspaceId: z.string().nullish(),
 }).strict();
 
 const searchSchema = z.object({
   q:           z.string().min(2).max(1000),
   entryType:   z.enum(ENTRY_TYPES as [EntryType, ...EntryType[]]).optional(),
-  workspaceId: z.string().optional(),
+  workspaceId: z.string().nullish(),
   limit:       z.coerce.number().int().min(1).max(50).default(10),
 });
 

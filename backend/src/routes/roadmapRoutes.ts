@@ -18,10 +18,10 @@ const ItemSchema = z.object({
   description: z.string().max(1000).optional(),
   quarter:     z.string().regex(/^Q[1-4]\s\d{4}$/, 'Format must be "Q1 2026"'),
   priority:    z.enum(['high', 'medium', 'low']).default('medium'),
-  decisionId:  z.string().optional(),
+  decisionId:  z.string().nullish(),
   dependsOn:   z.array(z.string()).optional(),
   tags:        z.array(z.string()).optional(),
-  workspaceId: z.string().optional(),
+  workspaceId: z.string().nullish(),
 });
 
 const UpdateSchema = ItemSchema.partial();
@@ -29,7 +29,7 @@ const UpdateSchema = ItemSchema.partial();
 const GenerateSchema = z.object({
   quarter:     z.string().regex(/^Q[1-4]\s\d{4}$/),
   context:     z.string().min(10).max(2000),
-  workspaceId: z.string().optional(),
+  workspaceId: z.string().nullish(),
 });
 
 const AI_ROADMAP_PROMPT = (quarter: string, context: string, workspaceEvidence: string) => `

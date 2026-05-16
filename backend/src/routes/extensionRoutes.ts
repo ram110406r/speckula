@@ -16,7 +16,7 @@ const requireUserId = (request: FastifyRequest, reply: FastifyReply): string | n
 const heartbeatSchema = z.object({
   extensionVersion: z.string().min(1).max(20),
   browserType:      z.string().min(1).max(30),
-  workspaceId:      z.string().optional(),
+  workspaceId:      z.string().nullish(),
   metadata:         z.record(z.string(), z.unknown()).optional(),
 }).strict();
 
@@ -26,7 +26,7 @@ const analyzeSchema = z.object({
   sourceUrl:    z.string().url().optional(),
   selectedText: z.string().max(5_000).optional(),
   projectId:    z.string().optional(),
-  workspaceId:  z.string().optional(),
+  workspaceId:  z.string().nullish(),
 }).strict();
 
 export default async function extensionRoutes(fastify: FastifyInstance) {

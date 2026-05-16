@@ -18,7 +18,7 @@ const CreateExperimentSchema = z.object({
   title:        z.string().min(1).max(200),
   hypothesis:   z.string().min(1).max(1000),
   targetMetric: z.string().min(1).max(100),
-  workspaceId:  z.string().optional(),
+  workspaceId:  z.string().nullish(),
   tags:         z.array(z.string()).optional(),
   variants:     z.array(z.object({
     name:      z.string().min(1),

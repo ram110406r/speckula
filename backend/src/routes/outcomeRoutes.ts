@@ -19,7 +19,7 @@ const CreateOutcomeSchema = z.object({
   expectedMetric:    z.string().min(1),
   expectedValue:     z.number(),
   expectedTimeframe: z.string().min(1),
-  workspaceId:       z.string().optional(),
+  workspaceId:       z.string().nullish(),
 });
 
 const RecordActualSchema = z.object({

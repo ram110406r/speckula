@@ -16,7 +16,7 @@ const requireUserId = (req: FastifyRequest, reply: FastifyReply): string | null 
 const StartSchema = z.object({
   idea:        z.string().min(1).max(2000),
   depth:       z.enum(['quick', 'standard', 'deep']).default('standard'),
-  workspaceId: z.string().optional(),
+  workspaceId: z.string().nullish(),
 });
 
 const StepSchema = z.object({
