@@ -3,6 +3,7 @@
 // Gracefully degrades when OPENAI_API_KEY is not set: returns null and skips
 // embedding so the rest of the ingestion pipeline still works.
 
+import { Prisma } from '@prisma/client';
 import { db } from '../lib/db.js';
 
 let _openai: import('openai').default | null = null;
@@ -82,17 +83,22 @@ export const semanticSearch = async (
   try {
     type Row = { entryId: string; distance: number };
 
+    // Build optional filter clauses as composable Prisma.sql fragments so they
+    // are safely parameterized without embedding raw queryRaw calls as values.
+    const entryTypeFilter = entryType   ? Prisma.sql`AND pbe."entryType" = ${entryType}`   : Prisma.empty;
+    const workspaceFilter = workspaceId ? Prisma.sql`AND pbe."workspaceId" = ${workspaceId}` : Prisma.empty;
+
     // Join SemanticEmbedding with ProductBrainEntry to apply user/type filters.
-    const rows = await db.$queryRaw<Row[]>`
+    const rows = await db.$queryRaw<Row[]>(Prisma.sql`
       SELECT se."entryId", (se."embedding" <=> ${vectorLiteral}::vector) AS distance
       FROM "SemanticEmbedding" se
       JOIN "ProductBrainEntry" pbe ON pbe."id" = se."entryId"
       WHERE pbe."userId" = ${userId}
-        ${entryType    ? db.$queryRaw`AND pbe."entryType" = ${entryType}` as unknown as typeof db.$queryRaw : db.$queryRaw``}
-        ${workspaceId  ? db.$queryRaw`AND pbe."workspaceId" = ${workspaceId}` as unknown as typeof db.$queryRaw : db.$queryRaw``}
+      ${entryTypeFilter}
+      ${workspaceFilter}
       ORDER BY distance ASC
       LIMIT ${limit}
-    `;
+    `);
     return rows;
   } catch (err) {
     console.warn('[embeddingService] semanticSearch failed:', err instanceof Error ? err.message : err);
