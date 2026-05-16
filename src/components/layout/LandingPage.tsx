@@ -204,20 +204,75 @@ export function LandingPage() {
                 </AnimateIn>
               </div>
 
-              {/* Right: Product Preview */}
+              {/* Right: PM Workflow Visualization */}
               <AnimateIn delay={200} className="lg:col-span-1">
-                <div className="relative aspect-[4/3] bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-300 dark:border-slate-600">
-                  {/* Placeholder for product screenshot - replace with real image */}
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="text-center space-y-3">
-                      <div className="flex justify-center">
-                        <div className="h-16 w-16 rounded-xl bg-slate-900 dark:bg-white flex items-center justify-center opacity-20">
-                          <Lightbulb className="h-8 w-8" />
+                <div className="relative space-y-4">
+                  {/* Workflow Cards */}
+                  <div className="space-y-3">
+                    {/* Stage 1: Input */}
+                    <div className="bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 hover:border-slate-900 dark:hover:border-white transition-all shadow-sm">
+                      <div className="flex items-start gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 font-semibold text-sm">1</div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-slate-900 dark:text-white">Capture Customer Data</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Interviews, reviews, feedback, support tickets</p>
                         </div>
                       </div>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Product Screenshot</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-500 max-w-xs mx-auto">Replace with real product image showing insights dashboard and PRD generation</p>
                     </div>
+
+                    {/* Arrow */}
+                    <div className="flex justify-center">
+                      <div className="text-slate-400 dark:text-slate-600">↓</div>
+                    </div>
+
+                    {/* Stage 2: Analysis */}
+                    <div className="bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 hover:border-slate-900 dark:hover:border-white transition-all shadow-sm">
+                      <div className="flex items-start gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 font-semibold text-sm">2</div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-slate-900 dark:text-white">AI Extracts Insights</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Pain points, opportunities, patterns detected</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div className="flex justify-center">
+                      <div className="text-slate-400 dark:text-slate-600">↓</div>
+                    </div>
+
+                    {/* Stage 3: Generation */}
+                    <div className="bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 hover:border-slate-900 dark:hover:border-white transition-all shadow-sm">
+                      <div className="flex items-start gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0 font-semibold text-sm">3</div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-slate-900 dark:text-white">Generate PRD</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Complete specification with acceptance criteria</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div className="flex justify-center">
+                      <div className="text-slate-400 dark:text-slate-600">↓</div>
+                    </div>
+
+                    {/* Stage 4: Execution */}
+                    <div className="bg-white dark:bg-slate-800 border-2 border-emerald-500 dark:border-emerald-600 rounded-xl p-4 sm:p-5 shadow-lg shadow-emerald-500/10 dark:shadow-emerald-600/10">
+                      <div className="flex items-start gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-emerald-500 flex items-center justify-center text-white shrink-0 font-semibold text-sm">✓</div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-slate-900 dark:text-white">Ship & Measure</p>
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">Tasks, roadmap, outcomes tracked</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Time Saved Badge */}
+                  <div className="mt-6 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-center">
+                    <p className="text-xs text-slate-600 dark:text-slate-400">Average time saved per cycle</p>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">2.5 hours</p>
                   </div>
                 </div>
 
