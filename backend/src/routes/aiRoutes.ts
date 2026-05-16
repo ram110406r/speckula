@@ -1,8 +1,16 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { groqService, getCircuitBreakerState } from '../services/groqService.js';
+import { productBrainService } from '../services/productBrainService.js';
 import { z } from 'zod';
 import { utcDayStart } from '../lib/dateUtils.js';
 import { classifyPrismaError } from '../lib/prismaErrors.js';
+
+const INSIGHT_CATEGORY_TO_SIGNAL_TYPE: Record<string, string> = {
+  'pain-point':    'customer_feedback',
+  'opportunity':   'market_shift',
+  'user-segment':  'trend',
+  'pattern':       'trend',
+};
 
 const MAX_CONTENT_CHARS = 80_000;
 
@@ -119,6 +127,25 @@ export default async function aiRoutes(fastify: FastifyInstance) {
           userId,
           body._meta
         );
+
+        // Persist each insight as a MarketSignal so the Market Intelligence
+        // view (which reads PostgreSQL) shows editor-extracted signals too.
+        if (Array.isArray(result.insights) && result.insights.length > 0) {
+          Promise.all(
+            result.insights.map((insight: { title?: string; description?: string; category?: string }) => {
+              if (!insight?.title || !insight?.description) return Promise.resolve();
+              const signalType = INSIGHT_CATEGORY_TO_SIGNAL_TYPE[insight.category ?? ''] ?? 'trend';
+              return productBrainService.saveMarketSignal(userId, {
+                signalType,
+                title:    insight.title,
+                content:  insight.description,
+                strength: 0.7,
+                tags:     insight.category ? [insight.category] : [],
+              });
+            })
+          ).catch(() => undefined);
+        }
+
         reply.code(200).send({ ok: true, data: result });
       } catch (error) {
         fastify.log.error(error);
