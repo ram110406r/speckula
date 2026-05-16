@@ -481,45 +481,45 @@ export function Editor() {
     <div className="flex flex-col h-full bg-slate-50 dark:bg-background" onMouseUp={handleMouseUp}>
 
       {/* ── Top bar ── */}
-      <div className="border-b border-border bg-card px-3 sm:px-5 py-2.5 shrink-0">
-        <div className="flex items-center gap-2 sm:gap-3">
+      <div className="border-b border-border bg-card px-3 sm:px-4 lg:px-5 py-2 sm:py-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 flex-wrap">
           <Input
             value={currentDoc?.title ?? "Untitled Document"}
             onChange={(e) => handleTitleChange(e.target.value)}
-            className="h-9 flex-1 max-w-full sm:max-w-[400px] rounded-md border-border/70 bg-transparent px-2 text-sm font-medium focus-visible:bg-background"
+            className="h-8 sm:h-9 flex-1 max-w-full sm:max-w-[300px] lg:max-w-[400px] rounded-md border-border/70 bg-transparent px-2 text-xs sm:text-sm font-medium focus-visible:bg-background"
             placeholder="Document title"
           />
 
           {/* Save status */}
-          <span className={`hidden sm:inline font-mono text-[10px] transition-opacity duration-300 shrink-0 ${
+          <span className={`hidden sm:inline font-mono text-[9px] sm:text-[10px] transition-opacity duration-300 shrink-0 ${
             saveStatus === "saving" ? "text-muted-foreground opacity-70" :
             saveStatus === "saved"  ? "text-emerald-500 opacity-80" : "opacity-0"
           }`}>
             {saveStatus === "saving" ? "Saving…" : saveLabel}
           </span>
 
-          <div className="flex items-center gap-1.5 ml-auto">
+          <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 ml-auto">
             {/* Export */}
             <button
               onClick={handleExport}
               disabled={blocksEmpty}
               title="Copy as Markdown"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-border bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-[4px] font-mono text-[10px] sm:text-[11px] font-medium border border-border bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-30 disabled:cursor-not-allowed h-8 sm:h-auto"
             >
-              <Copy className="h-3 w-3" />
+              <Copy className="h-3 w-3 shrink-0" />
               <span className="hidden sm:inline">Export</span>
             </button>
 
             {/* Import URL */}
             <button
               onClick={() => setShowURLImport((v) => !v)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border transition-all ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-[4px] font-mono text-[10px] sm:text-[11px] font-medium border transition-all h-8 sm:h-auto ${
                 showURLImport
                   ? "border-primary/40 bg-primary/[0.07] text-primary"
                   : "border-border bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
             >
-              <Link2 className="h-3 w-3" />
+              <Link2 className="h-3 w-3 shrink-0" />
               <span className="hidden sm:inline">Import URL</span>
             </button>
 
@@ -528,9 +528,9 @@ export function Editor() {
               onClick={handleExtractSignals}
               disabled={blocksEmpty || isExtractingSignals}
               title="Extract signals from this document and go to Signals view"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] font-mono text-[11px] font-medium border border-primary/40 bg-primary/[0.07] text-primary hover:bg-primary/15 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-[4px] font-mono text-[10px] sm:text-[11px] font-medium border border-primary/40 bg-primary/[0.07] text-primary hover:bg-primary/15 transition-all disabled:opacity-30 disabled:cursor-not-allowed h-8 sm:h-auto"
             >
-              {isExtractingSignals ? <Loader2 className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
+              {isExtractingSignals ? <Loader2 className="h-3 w-3 animate-spin shrink-0" /> : <Brain className="h-3 w-3 shrink-0" />}
               <span className="hidden sm:inline">{isExtractingSignals ? "Extracting…" : "Extract Signals"}</span>
             </button>
           </div>
@@ -581,7 +581,7 @@ export function Editor() {
                 <div
                   key={def.key}
                   id={`block-${def.key}`}
-                  className="w-full shrink-0 h-full snap-start p-3 sm:p-4"
+                  className="w-full shrink-0 h-full snap-start p-2 sm:p-3 lg:p-4"
                 >
                   <ResearchBlock
                     def={def}
@@ -624,10 +624,10 @@ export function Editor() {
       {!showMobileInsights && (
         <button
           onClick={() => setShowMobileInsights(true)}
-          className="lg:hidden fixed bottom-5 right-4 z-40 flex items-center gap-2 px-4 py-2.5 rounded-full bg-primary text-primary-foreground shadow-lg font-mono text-[11px] font-semibold"
+          className="lg:hidden fixed bottom-4 right-3 sm:right-4 z-40 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full bg-primary text-primary-foreground shadow-lg font-mono text-[10px] sm:text-[11px] font-semibold"
         >
-          <Brain className="h-3.5 w-3.5" />
-          Insights{analysis ? " ✓" : ""}
+          <Brain className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+          <span>Insights{analysis ? " ✓" : ""}</span>
         </button>
       )}
 
@@ -638,11 +638,11 @@ export function Editor() {
             className="flex-1 bg-black/40 backdrop-blur-sm"
             onClick={() => setShowMobileInsights(false)}
           />
-          <div className="bg-card border-t border-border rounded-t-2xl h-[72vh] flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 shrink-0">
-              <div className="flex items-center gap-2">
-                <Brain className="h-3.5 w-3.5 text-primary" />
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] font-semibold text-foreground/70">
+          <div className="bg-card border-t border-border rounded-t-2xl h-[70vh] sm:h-[72vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-border/60 shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Brain className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary" />
+                <span className="font-mono text-[9px] sm:text-[10px] uppercase tracking-[0.1em] font-semibold text-foreground/70">
                   Insight Engine
                 </span>
               </div>
@@ -738,32 +738,32 @@ function EmptyStateTemplates({
   onDismiss: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 py-8 text-center">
-      <div className="h-12 w-12 rounded-2xl border border-border flex items-center justify-center mb-4 bg-card">
-        <FileText className="h-6 w-6 text-muted-foreground/30" />
+    <div className="flex flex-col items-center justify-center min-h-[60vh] px-3 sm:px-4 py-6 sm:py-8 text-center">
+      <div className="h-11 sm:h-12 w-11 sm:w-12 rounded-2xl border border-border flex items-center justify-center mb-3 sm:mb-4 bg-card">
+        <FileText className="h-5 sm:h-6 w-5 sm:w-6 text-muted-foreground/30" />
       </div>
-      <h3 className="text-[15px] font-semibold text-foreground mb-1.5">Start your research</h3>
-      <p className="text-[12px] text-muted-foreground/60 mb-6 max-w-xs leading-relaxed">
+      <h3 className="text-[14px] sm:text-[15px] font-semibold text-foreground mb-1.5">Start your research</h3>
+      <p className="text-[11px] sm:text-[12px] text-muted-foreground/60 mb-4 sm:mb-6 max-w-xs leading-relaxed">
         Pick a template to pre-fill the blocks with a structured starting point, or start from scratch.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-xl mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 w-full max-w-xl mb-4 sm:mb-5">
         {templates.map((tpl) => (
           <button
             key={tpl.id}
             onClick={() => onApply(tpl)}
-            className="flex flex-col items-start gap-1.5 rounded-xl border border-border bg-card px-4 py-3.5 text-left hover:border-primary/40 hover:bg-primary/[0.04] hover:shadow-sm transition-all duration-150 group"
+            className="flex flex-col items-start gap-1 sm:gap-1.5 rounded-lg sm:rounded-xl border border-border bg-card px-3 sm:px-4 py-2.5 sm:py-3.5 text-left hover:border-primary/40 hover:bg-primary/[0.04] hover:shadow-sm transition-all duration-150 group"
           >
-            <span className="text-xl">{tpl.emoji}</span>
-            <span className="font-mono text-[11px] font-semibold text-foreground group-hover:text-primary transition-colors">
+            <span className="text-lg sm:text-xl">{tpl.emoji}</span>
+            <span className="font-mono text-[10px] sm:text-[11px] font-semibold text-foreground group-hover:text-primary transition-colors">
               {tpl.label}
             </span>
-            <span className="text-[10px] text-muted-foreground/55 leading-snug">{tpl.desc}</span>
+            <span className="text-[9px] sm:text-[10px] text-muted-foreground/55 leading-snug">{tpl.desc}</span>
           </button>
         ))}
       </div>
       <button
         onClick={onDismiss}
-        className="font-mono text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors underline underline-offset-2"
+        className="font-mono text-[9px] sm:text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors underline underline-offset-2"
       >
         Start from scratch
       </button>
@@ -786,11 +786,11 @@ function HealthScoreBar({ health }: { health: ReturnType<typeof computeHealth> }
   // SVG ring: r=15.9 → circumference ≈ 100, so strokeDasharray="${score} 100" fills correctly
   const ringColor = scoreRingColor(health.overall);
   return (
-    <div className="px-3 sm:px-5 py-2.5 bg-card border-b border-border shrink-0">
-      <div className="flex items-center gap-3 sm:gap-5">
+    <div className="px-3 sm:px-4 lg:px-5 py-2 sm:py-2.5 bg-card border-b border-border shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 lg:gap-5 min-w-0 overflow-x-auto">
 
         {/* Ring */}
-        <div className="relative flex items-center justify-center w-11 h-11 shrink-0">
+        <div className="relative flex items-center justify-center w-10 sm:w-11 h-10 sm:h-11 shrink-0">
           <svg viewBox="0 0 36 36" className="absolute inset-0 w-full h-full -rotate-90">
             <circle cx="18" cy="18" r="15.9" fill="none" strokeWidth="2.8"
               className="text-muted/30" stroke="currentColor" />
@@ -800,23 +800,23 @@ function HealthScoreBar({ health }: { health: ReturnType<typeof computeHealth> }
               strokeDasharray={`${health.overall} 100`}
               className={`${ringColor} transition-all duration-700`} />
           </svg>
-          <span className={`relative font-mono text-[13px] font-bold tabular-nums leading-none ${ringColor}`}>
+          <span className={`relative font-mono text-[12px] sm:text-[13px] font-bold tabular-nums leading-none ${ringColor}`}>
             {health.overall}
           </span>
         </div>
 
-        <div className="w-px h-5 bg-border shrink-0" />
+        <div className="hidden sm:block w-px h-5 bg-border shrink-0" />
 
-        <div className="flex gap-2 sm:gap-4 flex-1 min-w-0">
+        <div className="flex gap-1.5 sm:gap-2 lg:gap-4 flex-1 min-w-0">
           {[
             { label: "Completeness", value: health.completeness, invert: false },
             { label: "Clarity",      value: health.clarity,      invert: false },
             { label: "Risk",         value: health.risk,         invert: true  },
           ].map(({ label, value, invert }) => (
             <div key={label} className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground/55">{label}</span>
-                <span className="font-mono text-[10px] tabular-nums text-foreground/60">{value}</span>
+              <div className="flex items-center justify-between mb-0.5 sm:mb-1 gap-1">
+                <span className="font-mono text-[8px] sm:text-[9px] uppercase tracking-[0.08em] text-muted-foreground/55 truncate">{label}</span>
+                <span className="font-mono text-[9px] sm:text-[10px] tabular-nums text-foreground/60 shrink-0">{value}</span>
               </div>
               <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-muted overflow-hidden">
                 <div
