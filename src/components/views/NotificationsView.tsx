@@ -42,6 +42,7 @@ const TYPE_STYLES: Record<NotifType, { icon: React.ElementType; color: string; b
   task:     { icon: CheckSquare,     color: "text-purple-500", bg: "bg-purple-500/10" },
 };
 
+// Keyed on the actual type strings written by analysisWorker + productBrainService.
 const BACKEND_TYPE_MAP: Record<string, NotifType> = {
   analysis_completed:     "ai",
   job_failed:             "ai",
@@ -50,19 +51,16 @@ const BACKEND_TYPE_MAP: Record<string, NotifType> = {
   competitor_updated:     "signal",
   pricing_changed:        "signal",
   market_signal:          "signal",
-  decision_scored:        "decision",
-  learning_generated:     "decision",
-  task_created:           "task",
-  spec_generated:         "spec",
-  roadmap_generated:      "spec",
 };
 
 function toNotifType(backendType: string): NotifType {
   return BACKEND_TYPE_MAP[backendType] ?? "ai";
 }
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return "";
   const ms = Date.now() - new Date(iso).getTime();
+  if (isNaN(ms) || ms < 0) return "";
   if (ms < 60_000) return "just now";
   if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
   if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
@@ -72,7 +70,8 @@ function timeAgo(iso: string): string {
 export function NotificationsView() {
   const { user } = useAuth();
   const { lastEvent } = useSpecklaBus();
-  const [activeTab, setActiveTab] = useState<FilterKey>("all");
+  const [activeTab, setActiveTab]   = useState<FilterKey>("all");
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const { data, loading, refetch } = useApi<{ notifications: ApiNotification[]; unreadCount: number }>(
     "/api/notifications",
@@ -90,18 +89,30 @@ export function NotificationsView() {
     activeTab === "all" || toNotifType(n.type) === activeTab
   );
 
-  const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
-    if (!user) return;
-    const token = await user.getIdToken();
-    await fetch(url, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        ...(options.headers ?? {}),
-      },
-    });
-    refetch();
+  const authFetch = useCallback(async (url: string, options: RequestInit = {}): Promise<boolean> => {
+    if (!user) return false;
+    setActionError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          ...(options.headers ?? {}),
+        },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        setActionError(body.error ?? `Request failed (${res.status})`);
+        return false;
+      }
+      refetch();
+      return true;
+    } catch {
+      setActionError("Network error — please try again");
+      return false;
+    }
   }, [user, refetch]);
 
   const handleMarkRead = useCallback(async (id: string) => {
@@ -159,6 +170,16 @@ export function NotificationsView() {
             )}
           </div>
         </div>
+
+        {/* ── Action error ── */}
+        {actionError && (
+          <div className="mb-4 flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/30 text-xs text-destructive">
+            {actionError}
+            <button onClick={() => setActionError(null)} aria-label="Dismiss error">
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
 
         {/* ── Filter tabs ── */}
         <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-4 custom-scrollbar">

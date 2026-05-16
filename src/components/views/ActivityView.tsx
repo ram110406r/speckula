@@ -14,6 +14,17 @@ import { useSpecklaBus } from "@/hooks/useSpecklaBus";
 
 type FilterKey = "all" | ActivityEventType;
 
+// Module-level constant — never changes, no need to rebuild per render.
+const ACTIVITY_REFETCH_EVENTS = new Set([
+  "activity.created", "insight.created",
+  "market_signal.detected", "competitor.updated", "competitor.insight.created", "competitor.added",
+  "decision.created", "outcome.recorded", "learning.generated",
+  "task.created", "specification.generated", "roadmap.generated",
+  "experiment.started", "experiment.completed",
+  "agent.started", "agent.completed", "agent.stopped",
+  "product_brain.updated",
+]);
+
 const FILTER_TABS: { key: FilterKey; label: string; icon: React.ElementType }[] = [
   { key: "all",      label: "All",       icon: Activity        },
   { key: "ai",       label: "AI",        icon: Sparkles        },
@@ -114,7 +125,7 @@ export function ActivityView() {
         const type: ActivityEventType =
           it.eventType.startsWith("analysis.") || it.eventType.startsWith("agent.") ||
           it.eventType === "product_brain.updated" || it.eventType === "experiment.started" ||
-          it.eventType === "experiment.completed" || it.eventType === "notification.created" ? "ai" :
+          it.eventType === "experiment.completed" ? "ai" :
           it.eventType.includes("signal") || it.eventType.includes("competitor") ? "signal" :
           it.eventType === "insight.created" ? "signal" :
           it.eventType === "decision.created" || it.eventType === "outcome.recorded" ||
@@ -176,16 +187,7 @@ export function ActivityView() {
   useEffect(() => {
     if (!activeWorkspaceId) return;
     if (!lastEvent) return;
-    const refetchTypes = new Set([
-      "activity.created", "insight.created",
-      "market_signal.detected", "competitor.updated", "competitor.insight.created", "competitor.added",
-      "decision.created", "outcome.recorded", "learning.generated",
-      "task.created", "specification.generated", "roadmap.generated",
-      "experiment.started", "experiment.completed",
-      "agent.started", "agent.completed",
-      "product_brain.updated",
-    ]);
-    if (refetchTypes.has(lastEvent.type) || lastEvent.type.startsWith("analysis.")) {
+    if (ACTIVITY_REFETCH_EVENTS.has(lastEvent.type) || lastEvent.type.startsWith("analysis.")) {
       refetchBackend();
     }
   }, [activeWorkspaceId, lastEvent, refetchBackend]);
