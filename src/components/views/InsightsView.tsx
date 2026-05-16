@@ -498,29 +498,29 @@ export function InsightsView() {
   return (
     <div className="flex flex-col h-full bg-background transition-colors duration-300">
       {/* ── Status bar ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 md:px-8 py-3 border-b border-border shrink-0 bg-card">
-        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/60">
+      <div className="flex items-center justify-between px-3 sm:px-4 lg:px-8 py-2.5 sm:py-3 border-b border-border shrink-0 bg-card">
+        <span className="font-mono text-[9px] sm:text-[10px] uppercase tracking-[0.12em] text-muted-foreground/60">
           MARKET INTELLIGENCE
         </span>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <DataSourceBadge isLive={hasRealSignals ?? false} />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            <span className="font-mono text-[10px] text-emerald-400">LIVE</span>
+            <span className="font-mono text-[9px] sm:text-[10px] text-emerald-400">LIVE</span>
           </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-auto custom-scrollbar">
-        <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto">
+        <div className="p-3 sm:p-4 lg:p-8 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
 
           {/* ── New signal flash banner ───────────────────────────────────── */}
           {newSignalFlash && (
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[12px] font-medium animate-pulse">
-              <span className="relative flex h-2 w-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] sm:text-[12px] font-medium animate-pulse">
+              <span className="relative flex h-2 w-2 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
               </span>
@@ -529,21 +529,21 @@ export function InsightsView() {
           )}
 
           {/* ── Page Header ──────────────────────────────────────────────── */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-[28px] font-bold tracking-tight text-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl lg:text-[28px] font-bold tracking-tight text-foreground">
                 Market Intelligence
               </h1>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 Realtime startup market awareness engine
               </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
               </span>
-              <span className="text-[12px] text-muted-foreground font-mono">
+              <span className="text-[11px] sm:text-[12px] text-muted-foreground font-mono">
                 {hasRealSignals
                   ? <span>Live · <span className="text-foreground font-semibold">{signalsData!.total} signals</span></span>
                   : <>Updated <span className="text-foreground font-semibold">2 minutes ago</span></>
@@ -553,7 +553,7 @@ export function InsightsView() {
           </div>
 
           {/* ── Top Metrics ──────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-3">
             <MetricCard
               label="Signals Today"
               value={hasRealSignals ? String(signalsData!.total) : "0"}
@@ -585,14 +585,14 @@ export function InsightsView() {
           </div>
 
           {/* ── Filter Pills + Search ────────────────────────────────────── */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 flex-1">
+          <div className="flex flex-col gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 flex-1">
               {FILTER_PILLS.map(({ id, label }) => (
                 <button
                   key={id}
                   onClick={() => setActiveFilter(id)}
                   aria-current={activeFilter === id ? "page" : undefined}
-                  className={`px-4 py-1.5 rounded-full font-mono text-[11px] font-medium whitespace-nowrap border transition-all ${
+                  className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full font-mono text-[10px] sm:text-[11px] font-medium whitespace-nowrap border transition-all ${
                     activeFilter === id
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-border/80"
@@ -602,47 +602,47 @@ export function InsightsView() {
                 </button>
               ))}
             </div>
-            <div className="w-full sm:w-56 shrink-0">
+            <div className="w-full sm:w-56">
               <Input
                 placeholder="Search signals..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 text-[12px] font-mono"
+                className="h-8 text-[11px] sm:text-[12px] font-mono"
               />
             </div>
           </div>
 
           {/* ── Main 2-Column Layout ─────────────────────────────────────── */}
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4 sm:gap-6">
 
             {/* LEFT: Signal Feed */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4 text-primary" />
-                <h2 className="text-[13px] font-semibold text-foreground uppercase tracking-wider font-mono">
+            <div className="flex flex-col gap-3 sm:gap-4">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Activity className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-primary shrink-0" />
+                <h2 className="text-[12px] sm:text-[13px] font-semibold text-foreground uppercase tracking-wider font-mono">
                   Signal Feed
                 </h2>
-                <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+                <span className="ml-auto font-mono text-[10px] sm:text-[11px] text-muted-foreground shrink-0">
                   {filteredSignals.length} signal{filteredSignals.length !== 1 ? "s" : ""}
                 </span>
               </div>
 
               {/* Loading skeleton */}
               {signalsLoading && !hasRealSignals && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="h-40 rounded-xl border border-border bg-card animate-pulse" />
+                    <div key={i} className="h-40 rounded-lg sm:rounded-xl border border-border bg-card animate-pulse" />
                   ))}
                 </div>
               )}
 
               {!signalsLoading && filteredSignals.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 rounded-xl border-2 border-dashed border-border text-center p-6">
-                  <AlertTriangle className="h-6 w-6 text-muted-foreground/40 mb-3" />
-                  <p className="text-sm text-muted-foreground">No signals match this filter.</p>
+                <div className="flex flex-col items-center justify-center h-48 rounded-lg sm:rounded-xl border-2 border-dashed border-border text-center p-4 sm:p-6">
+                  <AlertTriangle className="h-5 sm:h-6 w-5 sm:w-6 text-muted-foreground/40 mb-2 sm:mb-3" />
+                  <p className="text-xs sm:text-sm text-muted-foreground">No signals match this filter.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {filteredSignals.map((signal) => (
                     <SignalCard
                       key={signal.id}
@@ -656,22 +656,22 @@ export function InsightsView() {
             </div>
 
             {/* RIGHT: Trending Topics + Opportunities */}
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 sm:gap-6">
 
               {/* Trending Topics */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                  <h2 className="text-[13px] font-semibold text-foreground uppercase tracking-wider font-mono">
+              <div className="flex flex-col gap-2.5 sm:gap-3">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <TrendingUp className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-primary shrink-0" />
+                  <h2 className="text-[12px] sm:text-[13px] font-semibold text-foreground uppercase tracking-wider font-mono">
                     Trending Topics
                   </h2>
                 </div>
 
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5 sm:gap-2">
                   {displayTrends.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-28 rounded-xl border-2 border-dashed border-border text-center p-4">
-                      <TrendingUp className="h-5 w-5 text-muted-foreground/40 mb-2" />
-                      <p className="text-[12px] text-muted-foreground">No trend data yet.</p>
+                    <div className="flex flex-col items-center justify-center h-24 sm:h-28 rounded border-2 sm:rounded-xl border-dashed border-border text-center p-3 sm:p-4">
+                      <TrendingUp className="h-4 sm:h-5 w-4 sm:w-5 text-muted-foreground/40 mb-1.5 sm:mb-2" />
+                      <p className="text-[11px] sm:text-[12px] text-muted-foreground">No trend data yet.</p>
                     </div>
                   )}
                   {displayTrends.map((trend) => {
@@ -679,30 +679,30 @@ export function InsightsView() {
                     return (
                       <div
                         key={trend.name}
-                        className="flex flex-col gap-2 p-3.5 rounded-xl border border-border bg-card hover:border-border/80 transition-all"
+                        className="flex flex-col gap-1.5 sm:gap-2 p-2.5 sm:p-3.5 rounded border-l-4 sm:rounded-xl border border-border border-l-primary bg-card hover:border-border/80 transition-all"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-[13px] font-medium text-foreground leading-snug">{trend.name}</span>
-                          <span className="font-mono text-[11px] font-bold text-emerald-400 shrink-0">{trend.growth}</span>
+                        <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+                          <span className="text-[12px] sm:text-[13px] font-medium text-foreground leading-snug">{trend.name}</span>
+                          <span className="font-mono text-[10px] sm:text-[11px] font-bold text-emerald-400 shrink-0">{trend.growth}</span>
                         </div>
 
                         {/* Momentum bar */}
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-0.5 sm:gap-1">
                           <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all duration-700 ${getMomentumColor(trend.momentum)}`}
                               style={{ width: `${trend.momentum}%` }}
                             />
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-mono text-muted-foreground">{trend.volume}</span>
-                            <span className="text-[10px] font-mono text-muted-foreground">{trend.momentum}% momentum</span>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[9px] sm:text-[10px] font-mono text-muted-foreground truncate">{trend.volume}</span>
+                            <span className="text-[9px] sm:text-[10px] font-mono text-muted-foreground shrink-0">{trend.momentum}%</span>
                           </div>
                         </div>
 
                         {/* Category badge */}
                         <span
-                          className={`self-start inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-medium ${badge.bg} ${badge.text}`}
+                          className={`self-start inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-mono font-medium ${badge.bg} ${badge.text}`}
                         >
                           {badge.label}
                         </span>
@@ -713,58 +713,60 @@ export function InsightsView() {
               </div>
 
               {/* Opportunities */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <Target className="h-4 w-4 text-primary" />
-                  <h2 className="text-[13px] font-semibold text-foreground uppercase tracking-wider font-mono">
+              <div className="flex flex-col gap-2.5 sm:gap-3">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <Target className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-primary shrink-0" />
+                  <h2 className="text-[12px] sm:text-[13px] font-semibold text-foreground uppercase tracking-wider font-mono">
                     Opportunities
                   </h2>
                 </div>
 
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2 sm:gap-3">
                   {displayOpportunities.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed border-border text-center p-4">
-                      <Target className="h-5 w-5 text-muted-foreground/40 mb-2" />
-                      <p className="text-[12px] text-muted-foreground">No opportunities detected yet.</p>
-                      <p className="text-[11px] text-muted-foreground/60 mt-1">Capture more signals to surface opportunities.</p>
+                    <div className="flex flex-col items-center justify-center h-24 sm:h-32 rounded border-2 sm:rounded-xl border-dashed border-border text-center p-3 sm:p-4">
+                      <Target className="h-4 sm:h-5 w-4 sm:w-5 text-muted-foreground/40 mb-1.5 sm:mb-2" />
+                      <p className="text-[11px] sm:text-[12px] text-muted-foreground">No opportunities detected yet.</p>
+                      <p className="text-[10px] sm:text-[11px] text-muted-foreground/60 mt-1">Capture more signals to surface opportunities.</p>
                     </div>
                   ) : displayOpportunities.map((opp) => {
                     const badge = getOpportunityCategoryBadge(opp.category);
                     return (
                       <div
                         key={opp.title}
-                        className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-card hover:border-border/80 transition-all"
+                        className="flex flex-col gap-2 sm:gap-3 p-2.5 sm:p-4 rounded border-l-4 sm:rounded-xl border border-border border-l-primary bg-card hover:border-border/80 transition-all"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-[13px] font-semibold text-foreground leading-snug">{opp.title}</h3>
-                          <span className="font-mono text-[12px] font-bold text-foreground shrink-0">{opp.strength}</span>
+                        <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+                          <h3 className="text-[12px] sm:text-[13px] font-semibold text-foreground leading-snug">{opp.title}</h3>
+                          <span className="font-mono text-[11px] sm:text-[12px] font-bold text-foreground shrink-0">{opp.strength}</span>
                         </div>
 
-                        <p className="text-[11px] leading-relaxed text-muted-foreground">{opp.description}</p>
+                        <p className="text-[10px] sm:text-[11px] leading-relaxed text-muted-foreground">{opp.description}</p>
 
                         {/* Strength bar */}
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-0.5 sm:gap-1">
                           <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all duration-700 ${getStrengthColor(opp.strength)}`}
                               style={{ width: `${opp.strength}%` }}
                             />
                           </div>
-                          <span className="text-[10px] font-mono text-muted-foreground">Opportunity strength</span>
+                          <span className="text-[9px] sm:text-[10px] font-mono text-muted-foreground">Strength</span>
                         </div>
 
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-medium ${badge.bg} ${badge.text}`}
+                            className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-mono font-medium ${badge.bg} ${badge.text}`}
                           >
                             {badge.label}
                           </span>
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-6 px-2.5 text-[10px] font-mono hover:border-primary/60 hover:text-primary hover:bg-primary/5"
+                            className="h-6 px-2 sm:px-2.5 text-[9px] sm:text-[10px] font-mono hover:border-primary/60 hover:text-primary hover:bg-primary/5"
                           >
-                            Explore <ChevronRight className="h-2.5 w-2.5 ml-0.5" />
+                            <span className="hidden sm:inline">Explore</span>
+                            <span className="sm:hidden">View</span>
+                            <ChevronRight className="h-2 sm:h-2.5 w-2 sm:w-2.5 ml-0.5" />
                           </Button>
                         </div>
                       </div>
@@ -776,15 +778,15 @@ export function InsightsView() {
           </div>
 
           {/* ── Sources Health ───────────────────────────────────────────── */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <BarChart2 className="h-4 w-4 text-primary" />
-              <h2 className="text-[13px] font-semibold text-foreground uppercase tracking-wider font-mono">
+          <div className="flex flex-col gap-2.5 sm:gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <BarChart2 className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-primary shrink-0" />
+              <h2 className="text-[12px] sm:text-[13px] font-semibold text-foreground uppercase tracking-wider font-mono">
                 Sources Health
               </h2>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
               {[
                 {
                   name: "Reddit",

@@ -401,25 +401,25 @@ export function AIPanel() {
     <div className="flex h-full flex-col bg-background">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between border-b border-border/70 px-4 py-3 shrink-0 bg-card">
-        <div className="flex items-center gap-3">
-          <div className="relative">
+      <div className="flex items-center justify-between border-b border-border/70 px-3 sm:px-4 py-2.5 sm:py-3 shrink-0 bg-card">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="relative shrink-0">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             {/* Pulse dot */}
             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
           </div>
-          <div>
-            <p className="text-[13px] font-semibold text-foreground leading-none">Speckula AI</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-none">Thinking about your case...</p>
+          <div className="min-w-0">
+            <p className="text-[12px] sm:text-[13px] font-semibold text-foreground leading-none truncate">Speckula AI</p>
+            <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-none truncate">Thinking about your case...</p>
           </div>
         </div>
         <Button
           variant="ghost"
           size="icon"
           onClick={toggleAiPanel}
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
           aria-label="Close assistant"
         >
           <X className="h-4 w-4" />
@@ -427,37 +427,37 @@ export function AIPanel() {
       </div>
 
       {/* ── Scrollable body ─────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto p-4 space-y-4 custom-scrollbar">
+      <div className="flex-1 overflow-auto px-3 sm:px-4 py-3 sm:py-4 space-y-3 sm:space-y-4 custom-scrollbar">
 
         {/* Case context summary */}
-        <div className="rounded-xl border border-border/60 bg-card p-3.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground mb-1.5">Case Context</p>
+        <div className="rounded-xl border border-border/60 bg-card p-3 sm:p-3.5">
+          <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground mb-1.5">Case Context</p>
           {currentUnderstanding ? (
-            <p className="text-[12px] text-foreground leading-relaxed">{currentUnderstanding}</p>
+            <p className="text-[11px] sm:text-[12px] text-foreground leading-relaxed">{currentUnderstanding}</p>
           ) : (
-            <p className="text-[12px] text-muted-foreground italic leading-relaxed">
+            <p className="text-[11px] sm:text-[12px] text-muted-foreground italic leading-relaxed">
               Start describing your product idea to activate insights.
             </p>
           )}
         </div>
 
         {/* Quick action cards */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground px-0.5">Quick Actions</p>
+        <div className="space-y-2 sm:space-y-2">
+          <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground px-0.5">Quick Actions</p>
           <div className="flex flex-col gap-2">
             {quickActions.map(({ icon: Icon, label, desc, prompt, iconColor, iconBg }) => (
               <button
                 key={label}
                 type="button"
                 onClick={() => triggerPrompt(prompt)}
-                className="group flex items-start gap-3 p-3 rounded-xl border border-border/60 bg-card text-left hover:border-primary/30 hover:shadow-sm hover:-translate-y-0.5 transition-all duration-150 active:translate-y-0 active:shadow-none"
+                className="group flex items-start gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg sm:rounded-xl border border-border/60 bg-card text-left hover:border-primary/30 hover:shadow-sm hover:-translate-y-0.5 transition-all duration-150 active:translate-y-0 active:shadow-none"
               >
-                <div className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${iconBg}`}>
-                  <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
+                <div className={`shrink-0 w-6 sm:w-7 h-6 sm:h-7 rounded-lg flex items-center justify-center transition-colors ${iconBg}`}>
+                  <Icon className={`h-3 sm:h-3.5 w-3 sm:w-3.5 ${iconColor}`} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[12px] font-semibold text-foreground leading-tight">{label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{desc}</p>
+                  <p className="text-[11px] sm:text-[12px] font-semibold text-foreground leading-tight">{label}</p>
+                  <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-snug">{desc}</p>
                 </div>
               </button>
             ))}
@@ -467,22 +467,22 @@ export function AIPanel() {
         {/* Live warnings */}
         {(weakProblemSignal || repeatedPatternInsight) && (
           <div className="space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground px-0.5">Warnings</p>
+            <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground px-0.5">Warnings</p>
 
             {weakProblemSignal && (
-              <div className="rounded-xl border border-warning/30 bg-warning/5 p-3.5">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <AlertTriangle className="h-3.5 w-3.5 text-warning" />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-warning">High</span>
+              <div className="rounded-lg sm:rounded-xl border border-warning/30 bg-warning/5 p-2.5 sm:p-3.5">
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="flex items-center gap-1">
+                    <AlertTriangle className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-warning shrink-0" />
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.08em] text-warning">High</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground font-medium">Problem Definition</span>
+                  <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium text-right">Problem Definition</span>
                 </div>
-                <p className="text-[12px] text-foreground leading-snug mb-3">{weakProblemSignal}</p>
+                <p className="text-[11px] sm:text-[12px] text-foreground leading-snug mb-2 sm:mb-3">{weakProblemSignal}</p>
                 <button
                   type="button"
                   onClick={() => triggerPrompt("Define the problem precisely: who is affected, what behavior is broken, and which metric is impacted?")}
-                  className="text-[11px] font-semibold text-warning hover:opacity-75 transition-opacity"
+                  className="text-[10px] sm:text-[11px] font-semibold text-warning hover:opacity-75 transition-opacity"
                 >
                   Fix Now →
                 </button>
@@ -490,34 +490,34 @@ export function AIPanel() {
             )}
 
             {repeatedPatternInsight && (
-              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3.5">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Lightbulb className="h-3.5 w-3.5 text-blue-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-500">Low</span>
+              <div className="rounded-lg sm:rounded-xl border border-blue-500/20 bg-blue-500/5 p-2.5 sm:p-3.5">
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="flex items-center gap-1">
+                    <Lightbulb className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-blue-500 shrink-0" />
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.08em] text-blue-500">Low</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground font-medium">Pattern Detected</span>
+                  <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium text-right">Pattern Detected</span>
                 </div>
-                <p className="text-[12px] text-foreground leading-snug">{repeatedPatternInsight}</p>
+                <p className="text-[11px] sm:text-[12px] text-foreground leading-snug">{repeatedPatternInsight}</p>
               </div>
             )}
           </div>
         )}
 
         {/* Intelligence / Signals */}
-        <div className="rounded-xl border border-primary/20 bg-card p-3.5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              <span className="text-[11px] font-semibold text-primary tracking-[0.03em]">Intelligence</span>
+        <div className="rounded-lg sm:rounded-xl border border-primary/20 bg-card p-2.5 sm:p-3.5 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <Sparkles className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-primary shrink-0" />
+              <span className="text-[10px] sm:text-[11px] font-semibold text-primary tracking-[0.03em]">Intelligence</span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               {isAnalyzing && <Loader2 className="h-3 w-3 animate-spin text-primary/60" />}
               {!isAnalyzing && signalCount > 0 && (
                 <button
                   type="button"
                   onClick={() => setShowDetailedSignals((p) => !p)}
-                  className="text-[11px] font-medium text-primary hover:opacity-75 transition-opacity"
+                  className="text-[10px] sm:text-[11px] font-medium text-primary hover:opacity-75 transition-opacity whitespace-nowrap"
                 >
                   {showDetailedSignals ? "Collapse" : `${signalCount} insight${signalCount !== 1 ? "s" : ""}`}
                 </button>
@@ -566,35 +566,36 @@ export function AIPanel() {
 
           {/* Expanded signals */}
           {showDetailedSignals && (
-            <div className="space-y-2">
+            <div className="space-y-1.5 sm:space-y-2">
 
               {signals.insights
                 .map((insight, idx) => ({ insight, idx, id: `insight-${idx}` }))
                 .filter(({ id }) => !dismissed.has(id))
                 .map(({ insight, idx, id }) => (
-                  <div key={id} className="rounded-lg border-l-4 border border-primary/20 border-l-primary bg-primary/5 p-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className="text-[12px] font-semibold text-foreground">{insight.title}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{insight.description}</p>
+                  <div key={id} className="rounded border-l-4 sm:rounded-lg border border-primary/20 border-l-primary bg-primary/5 p-2 sm:p-2.5">
+                    <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] sm:text-[12px] font-semibold text-foreground">{insight.title}</p>
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 leading-snug">{insight.description}</p>
                       </div>
                       <button onClick={() => dismissHint(id)} className="text-muted-foreground/50 hover:text-foreground shrink-0 transition-colors" aria-label="Dismiss">
-                        <X className="h-3.5 w-3.5" />
+                        <X className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
                       </button>
                     </div>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 mt-1.5 sm:mt-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-6 text-[11px] border-primary/30 hover:bg-primary/10 hover:border-primary/50"
+                        className="h-6 text-[10px] sm:text-[11px] border-primary/30 hover:bg-primary/10 hover:border-primary/50 flex-1 sm:flex-none justify-center"
                         onClick={() => convertInsightToFeature(insight, idx)}
                         disabled={isGeneratingFeatureId === id}
                       >
                         {isGeneratingFeatureId === id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
-                        Convert to Feature
+                        <span className="hidden sm:inline">Convert to Feature</span>
+                        <span className="sm:hidden">Convert</span>
                       </Button>
                       {featureDrafts[id] && (
-                        <Button variant="ghost" size="sm" className="h-6 text-[11px] text-primary" onClick={() => insertFeatureDraft(id)}>
+                        <Button variant="ghost" size="sm" className="h-6 text-[10px] sm:text-[11px] text-primary flex-1 sm:flex-none" onClick={() => insertFeatureDraft(id)}>
                           Insert
                         </Button>
                       )}
@@ -606,19 +607,19 @@ export function AIPanel() {
                 .map((s, idx) => ({ s, id: `suggestion-${idx}` }))
                 .filter(({ id }) => !dismissed.has(id))
                 .map(({ s, id }) => (
-                  <div key={id} className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2">
-                        <Lightbulb className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-[12px] leading-snug text-foreground">{s.text}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">Why: {s.why}</p>
+                  <div key={id} className="rounded border-l-4 sm:rounded-lg border border-emerald-500/20 border-l-emerald-500 bg-emerald-500/5 p-2 sm:p-2.5">
+                    <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+                      <div className="flex items-start gap-1.5 sm:gap-2 min-w-0">
+                        <Lightbulb className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-[11px] sm:text-[12px] leading-snug text-foreground">{s.text}</p>
+                          <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Why: {s.why}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-medium">{s.confidence}/10</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-medium whitespace-nowrap">{s.confidence}/10</span>
                         <button onClick={() => dismissHint(id)} className="text-muted-foreground/50 hover:text-foreground transition-colors" aria-label="Dismiss">
-                          <X className="h-3.5 w-3.5" />
+                          <X className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
                         </button>
                       </div>
                     </div>
@@ -629,19 +630,19 @@ export function AIPanel() {
                 .map((c, idx) => ({ c, id: `challenge-${idx}` }))
                 .filter(({ id }) => !dismissed.has(id))
                 .map(({ c, id }) => (
-                  <div key={id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-[12px] leading-snug text-foreground">{c.text}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">Why: {c.why}</p>
+                  <div key={id} className="rounded border-l-4 sm:rounded-lg border border-amber-500/20 border-l-amber-500 bg-amber-500/5 p-2 sm:p-2.5">
+                    <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+                      <div className="flex items-start gap-1.5 sm:gap-2 min-w-0">
+                        <AlertTriangle className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-[11px] sm:text-[12px] leading-snug text-foreground">{c.text}</p>
+                          <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Why: {c.why}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-medium">{c.confidence}/10</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-medium whitespace-nowrap">{c.confidence}/10</span>
                         <button onClick={() => dismissHint(id)} className="text-muted-foreground/50 hover:text-foreground transition-colors" aria-label="Dismiss">
-                          <X className="h-3.5 w-3.5" />
+                          <X className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
                         </button>
                       </div>
                     </div>
@@ -652,29 +653,30 @@ export function AIPanel() {
                 ?.map((d, idx) => ({ d, idx, id: `decision-${idx}` }))
                 .filter(({ id }) => !dismissed.has(id))
                 .map(({ d, idx, id }) => (
-                  <div key={id} className="rounded-lg border-l-4 border border-blue-500/20 border-l-blue-500 bg-blue-500/5 p-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className="text-[12px] font-semibold text-foreground">{d.text}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">Why: {d.why}</p>
+                  <div key={id} className="rounded border-l-4 sm:rounded-lg border border-blue-500/20 border-l-blue-500 bg-blue-500/5 p-2 sm:p-2.5">
+                    <div className="flex items-start justify-between gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] sm:text-[12px] font-semibold text-foreground">{d.text}</p>
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Why: {d.why}</p>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 font-medium">{d.confidence}/10</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 font-medium whitespace-nowrap">{d.confidence}/10</span>
                         <button onClick={() => dismissHint(id)} className="text-muted-foreground/50 hover:text-foreground transition-colors" aria-label="Dismiss">
-                          <X className="h-3.5 w-3.5" />
+                          <X className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
                         </button>
                       </div>
                     </div>
                     <Button
                       size="sm"
-                      className="h-6 text-[11px] mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      className="h-6 text-[10px] sm:text-[11px] w-full bg-blue-600 hover:bg-blue-700 text-white"
                       onClick={() => convertDecisionToPRD(d, idx)}
                       disabled={isGeneratingPRDFromDecision === id}
                     >
                       {isGeneratingPRDFromDecision === id
                         ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
                         : <Sparkles className="h-3 w-3 mr-1" />}
-                      {isGeneratingPRDFromDecision === id ? "Generating PRD..." : "Convert to PRD"}
+                      <span className="hidden sm:inline">{isGeneratingPRDFromDecision === id ? "Generating PRD..." : "Convert to PRD"}</span>
+                      <span className="sm:hidden">{isGeneratingPRDFromDecision === id ? "PRD..." : "PRD"}</span>
                     </Button>
                   </div>
                 ))}
@@ -684,28 +686,28 @@ export function AIPanel() {
 
         {/* Chat messages */}
         {messages.length === 0 ? (
-          <div className="rounded-xl border border-border/60 bg-card p-3.5">
-            <p className="text-[12px] text-muted-foreground leading-relaxed">
+          <div className="rounded-lg sm:rounded-xl border border-border/60 bg-card p-2.5 sm:p-3.5">
+            <p className="text-[11px] sm:text-[12px] text-muted-foreground leading-relaxed">
               {user
                 ? "Ask anything about your case — strategy, risks, features, or roadmap."
                 : "Sign in to start chatting with Speckula AI."}
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2.5 sm:space-y-3">
             {messages.map((m) => (
               <div
                 key={m.id}
-                className={`rounded-xl text-sm p-3 ${
+                className={`rounded-lg sm:rounded-xl text-sm p-2.5 sm:p-3 ${
                   m.role === "user"
-                    ? "bg-primary/10 text-foreground ml-2 sm:ml-4 border border-primary/20"
-                    : "bg-card border border-border/60 mr-2 sm:mr-4"
+                    ? "bg-primary/10 text-foreground ml-1 sm:ml-2 mr-0 sm:mr-0 border border-primary/20"
+                    : "bg-card border border-border/60 ml-0 sm:ml-0 mr-1 sm:mr-2"
                 }`}
               >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground mb-1.5 block">
+                <span className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground mb-1 block">
                   {m.role === "user" ? "You" : "Speckula AI"}
                 </span>
-                <div className="whitespace-pre-wrap leading-relaxed text-[13px]">
+                <div className="whitespace-pre-wrap leading-relaxed text-[12px] sm:text-[13px]">
                   {m.content || (isLoading ? "▋" : "")}
                 </div>
               </div>
@@ -727,21 +729,21 @@ export function AIPanel() {
       </div>
 
       {/* ── Input area ──────────────────────────────────────────────────────── */}
-      <div className="p-3 border-t border-border/70 shrink-0 bg-card">
+      <div className="px-3 sm:px-4 py-2 sm:py-3 border-t border-border/70 shrink-0 bg-card">
         {messages.length > 0 && (
           <button
             type="button"
-            className="mb-2 w-full text-center text-[11px] text-muted-foreground hover:text-primary transition-colors"
+            className="mb-1.5 w-full text-center text-[10px] sm:text-[11px] text-muted-foreground hover:text-primary transition-colors"
             onClick={() => setMessages([])}
           >
             Clear conversation
           </button>
         )}
-        <form className="flex items-end gap-2" onSubmit={handleSubmit}>
+        <form className="flex items-end gap-1.5 sm:gap-2" onSubmit={handleSubmit}>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 min-h-[60px] max-h-[120px] text-sm resize-none rounded-xl border border-input bg-background px-3 py-2.5 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 leading-relaxed transition-all duration-150"
+            className="flex-1 min-h-[48px] sm:min-h-[60px] max-h-[120px] text-sm resize-none rounded-lg sm:rounded-xl border border-input bg-background px-2.5 sm:px-3 py-2 sm:py-2.5 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 leading-relaxed transition-all duration-150 text-[13px]"
             placeholder="Ask Speckula anything..."
             disabled={isLoading}
             onKeyDown={(e) => {
@@ -755,7 +757,7 @@ export function AIPanel() {
             type="submit"
             disabled={isLoading || !input.trim()}
             size="icon"
-            className="h-11 w-11 sm:h-9 sm:w-9 shrink-0 rounded-xl text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+            className="h-10 w-10 sm:h-9 sm:w-9 shrink-0 rounded-lg sm:rounded-xl text-white hover:opacity-90 transition-opacity disabled:opacity-40"
             style={{ backgroundColor: "#7E43F5" }}
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
