@@ -234,87 +234,85 @@ export function Shell() {
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden text-foreground selection:bg-primary/10">
-      {/* ── Top bar ── */}
-      <header className="relative z-30 shrink-0 border-b border-border/70 bg-card/95 backdrop-blur-md">
-        <div className="flex h-12 items-center gap-2 pl-12 pr-3 md:px-5">
+      {/* Sidebar — always mounted; manages its own fixed positioning for mobile/desktop */}
+      <ModernSidebar onCollapsedChange={setSidebarCollapsed} />
 
-          {/* Left — document title + timestamp */}
-          <div className="min-w-0 flex-1 flex items-center gap-2">
-            <p className="truncate text-sm font-semibold tracking-tight text-foreground">
-              {currentDoc?.title ||
-                (documents.length === 0 ? "No document" : "Untitled")}
-            </p>
-            {activityText && (
-              <span className="hidden md:inline shrink-0 text-[10px] text-muted-foreground/60 font-mono">
-                · {activityText}
-              </span>
+      {/* Main area — shifts right on desktop to clear the fixed sidebar */}
+      <div className={`flex flex-col flex-1 min-h-0 transition-[padding] duration-300 ${
+        sidebarCollapsed ? "md:pl-[68px]" : "md:pl-[240px]"
+      }`}>
+        {/* ── Top bar ── */}
+        <header className="relative z-30 shrink-0 border-b border-border/70 bg-card/95 backdrop-blur-md">
+          <div className="flex h-12 items-center gap-2 pl-12 pr-3 md:px-5">
+
+            {/* Left — document title + timestamp */}
+            <div className="min-w-0 flex-1 flex items-center gap-2">
+              <p className="truncate text-sm font-semibold tracking-tight text-foreground">
+                {currentDoc?.title ||
+                  (documents.length === 0 ? "No document" : "Untitled")}
+              </p>
+              {activityText && (
+                <span className="hidden md:inline shrink-0 text-[10px] text-muted-foreground/60 font-mono">
+                  · {activityText}
+                </span>
+              )}
+            </div>
+
+            {/* Center — phase breadcrumb */}
+            <div className="absolute left-1/2 -translate-x-1/2">
+              <PhaseBreadcrumb activeView={activeView} setActiveView={setActiveView} />
+            </div>
+
+            {/* Right — actions */}
+            <div className="flex items-center gap-1.5 ml-auto">
+              {activeView === "editor" && (
+                <button
+                  type="button"
+                  onClick={toggleAiPanel}
+                  className={`
+                    inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium
+                    transition-all duration-150 border
+                    ${
+                      aiPanelOpen
+                        ? "border-primary/30 bg-primary/10 text-primary"
+                        : "border-border/60 bg-transparent text-muted-foreground hover:border-primary/30 hover:text-primary hover:bg-primary/5"
+                    }
+                  `}
+                  aria-pressed={aiPanelOpen}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span className="hidden sm:inline">Ask AI</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* ── Content ── */}
+        <div className={`grid min-h-0 flex-1 grid-cols-1 ${showAIPanel ? "lg:grid-cols-[minmax(0,1fr)_360px]" : ""}`}>
+          <div className="min-h-0 min-w-0 overflow-hidden bg-card">
+            {/* All views except Autonomous Mode — unmount freely */}
+            <div style={{ display: activeView === "autonomous" ? "none" : undefined }} className="h-full">
+              {renderMainView()}
+            </div>
+            {/* Autonomous Mode — kept mounted once visited so state survives navigation */}
+            {autonomousMounted && (
+              <div style={{ display: activeView !== "autonomous" ? "none" : undefined }} className="h-full">
+                <AutonomousModeView />
+              </div>
             )}
           </div>
 
-          {/* Center — phase breadcrumb */}
-          <div className="absolute left-1/2 -translate-x-1/2">
-            <PhaseBreadcrumb activeView={activeView} setActiveView={setActiveView} />
-          </div>
-
-          {/* Right — actions */}
-          <div className="flex items-center gap-1.5 ml-auto">
-            {activeView === "editor" && (
-              <button
-                type="button"
-                onClick={toggleAiPanel}
-                className={`
-                  inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium
-                  transition-all duration-150 border
-                  ${
-                    aiPanelOpen
-                      ? "border-primary/30 bg-primary/10 text-primary"
-                      : "border-border/60 bg-transparent text-muted-foreground hover:border-primary/30 hover:text-primary hover:bg-primary/5"
-                  }
-                `}
-                aria-pressed={aiPanelOpen}
-              >
-                <Sparkles className="h-3 w-3" />
-                <span className="hidden sm:inline">Ask AI</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* ── Content ── */}
-      <div
-        className={
-          showAIPanel
-            ? `grid min-h-0 flex-1 grid-cols-1 ${sidebarCollapsed ? "md:grid-cols-[68px_minmax(0,1fr)] lg:grid-cols-[68px_minmax(0,1fr)_360px]" : "md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_360px]"}`
-            : `grid min-h-0 flex-1 grid-cols-1 ${sidebarCollapsed ? "md:grid-cols-[68px_minmax(0,1fr)]" : "md:grid-cols-[240px_minmax(0,1fr)]"}`
-        }
-      >
-        <div className="hidden min-h-0 border-r border-border/70 md:block transition-all duration-300">
-          <ModernSidebar onCollapsedChange={setSidebarCollapsed} />
-        </div>
-
-        <div className="min-h-0 min-w-0 overflow-hidden bg-card">
-          {/* All views except Autonomous Mode — unmount freely */}
-          <div style={{ display: activeView === "autonomous" ? "none" : undefined }} className="h-full">
-            {renderMainView()}
-          </div>
-          {/* Autonomous Mode — kept mounted once visited so state survives navigation */}
-          {autonomousMounted && (
-            <div style={{ display: activeView !== "autonomous" ? "none" : undefined }} className="h-full">
-              <AutonomousModeView />
+          {showAIPanel && (
+            <div className="hidden min-h-0 border-l border-border/70 bg-muted/40 lg:block">
+              {/* Only mount AIPanel when this column is actually visible (lg+).
+                  The mobile overlay below renders the same component on smaller
+                  screens. Never mounting both at once prevents duplicate timers,
+                  analysis calls, and subscriptions from the two instances. */}
+              {isDesktopPanel && <AIPanel />}
             </div>
           )}
         </div>
-
-        {showAIPanel && (
-          <div className="hidden min-h-0 border-l border-border/70 bg-muted/40 lg:block">
-            {/* Only mount AIPanel when this column is actually visible (lg+).
-                The mobile overlay below renders the same component on smaller
-                screens. Never mounting both at once prevents duplicate timers,
-                analysis calls, and subscriptions from the two instances. */}
-            {isDesktopPanel && <AIPanel />}
-          </div>
-        )}
       </div>
 
       {/* ── Mobile AI panel overlay (xs/sm/md — below lg) ── */}

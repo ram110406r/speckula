@@ -721,7 +721,7 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
 
       {/* Navigation */}
       <nav
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-2.5 px-2 custom-scrollbar"
+        className="flex-1 min-h-0 overflow-y-auto py-2.5 px-2 custom-scrollbar"
         aria-label="Main navigation"
       >
         {NAV_SECTIONS.map((section) => (
@@ -779,10 +779,10 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
 
   return (
     <>
-      {/* Mobile hamburger */}
+      {/* Mobile hamburger — only visible on mobile */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed top-3 left-3 z-50 p-2 rounded-md bg-card border border-border shadow-sm md:hidden hover:bg-muted transition-colors"
+        className="fixed top-3 left-3 z-[60] p-2 rounded-md bg-card border border-border shadow-sm md:hidden hover:bg-muted transition-colors"
         aria-label="Open navigation"
       >
         <Menu className="h-4 w-4 text-muted-foreground" />
@@ -791,31 +791,33 @@ export function ModernSidebar({ onCollapsedChange }: ModernSidebarProps) {
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[55] md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
-      {/* Mobile drawer */}
-      <div
-        className={`fixed top-0 left-0 h-full w-[80vw] max-w-[280px] z-50 shadow-xl transition-transform duration-300 ease-out md:hidden ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+      {/* Unified sidebar panel — mobile drawer + desktop fixed sidebar */}
+      <aside
+        className={[
+          "fixed left-0 top-0 z-[60] flex flex-col",
+          "bg-sidebar text-sidebar-foreground border-r border-sidebar-border/60",
+          "h-full w-[80vw] max-w-[280px]",
+          "transition-[transform,width] duration-300 ease-out will-change-transform",
+          "shadow-2xl md:shadow-none",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          isCollapsed ? "md:w-[68px]" : "md:w-[240px]",
+        ].join(" ")}
       >
+        {/* Mobile close button */}
         <button
           onClick={() => setMobileOpen(false)}
-          className="absolute top-3 right-3 z-10 p-2 rounded-md hover:bg-muted transition-colors"
+          className="absolute top-3 right-3 z-10 p-2 rounded-md hover:bg-muted transition-colors md:hidden"
           aria-label="Close navigation"
         >
           <X className="h-4 w-4 text-muted-foreground" />
         </button>
         {SidebarContent}
-      </div>
-
-      {/* Desktop sidebar */}
-      <div className="hidden md:block h-full overflow-visible">
-        {SidebarContent}
-      </div>
+      </aside>
     </>
   );
 }
