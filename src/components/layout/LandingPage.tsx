@@ -234,8 +234,6 @@ export function LandingPage() {
               autoRampDuration={0.6}
             />
           </div>
-          {/* Subtle grid overlay on top of fluid sim */}
-          <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={gridBg("white")} />
           {/* Focused glow under headline (mix-blend-screen lifts highlights instead of fighting the sim) */}
           <div
             className="absolute inset-x-0 top-0 h-[700px] pointer-events-none opacity-50 mix-blend-screen"
@@ -260,14 +258,31 @@ export function LandingPage() {
               <AnimateIn delay={80}>
                 <h1
                   className="text-balance font-light leading-[1.02] tracking-[-0.01em] text-5xl sm:text-6xl lg:text-7xl xl:text-[5.5rem]"
-                  style={SERIF}
+                  style={{
+                    ...SERIF,
+                    textShadow:
+                      "0 0 28px rgba(126,67,245,0.55), 0 0 80px rgba(126,67,245,0.30), 0 1px 0 rgba(255,255,255,0.05)",
+                  }}
                 >
-                  Turn market signals into <em className="italic" style={{ color: COLOR.mint }}>winning strategy</em>
+                  Turn market signals into{" "}
+                  <em
+                    className="italic"
+                    style={{
+                      color: COLOR.mint,
+                      textShadow:
+                        "0 0 24px rgba(233,213,255,0.55), 0 0 60px rgba(126,67,245,0.35)",
+                    }}
+                  >
+                    winning strategy
+                  </em>
                 </h1>
               </AnimateIn>
 
               <AnimateIn delay={160}>
-                <p className="text-balance text-lg sm:text-xl text-white/70 leading-[1.6] max-w-2xl mx-auto font-normal">
+                <p
+                  className="text-balance text-lg sm:text-xl text-white/75 leading-[1.6] max-w-2xl mx-auto font-normal"
+                  style={{ textShadow: "0 0 22px rgba(126,67,245,0.25)" }}
+                >
                   Speckula transforms raw customer data into actionable insights and polished PRDs. Ship better products in half the time.
                 </p>
               </AnimateIn>
@@ -636,8 +651,6 @@ export function LandingPage() {
           <div className="px-4 sm:px-6 lg:px-12 pt-10 sm:pt-14">
             <div className="w-full max-w-7xl mx-auto">
 
-              <PlusRow />
-
               {/* Main grid */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 py-10 sm:py-14">
 
@@ -682,8 +695,6 @@ export function LandingPage() {
                 </div>
               </div>
 
-              <PlusRow />
-
               {/* Bottom row */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-6 sm:py-8 text-[11px] uppercase tracking-[0.15em] text-white/55">
                 <div className="flex items-center gap-2.5">
@@ -713,46 +724,49 @@ export function LandingPage() {
                   </span>
                 </div>
               </div>
-
-              <PlusRow />
             </div>
           </div>
 
-          {/* Giant striped SPECKULA wordmark — SVG forces perfect-fit at any width */}
-          <div className="mt-4 sm:mt-6 px-3 sm:px-6">
+          {/* Giant Speckula wordmark — serif italic, vertical gradient fill, fits any width */}
+          <div className="mt-2 sm:mt-4 px-3 sm:px-6 pb-2 sm:pb-4">
             <svg
               aria-hidden="true"
-              viewBox="0 0 1200 260"
+              viewBox="0 0 1200 360"
               preserveAspectRatio="xMidYMid meet"
               className="block w-full h-auto select-none"
             >
               <defs>
-                <pattern
-                  id="speckula-stripes"
-                  x="0"
-                  y="0"
-                  width="100"
-                  height="13"
-                  patternUnits="userSpaceOnUse"
-                >
-                  <rect x="0" y="0" width="100" height="3.2" fill="rgba(243,232,255,0.92)" />
-                </pattern>
+                {/* Vertical fade from highlight violet at the top to deep brand violet at the descender */}
+                <linearGradient id="speckula-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"  stopColor="rgba(248,242,255,0.98)" />
+                  <stop offset="45%" stopColor="rgba(216,180,254,0.85)" />
+                  <stop offset="85%" stopColor="rgba(126,67,245,0.55)" />
+                  <stop offset="100%" stopColor="rgba(76,29,149,0.30)" />
+                </linearGradient>
+                {/* Soft glow that bleeds the letterforms into the dark surface */}
+                <filter id="speckula-glow" x="-10%" y="-10%" width="120%" height="120%">
+                  <feGaussianBlur stdDeviation="5" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
               </defs>
               <text
                 x="600"
-                y="218"
+                y="270"
                 textAnchor="middle"
                 textLength="1170"
                 lengthAdjust="spacingAndGlyphs"
-                fontSize="260"
-                fontWeight="800"
-                fontFamily='var(--font-sans), "Sora", system-ui, sans-serif'
-                fill="url(#speckula-stripes)"
-                stroke="rgba(243,232,255,0.32)"
-                strokeWidth="0.6"
-                style={{ fontKerning: "none" }}
+                fontSize="320"
+                fontStyle="italic"
+                fontWeight="400"
+                fontFamily='var(--font-display), "Instrument Serif", Georgia, "Times New Roman", serif'
+                fill="url(#speckula-fill)"
+                filter="url(#speckula-glow)"
+                style={{ fontKerning: "normal" }}
               >
-                SPECKULA
+                Speckula
               </text>
             </svg>
           </div>
@@ -918,26 +932,6 @@ function PricingCard({
           ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Signing in…</>
           : cta}
       </Button>
-    </div>
-  );
-}
-
-function PlusRow() {
-  return (
-    <div
-      aria-hidden="true"
-      className="flex items-center justify-between text-white/35 text-sm select-none py-0.5 font-mono"
-      style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
-    >
-      <span className="-translate-y-1/2 leading-none">+</span>
-      <span className="hidden sm:inline -translate-y-1/2 leading-none">+</span>
-      <span className="hidden md:inline -translate-y-1/2 leading-none">+</span>
-      <span className="hidden md:inline -translate-y-1/2 leading-none">+</span>
-      <span className="-translate-y-1/2 leading-none">+</span>
-      <span className="hidden md:inline -translate-y-1/2 leading-none">+</span>
-      <span className="hidden md:inline -translate-y-1/2 leading-none">+</span>
-      <span className="hidden sm:inline -translate-y-1/2 leading-none">+</span>
-      <span className="-translate-y-1/2 leading-none">+</span>
     </div>
   );
 }
