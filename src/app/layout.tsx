@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Sora, IBM_Plex_Mono } from "next/font/google";
+import { Sora, IBM_Plex_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/firebase/AuthProvider";
@@ -15,6 +15,13 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500", "600"],
   subsets: ["latin"],
   variable: "--font-mono",
+});
+
+const instrumentSerif = Instrument_Serif({
+  weight: ["400"],
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-display",
 });
 
 
@@ -60,7 +67,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} font-sans min-h-screen bg-background antialiased`}>
+      <body suppressHydrationWarning className={`${sora.variable} ${plexMono.variable} ${instrumentSerif.variable} font-sans min-h-screen bg-background antialiased`}>
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
           <Toaster />
