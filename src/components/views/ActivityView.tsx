@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Activity, Download, Lightbulb, Compass,
   LayoutDashboard, CheckSquare, Sparkles, Users,
@@ -86,113 +86,210 @@ function actorInitials(actor: string): string {
 const AVATAR_COLORS = ["bg-slate-500", "bg-blue-500", "bg-pink-500", "bg-emerald-500", "bg-amber-500", "bg-violet-500"];
 const colorFor = (s: string) => AVATAR_COLORS[s.charCodeAt(0) % AVATAR_COLORS.length];
 
+type BackendActivityItem = {
+  id: string;
+  actorId: string;
+  eventType: string;
+  title: string;
+  description: string | null;
+  createdAt: string;
+};
+
+function mapEventTypeToActivityType(eventType: string): ActivityEventType {
+  if (
+    eventType.startsWith("analysis.") || eventType.startsWith("agent.") ||
+    eventType === "product_brain.updated" || eventType === "experiment.started" ||
+    eventType === "experiment.completed"
+  ) return "ai";
+  if (
+    eventType.includes("signal") || eventType.includes("competitor") ||
+    eventType === "insight.created"
+  ) return "signal";
+  if (
+    eventType === "decision.created" || eventType === "outcome.recorded" ||
+    eventType === "learning.generated"
+  ) return "decision";
+  if (eventType === "task.created") return "task";
+  if (eventType === "specification.generated" || eventType === "roadmap.generated") return "spec";
+  if (eventType.startsWith("workspace.") || eventType.startsWith("auth.")) return "auth";
+  return "ai";
+}
+
+function formatEventAction(eventType: string): string {
+  switch (eventType) {
+    case "analysis.queued":          return "queued an analysis";
+    case "analysis.started":         return "started an analysis";
+    case "analysis.completed":       return "completed an analysis";
+    case "analysis.failed":          return "analysis failed";
+    case "insight.created":          return "captured insight";
+    case "market_signal.detected":   return "detected a market signal";
+    case "competitor.updated":       return "updated competitor data";
+    case "competitor.insight.created": return "added competitor insight";
+    case "competitor.added":         return "added a competitor";
+    case "decision.created":         return "created a decision";
+    case "outcome.recorded":         return "recorded an outcome";
+    case "learning.generated":       return "generated a learning";
+    case "task.created":             return "created a task";
+    case "specification.generated":  return "generated a spec";
+    case "roadmap.generated":        return "generated a roadmap";
+    case "experiment.started":       return "started an experiment";
+    case "experiment.completed":     return "completed an experiment";
+    case "agent.started":            return "started agent run";
+    case "agent.completed":          return "completed agent run";
+    case "product_brain.updated":    return "updated product brain";
+    case "workspace.member.added":   return "added a member";
+    case "workspace.member.removed": return "removed a member";
+    default:                         return eventType.replace(/[._]/g, " ");
+  }
+}
+
+function mapBackendItemToActivity(it: BackendActivityItem, currentUserId: string): ActivityEvent {
+  return {
+    id: it.id,
+    type: mapEventTypeToActivityType(it.eventType),
+    actor: it.actorId === currentUserId ? "You" : it.actorId,
+    action: formatEventAction(it.eventType),
+    subject: it.title,
+    meta: it.description ?? undefined,
+    createdAt: it.createdAt as unknown as ActivityEvent["createdAt"],
+  } as ActivityEvent;
+}
+
+/** Map a live SpecklaBus event into a display-ready ActivityEvent. Returns null
+ *  for protocol-level or non-user-facing events (ping/pong, connection state). */
+function mapBusEventToActivity(
+  ev: { type: string; userId?: string; data?: Record<string, unknown> },
+  currentUserId: string | undefined,
+): ActivityEvent | null {
+  const skip = new Set([
+    "ping", "pong", "connected", "workspace.subscribed", "workspace.unsubscribed",
+    "error", "extension.connected", "extension.disconnected", "agent.step",
+    "analysis.progress",
+  ]);
+  if (skip.has(ev.type)) return null;
+
+  const data = ev.data ?? {};
+  const str = (k: string): string | undefined =>
+    typeof data[k] === "string" ? (data[k] as string) : undefined;
+  const slice8 = (s: string | undefined) => (s ? s.slice(0, 8) : undefined);
+
+  const subject =
+    str("title") ??
+    (str("jobId")        && `Job ${slice8(str("jobId"))}`) ??
+    (str("runId")        && `Run ${slice8(str("runId"))}`) ??
+    (str("decisionId")   && `Decision ${slice8(str("decisionId"))}`) ??
+    (str("taskId")       && `Task ${slice8(str("taskId"))}`) ??
+    (str("signalId")     && `Signal ${slice8(str("signalId"))}`) ??
+    (str("experimentId") && `Experiment ${slice8(str("experimentId"))}`) ??
+    str("domain") ??
+    ev.type.replace(/[._]/g, " ");
+
+  // Stable ID for dedupe against backend-persisted equivalents
+  const idAnchor =
+    str("jobId") ?? str("runId") ?? str("entryId") ?? str("decisionId") ??
+    str("taskId") ?? str("signalId") ?? str("experimentId") ??
+    str("notificationId") ?? String(Date.now());
+
+  return {
+    id: `bus:${ev.type}:${idAnchor}`,
+    type: mapEventTypeToActivityType(ev.type),
+    actor: ev.userId === currentUserId ? "You" : (ev.userId ?? "System"),
+    action: formatEventAction(ev.type),
+    subject,
+    createdAt: new Date() as unknown as ActivityEvent["createdAt"],
+  } as ActivityEvent;
+}
+
 export function ActivityView() {
   const { user } = useAuth();
   const { preferences } = useExtensionPreferences();
   const activeWorkspaceId = preferences?.activeWorkspaceId ?? null;
 
-  type BackendActivityItem = {
-    id: string;
-    actorId: string;
-    eventType: string;
-    title: string;
-    description: string | null;
-    createdAt: string;
-  };
-
-  const { data: backendActivity, loading: backendLoading, refetch: refetchBackend } = useApi<{ items: BackendActivityItem[] }>(
+  const {
+    data: backendActivity,
+    loading: backendLoading,
+    error: backendError,
+    refetch: refetchBackend,
+  } = useApi<{ items: BackendActivityItem[] }>(
     activeWorkspaceId ? `/api/workspaces/${activeWorkspaceId}/activity?limit=100` : "",
     { enabled: Boolean(activeWorkspaceId), refreshInterval: 60_000 }
   );
 
-  const { lastEvent } = useSpecklaBus(activeWorkspaceId);
+  const { lastEvent, connected: busConnected } = useSpecklaBus(activeWorkspaceId);
 
-  const [events,  setEvents]  = useState<ActivityEvent[]>([]);
-  const [filter,  setFilter]  = useState<FilterKey>("all");
-  const [search,  setSearch]  = useState("");
-  const [limit,   setLimit]   = useState(20);
-  const [loading, setLoading] = useState(true);
+  const [events,     setEvents]     = useState<ActivityEvent[]>([]);
+  const [liveEvents, setLiveEvents] = useState<ActivityEvent[]>([]);
+  const [filter,     setFilter]     = useState<FilterKey>("all");
+  const [search,     setSearch]     = useState("");
+  const [limit,      setLimit]      = useState(20);
+  const [loading,    setLoading]    = useState(true);
 
   const effectiveLoading = activeWorkspaceId ? backendLoading : loading;
 
+  // Load persisted activity. Backend (workspaceActivity) when a workspace is
+  // active; otherwise fall back to user-scoped Firebase activity.
   useEffect(() => {
-    if (!user) { return; }
+    if (!user) return;
 
-    // Prefer backend workspace-scoped activity when a workspace is active.
     if (activeWorkspaceId) {
       const items = backendActivity?.items ?? [];
-      const mapped: ActivityEvent[] = items.map((it) => {
-        const type: ActivityEventType =
-          it.eventType.startsWith("analysis.") || it.eventType.startsWith("agent.") ||
-          it.eventType === "product_brain.updated" || it.eventType === "experiment.started" ||
-          it.eventType === "experiment.completed" ? "ai" :
-          it.eventType.includes("signal") || it.eventType.includes("competitor") ? "signal" :
-          it.eventType === "insight.created" ? "signal" :
-          it.eventType === "decision.created" || it.eventType === "outcome.recorded" ||
-          it.eventType === "learning.generated" ? "decision" :
-          it.eventType === "task.created" ? "task" :
-          it.eventType === "specification.generated" || it.eventType === "roadmap.generated" ? "spec" :
-          it.eventType.startsWith("workspace.") || it.eventType.startsWith("auth.") ? "auth" :
-          "ai";
-
-        const actor = it.actorId === user.uid ? "You" : it.actorId;
-        const action =
-          it.eventType === "analysis.queued"          ? "queued an analysis" :
-          it.eventType === "analysis.started"         ? "started an analysis" :
-          it.eventType === "analysis.completed"       ? "completed an analysis" :
-          it.eventType === "analysis.failed"          ? "analysis failed" :
-          it.eventType === "insight.created"          ? "captured insight" :
-          it.eventType === "market_signal.detected"   ? "detected a market signal" :
-          it.eventType === "competitor.updated"       ? "updated competitor data" :
-          it.eventType === "competitor.insight.created" ? "added competitor insight" :
-          it.eventType === "competitor.added"         ? "added a competitor" :
-          it.eventType === "decision.created"         ? "created a decision" :
-          it.eventType === "outcome.recorded"         ? "recorded an outcome" :
-          it.eventType === "learning.generated"       ? "generated a learning" :
-          it.eventType === "task.created"             ? "created a task" :
-          it.eventType === "specification.generated"  ? "generated a spec" :
-          it.eventType === "roadmap.generated"        ? "generated a roadmap" :
-          it.eventType === "experiment.started"       ? "started an experiment" :
-          it.eventType === "experiment.completed"     ? "completed an experiment" :
-          it.eventType === "agent.started"            ? "started agent run" :
-          it.eventType === "agent.completed"          ? "completed agent run" :
-          it.eventType === "product_brain.updated"    ? "updated product brain" :
-          it.eventType === "workspace.member.added"   ? "added a member" :
-          it.eventType === "workspace.member.removed" ? "removed a member" :
-          it.eventType.replace(/[._]/g, " ");
-
-        return {
-          id: it.id,
-          type,
-          actor,
-          action,
-          subject: it.title,
-          meta: it.description ?? undefined,
-          createdAt: it.createdAt as unknown as ActivityEvent["createdAt"],
-        } as ActivityEvent;
-      });
-
-      setEvents(mapped);
+      setEvents(items.map((it) => mapBackendItemToActivity(it, user.uid)));
       return;
     }
 
+    // NOTE: no current backend code writes to users/{uid}/activity, so this
+    // branch usually returns empty until logActivity() is wired up.
     const unsub = subscribeToActivity(
       user.uid,
       (data) => { setEvents(data); setLoading(false); },
-      () => setLoading(false)
+      () => setLoading(false),
     );
     return unsub;
   }, [user, activeWorkspaceId, backendActivity, backendLoading]);
 
+  // Refetch backend activity when a related bus event arrives.
   useEffect(() => {
-    if (!activeWorkspaceId) return;
-    if (!lastEvent) return;
+    if (!activeWorkspaceId || !lastEvent) return;
     if (ACTIVITY_REFETCH_EVENTS.has(lastEvent.type) || lastEvent.type.startsWith("analysis.")) {
       refetchBackend();
     }
   }, [activeWorkspaceId, lastEvent, refetchBackend]);
 
-  const filtered = events.filter((e) => {
+  // Accumulate live bus events into a client-side ring so the timeline shows
+  // activity immediately — independent of backend persistence latency or whether
+  // the matching workspaceActivity row exists yet.
+  useEffect(() => {
+    if (!lastEvent) return;
+    const mapped = mapBusEventToActivity(
+      lastEvent as { type: string; userId?: string; data?: Record<string, unknown> },
+      user?.uid,
+    );
+    if (!mapped) return;
+    setLiveEvents((prev) => {
+      if (prev.some((e) => e.id === mapped.id)) return prev;
+      return [mapped, ...prev].slice(0, 100);
+    });
+    if (loading) setLoading(false);
+  }, [lastEvent, user?.uid, loading]);
+
+  // Merge persisted + live, dedupe by id, sort newest-first.
+  const mergedEvents = useMemo(() => {
+    const seen = new Set<string>();
+    const out: ActivityEvent[] = [];
+    for (const e of [...liveEvents, ...events]) {
+      const key = e.id ?? `${e.type}:${e.subject}:${String(e.createdAt)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(e);
+    }
+    return out.sort((a, b) => {
+      const aT = toDate(a.createdAt)?.getTime() ?? 0;
+      const bT = toDate(b.createdAt)?.getTime() ?? 0;
+      return bT - aT;
+    });
+  }, [liveEvents, events]);
+
+  const filtered = mergedEvents.filter((e) => {
     const matchType   = filter === "all" || e.type === filter;
     const matchSearch = !search ||
       e.subject.toLowerCase().includes(search.toLowerCase()) ||
@@ -216,15 +313,43 @@ export function ActivityView() {
       <div className="max-w-3xl mx-auto px-6 py-8">
 
         {/* ── Header ── */}
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex items-start justify-between mb-3">
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Activity Log</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-foreground">Activity Log</h1>
+              <span
+                title={busConnected ? "Realtime stream connected" : "Realtime stream offline"}
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider ${
+                  busConnected
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${busConnected ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40"}`} />
+                {busConnected ? "Live" : "Offline"}
+              </span>
+            </div>
             <p className="text-sm text-muted-foreground mt-0.5">A complete history of events in your workspace</p>
           </div>
           <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/60 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             <Download className="h-3.5 w-3.5" /> Export
           </button>
         </div>
+
+        {/* Backend error banner — surfaces proxy / 4xx / 5xx instead of silently
+            showing an empty state */}
+        {activeWorkspaceId && backendError && (
+          <div className="mb-4 px-3 py-2 rounded-lg border border-destructive/30 bg-destructive/5 text-xs text-destructive flex items-start gap-2">
+            <span className="font-semibold shrink-0">Backend:</span>
+            <span className="flex-1">{backendError}</span>
+            <button
+              onClick={() => refetchBackend()}
+              className="shrink-0 px-2 py-0.5 rounded border border-destructive/30 hover:bg-destructive/10 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* ── Search + filters ── */}
         <div className="space-y-3 mb-6">
