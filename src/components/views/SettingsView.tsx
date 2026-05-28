@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
-import { useAppStore } from "@/store/useAppStore";
 import { toast } from "@/store/useToastStore";
 import {
   Settings, Cpu, Puzzle, Users, Bell,
@@ -276,7 +275,6 @@ function AISection() {
 
 function ExtensionSection() {
   const { user } = useAuth();
-  const setActiveView = useAppStore((s) => s.setActiveView);
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
   const [autoCapture, setAutoCapture] = useState(false);
@@ -321,12 +319,6 @@ function ExtensionSection() {
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
-          <button
-            onClick={() => setActiveView("extension")}
-            className="flex items-center gap-1 text-[11px] text-primary hover:underline"
-          >
-            Open Extension page <ChevronRight className="h-3 w-3" />
-          </button>
         </div>
       </SettingRow>
 
