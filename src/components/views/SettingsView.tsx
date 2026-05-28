@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
+import { useAppStore } from "@/store/useAppStore";
+import { toast } from "@/store/useToastStore";
 import {
   Settings, Cpu, Puzzle, Users, Bell,
   Key, Shield, ChevronRight, Check, Copy, RefreshCw,
@@ -274,37 +276,56 @@ function AISection() {
 
 function ExtensionSection() {
   const { user } = useAuth();
+  const setActiveView = useAppStore((s) => s.setActiveView);
   const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [autoCapture, setAutoCapture] = useState(false);
   const [allowedDomains, setAllowedDomains] = useState("*.competitor.com\n*.producthunt.com\nreddit.com");
   const [saved, setSaved] = useState(false);
 
-  const mockToken = user
-    ? `spk_ext_${user.uid.slice(0, 8)}xxxxxxxxxxxxxxxxxxxx`
-    : "spk_ext_sign_in_first";
-
-  const copyToken = () => {
-    navigator.clipboard.writeText(mockToken);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // The extension authenticates with a Firebase ID token. Fetch it on demand
+  // rather than rendering the raw JWT in the DOM.
+  const copyToken = useCallback(async () => {
+    if (!user) { toast.error("Sign in first"); return; }
+    setCopying(true);
+    try {
+      const token = await user.getIdToken();
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+      toast.success("Connection token copied", "Paste it into the extension's Settings");
+    } catch {
+      toast.error("Could not copy token");
+    } finally {
+      setCopying(false);
+    }
+  }, [user]);
 
   return (
     <div>
       <h2 className="text-base font-semibold text-foreground mb-1">Extension</h2>
       <p className="text-xs text-muted-foreground mb-6">Configure the SPECKULA browser extension integration.</p>
 
-      <SettingRow label="Extension Token" description="Paste this token in the extension Settings to link your account.">
-        <div className="flex items-center gap-2">
-          <code className="px-2.5 py-1 rounded-md bg-muted text-[11px] font-mono text-muted-foreground max-w-[220px] truncate">
-            {mockToken}
-          </code>
+      <SettingRow label="Connection Token" description="Copy this token and paste it into the extension's Settings to link your account. Valid ~1 hour.">
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2">
+            <code className="px-2.5 py-1 rounded-md bg-muted text-[11px] font-mono text-muted-foreground/70 select-none">
+              •••• connection token ••••
+            </code>
+            <button
+              onClick={copyToken}
+              disabled={copying || !user}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+            >
+              {copying ? <Loader2 className="h-3 w-3 animate-spin" /> : copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
           <button
-            onClick={copyToken}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            onClick={() => setActiveView("extension")}
+            className="flex items-center gap-1 text-[11px] text-primary hover:underline"
           >
-            {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
-            {copied ? "Copied" : "Copy"}
+            Open Extension page <ChevronRight className="h-3 w-3" />
           </button>
         </div>
       </SettingRow>
