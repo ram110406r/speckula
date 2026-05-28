@@ -87,19 +87,6 @@ export function useAgentJobs(status?: string) {
   return { data, loading, error, refetch };
 }
 
-export interface AgentHistoryResponse {
-  dailyTrend: { date: string; queued: number; completed: number; failed: number }[];
-  byStatus: Record<string, number>;
-}
-
-export function useAgentHistory() {
-  const { data, loading, error, refetch } = useApi<AgentHistoryResponse>(
-    '/api/agents/history',
-    { refreshInterval: 60_000 },
-  );
-  return { data, loading, error, refetch };
-}
-
 export type AgentVerdict = 'PROCEED' | 'VALIDATE_FIRST' | 'DO_NOT_BUILD';
 
 export interface AgentRunSummary {
