@@ -152,12 +152,21 @@ export function DecisionView() {
 
   // ── Load saved decisions from Firestore ──────────────────────────────────────
   React.useEffect(() => {
-    if (!user || !currentDocId) return;
+    if (!user) return;
+    // No active doc — clear any decisions left over from a previously-viewed
+    // doc so they don't leak into this context (and into PRDs created here).
+    if (!currentDocId) {
+      setScoredSuggestions([]);
+      setSuggestions([]);
+      setPhaseHasContent({ decisions: false });
+      return;
+    }
+    let cancelled = false;
     (async () => {
       try {
         const records = await getDecisions(user.uid);
+        if (cancelled) return; // a newer doc switch superseded this fetch
         const forDoc = records.filter((r) => r.sourceDocId === currentDocId);
-        if (forDoc.length === 0) return;
         const scored: ScoredDecision[] = forDoc.map((r) => {
           const breakdown: OpportunityScoreData = {
             impact: r.impact,
@@ -185,13 +194,21 @@ export function DecisionView() {
           } as ScoredDecision;
         });
         setScoredSuggestions(scored);
-        setSuggestions(scored); // keeps "no decisions" empty state accurate
+        setSuggestions(scored); // empty array clears stale decisions from a prior doc
         setPhaseHasContent({ decisions: scored.length > 0 });
       } catch {
         // silent — first load failure is non-critical
       }
     })();
+    return () => { cancelled = true; };
   }, [user, currentDocId, setPhaseHasContent]);
+
+  // Discard any open PRD preview when the active doc changes so it can't be
+  // saved against — or inserted into — the wrong document.
+  React.useEffect(() => {
+    setPrdPreview(null);
+    setPendingDecisionForPRD(null);
+  }, [currentDocId]);
 
   React.useEffect(() => {
     if (currentDocId) {
