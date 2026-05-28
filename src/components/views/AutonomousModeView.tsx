@@ -316,6 +316,61 @@ export function AutonomousModeView() {
     setChat((prev) => [...prev, { ...entry, id: nextEntryId() }]);
   }, []);
 
+  // Backend run recording (fire-and-forget). Surfaces runs on the Agents page.
+  // None of these block or fail the client-side run — if the backend is down
+  // the analysis still completes, it just won't appear in run history.
+  const backendRunIdRef = React.useRef<string | null>(null);
+
+  const recordRunStart = React.useCallback(async (ideaText: string, runDepth: AgentDepth) => {
+    if (!user) return;
+    backendRunIdRef.current = null;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/agent-runs", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ idea: ideaText, depth: runDepth }),
+      });
+      const body = (await res.json()) as { ok: boolean; data?: { run?: { id: string } } };
+      if (res.ok && body.ok && body.data?.run?.id) backendRunIdRef.current = body.data.run.id;
+    } catch { /* non-fatal */ }
+  }, [user]);
+
+  const recordRunComplete = React.useCallback(async () => {
+    const runId = backendRunIdRef.current;
+    const v = resumeDataRef.current.verdict;
+    if (!user || !runId || !v?.label) return;
+    backendRunIdRef.current = null;
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/agent-runs/${runId}/complete`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisions: resumeDataRef.current.decisions,
+          strategy: resumeDataRef.current.strategy,
+          roadmap: resumeDataRef.current.roadmap,
+          verdict: v.label,
+          verdictReason: v.reason,
+          tokensUsed: 0,
+        }),
+      });
+    } catch { /* non-fatal */ }
+  }, [user]);
+
+  const recordRunStop = React.useCallback(async () => {
+    const runId = backendRunIdRef.current;
+    if (!user || !runId) return;
+    backendRunIdRef.current = null;
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/agent-runs/${runId}/stop`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch { /* non-fatal */ }
+  }, [user]);
+
   const handleAgentEvent = React.useCallback((event: AgentEvent) => {
     switch (event.type) {
       case "state":
@@ -411,13 +466,15 @@ export function AutonomousModeView() {
         break;
       case "error":
         appendEntry({ kind: "error", text: event.message });
+        void recordRunStop();
         break;
       case "done":
         appendEntry({ kind: "system", text: "Run complete." });
         setMobileTab("output");
+        void recordRunComplete();
         break;
     }
-  }, [appendEntry, user?.uid]);
+  }, [appendEntry, user?.uid, recordRunComplete, recordRunStop]);
 
   const startRun = React.useCallback(async (resumeFrom?: AgentResumeData) => {
     const trimmed = idea.trim();
@@ -447,6 +504,8 @@ export function AutonomousModeView() {
     setAgentState("understand_idea");
     setMobileTab("stream");
     appendEntry({ kind: "user", text: resumeFrom ? `↩ Resuming: ${trimmed}` : trimmed });
+
+    void recordRunStart(trimmed, depth);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -480,7 +539,7 @@ export function AutonomousModeView() {
       answerResolverRef.current = null;
       answerRejecterRef.current = null;
     }
-  }, [idea, depth, isRunning, appendEntry, handleAgentEvent, user?.uid, strictness, autoMode, modeMeta, currentDocId]);
+  }, [idea, depth, isRunning, appendEntry, handleAgentEvent, recordRunStart, user?.uid, strictness, autoMode, modeMeta, currentDocId]);
 
   const start = React.useCallback(() => startRun(), [startRun]);
   const resumeRun = React.useCallback(() => startRun({ ...resumeDataRef.current }), [startRun]);
@@ -493,7 +552,8 @@ export function AutonomousModeView() {
       answerRejecterRef.current(err);
     }
     setPendingQuestion(null);
-  }, []);
+    void recordRunStop();
+  }, [recordRunStop]);
 
   const submitAnswer = React.useCallback(() => {
     const text = answerText.trim();
