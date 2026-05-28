@@ -564,7 +564,7 @@ export function AgentsView() {
   const setActiveView = useAppStore((s) => s.setActiveView);
   const { user } = useAuth();
 
-  const { data: fleet, loading: fleetLoading, refetch: refetchFleet } = useAgents();
+  const { data: fleet, loading: fleetLoading, error: fleetError, refetch: refetchFleet } = useAgents();
   const { data: history } = useAgentHistory();
   const [jobFilter, setJobFilter] = React.useState<string | undefined>(undefined);
   const { data: jobsData } = useAgentJobs(jobFilter);
@@ -719,7 +719,15 @@ export function AgentsView() {
               <Plus className="h-3 w-3" /> New agent
             </button>
           </div>
-          {fleetLoading && agents.length === 0 ? (
+          {fleetError && agents.length === 0 ? (
+            <div className="flex flex-col items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+              <p className="text-xs text-destructive">Couldn&apos;t load the agent fleet: {fleetError}</p>
+              <button type="button" onClick={() => refetchFleet()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 font-mono text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                <RefreshCw className="h-3 w-3" /> Retry
+              </button>
+            </div>
+          ) : fleetLoading && agents.length === 0 ? (
             <div className="flex items-center gap-2 py-8 text-xs text-muted-foreground/50">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading fleet…
             </div>

@@ -57,7 +57,7 @@ export interface AgentJobsResponse {
 export function useAgents() {
   const { data, loading, error, refetch } = useApi<AgentsResponse>(
     '/api/agents',
-    { refreshInterval: 10_000 },
+    { refreshInterval: 30_000 },
   );
   const { lastEvent } = useSpecklaBus();
 
@@ -81,7 +81,7 @@ export function useAgentJobs(status?: string) {
     : '/api/agents/jobs';
 
   const { data, loading, error, refetch } = useApi<AgentJobsResponse>(url, {
-    refreshInterval: 10_000,
+    refreshInterval: 30_000,
   });
 
   return { data, loading, error, refetch };
@@ -95,7 +95,7 @@ export interface AgentHistoryResponse {
 export function useAgentHistory() {
   const { data, loading, error, refetch } = useApi<AgentHistoryResponse>(
     '/api/agents/history',
-    { refreshInterval: 30_000 },
+    { refreshInterval: 60_000 },
   );
   return { data, loading, error, refetch };
 }
@@ -127,7 +127,7 @@ export function useAgentRuns(status?: string) {
     : '/api/agent-runs';
 
   const { data, loading, error, refetch } = useApi<AgentRunsResponse>(url, {
-    refreshInterval: 15_000,
+    refreshInterval: 30_000,
   });
   const { lastEvent } = useSpecklaBus();
 
@@ -156,7 +156,7 @@ export interface AgentRunStats {
 export function useAgentRunStats() {
   const { data, loading, error, refetch } = useApi<AgentRunStats>(
     '/api/agent-runs/stats',
-    { refreshInterval: 30_000 },
+    { refreshInterval: 60_000 },
   );
   const { lastEvent } = useSpecklaBus();
 

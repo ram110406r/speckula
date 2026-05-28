@@ -233,12 +233,14 @@ export const createServer = async () => {
     { prefix: '/competitors' }
   );
 
-  // Agent status routes: 60 req/hr.
+  // Agent status routes: 300 req/hr — the Agents/Dashboard pages poll these
+  // read endpoints and also refetch on realtime events, so the cap needs
+  // headroom above the base poll interval.
   await fastify.register(
     async (instance) => {
       instance.addHook('onRequest', verifyFirebaseAuth);
       instance.addHook('onRoute', (route) => {
-        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+        route.config = { ...(route.config || {}), rateLimit: { max: 300, timeWindow: '1 hour' } };
       });
       await instance.register(agentRoutes);
     },
@@ -317,12 +319,13 @@ export const createServer = async () => {
     { prefix: '/experiments' }
   );
 
-  // Agent run routes: 60 req/hr.
+  // Agent run routes: 300 req/hr — Agents page polls runs/stats and refetches
+  // on realtime agent.* events, so the cap needs headroom above the base poll.
   await fastify.register(
     async (instance) => {
       instance.addHook('onRequest', verifyFirebaseAuth);
       instance.addHook('onRoute', (route) => {
-        route.config = { ...(route.config || {}), rateLimit: { max: 60, timeWindow: '1 hour' } };
+        route.config = { ...(route.config || {}), rateLimit: { max: 300, timeWindow: '1 hour' } };
       });
       await instance.register(agentRunRoutes);
     },
