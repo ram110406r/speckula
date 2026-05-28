@@ -20,7 +20,6 @@ const PlatformView        = dynamic(() => import("../views/PlatformView").then(m
 const SlackView           = dynamic(() => import("../views/SlackView").then(m => ({ default: m.SlackView })), { ssr: false });
 // AI SYSTEMS
 const AutonomousModeView  = dynamic(() => import("../views/AutonomousModeView").then(m => ({ default: m.AutonomousModeView })), { ssr: false });
-const AgentsView          = dynamic(() => import("../views/AgentsView").then(m => ({ default: m.AgentsView })), { ssr: false });
 const ActivityView        = dynamic(() => import("../views/ActivityView").then(m => ({ default: m.ActivityView })), { ssr: false });
 // HOME
 const WorkspaceView       = dynamic(() => import("../views/WorkspaceView").then(m => ({ default: m.WorkspaceView })), { ssr: false });
@@ -217,7 +216,6 @@ export function Shell() {
       case "projects":           return wrap("Projects",          <PlatformView />);
       case "integrations":       return wrap("Integrations",      <SlackView />);
       // AI SYSTEMS
-      case "agents":             return wrap("Agents",            <AgentsView />);
       case "activity":           return wrap("Activity",          <ActivityView />);
       // PLATFORM
       case "notifications":      return wrap("Notifications",     <NotificationsView />);

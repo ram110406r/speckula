@@ -46,6 +46,7 @@ import { exportDialog } from "@/store/useExportDialogStore";
 import { activity } from "@/store/useActivityStore";
 import { CaseBriefDialog } from "@/components/decision/CaseBriefDialog";
 import { FocusPanel, type FocusPanelData } from "@/components/decision/FocusPanel";
+import { AutonomousRunHistory } from "./AutonomousRunHistory";
 
 type DecisionFilter = "all" | "strong" | "risky" | "recent";
 
@@ -208,7 +209,7 @@ export function DecisionView() {
   React.useEffect(() => {
     setPrdPreview(null);
     setPendingDecisionForPRD(null);
-  }, [currentDocId]);
+  }, [currentDocId, setPrdPreview, setPendingDecisionForPRD]);
 
   React.useEffect(() => {
     if (currentDocId) {
@@ -929,6 +930,9 @@ export function DecisionView() {
             )}
           </section>
         )}
+
+        {/* Autonomous run history — folded in from the former Agents page */}
+        <AutonomousRunHistory />
       </div>
 
       <CaseBriefDialog

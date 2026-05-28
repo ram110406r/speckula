@@ -12,7 +12,7 @@ export type AppView =
   // EXECUTION
   | 'tasks' | 'projects' | 'integrations'
   // AI SYSTEMS
-  | 'agents' | 'autonomous' | 'activity'
+  | 'autonomous' | 'activity'
   // PLATFORM
   | 'extension' | 'notifications' | 'settings' | 'profile' | 'help';
 
