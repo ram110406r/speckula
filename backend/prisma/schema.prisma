@@ -561,6 +561,46 @@ model LearningInsight {
 // =========================
 
 /// A single Autonomous Mode session — tracks the full multi-step reasoning run.
+/// Persistent agent identity + config. Replaces the old "agents are just
+/// grouped jobs" model — each row is a configurable agent the user owns.
+/// Job stats are still derived from AnalysisJob.pageType at query time and
+/// joined onto the agent via `key`.
+model Agent {
+  id            String   @id @default(uuid())
+  userId        String
+  workspaceId   String?
+  // Stable slug used to (a) map AnalysisJob.pageType → agent for stats and
+  // (b) identify the seeded defaults. Unique per user.
+  key           String
+  name          String
+  role          String
+  objective     String?
+  // Execution config
+  modelName     String   @default("llama-3.3-70b-versatile")
+  temperature   Float    @default(0.7)
+  autonomyLevel String   @default("suggest")  // manual | suggest | auto
+  enabled       Boolean  @default(true)
+  schedule      String?  // cron expression; null = manual/on-demand only
+  tokenBudget   Int?     // monthly soft cap; null = unlimited
+  maxRetries    Int      @default(1)
+  memoryScope   String   @default("workspace") // none | agent | workspace | global
+  // Forward-looking JSON config (validated/used incrementally).
+  tools             String?  // JSON: string[] of tool ids
+  permissions       String?  // JSON: permission flags
+  confidenceProfile String?  // JSON: calibration profile
+  executionPolicy   String?  // JSON: misc execution policy
+  // Defaults are seeded per-user and cannot be deleted (only disabled).
+  isDefault     Boolean  @default(false)
+  lastRunAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([enabled])
+}
+
 model AgentRun {
   id            String    @id @default(uuid())
   userId        String
