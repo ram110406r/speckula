@@ -15,7 +15,6 @@ import {
   CheckSquare,
   Layers,
   Plug,
-  Bot,
   Cpu,
   Activity,
   Puzzle,
@@ -112,7 +111,6 @@ const NAV_SECTIONS: NavSectionConfig[] = [
     label: "AI Systems",
     collapsible: true,
     items: [
-      { view: "agents",    label: "Agents",          icon: Bot,      pulse: true },
       { view: "autonomous",label: "Autonomous Mode", icon: Cpu,      pulse: true },
       { view: "activity",  label: "Activity",        icon: Activity              },
     ],
