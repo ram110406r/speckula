@@ -45,7 +45,7 @@ const MarketSignalSchema = z.object({
   strength:   z.number().min(0).max(1).optional().default(0.5),
 });
 
-const GroqOutputSchema = z.object({
+export const GroqOutputSchema = z.object({
   summary:        z.string().optional().default(''),
   insights:       z.array(InsightSchema).optional().default([]),
   competitorData: CompetitorDataSchema,
@@ -53,10 +53,11 @@ const GroqOutputSchema = z.object({
   tags:           z.array(z.string()).optional().default([]),
 });
 
-type GroqOutput = z.infer<typeof GroqOutputSchema>;
+export type GroqOutput = z.infer<typeof GroqOutputSchema>;
 
-// Page-type-specific analysis prompts.
-const buildPrompt = (data: AnalysisJobData): string => {
+// Page-type-specific analysis prompts. Exported so the insight-quality eval
+// harness (src/eval) scores against the EXACT production prompt.
+export const buildPrompt = (data: AnalysisJobData): string => {
   const truncated = data.content.slice(0, 12_000);
   const selected = data.selectedText ? `\n\nUser selected text: "${data.selectedText.slice(0, 2000)}"` : '';
 

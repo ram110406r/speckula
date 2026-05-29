@@ -14,6 +14,7 @@
     "retention:sweep": "tsx src/scripts/retentionSweeper.ts",
     "digest:send": "tsx src/scripts/weeklyDigest.ts",
     "worker": "tsx src/workers/analysisWorker.ts",
+    "eval": "tsx src/eval/runEval.ts",
     "test": "vitest",
     "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint --config .eslintrc.cjs --no-eslintrc --ext .ts src",
     "type-check": "tsc --noEmit"
