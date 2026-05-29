@@ -166,15 +166,6 @@ export function WorkspaceView() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {!extensionConnected && (
-              <button
-                onClick={() => setActiveView("extension")}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 text-xs font-medium hover:bg-amber-500/20 transition-colors"
-              >
-                <Puzzle className="h-3 w-3" />
-                Connect Extension
-              </button>
-            )}
             <button
               onClick={() => setActiveView("settings")}
               className="px-3 py-1.5 rounded-lg border border-border/60 text-muted-foreground text-xs hover:text-foreground hover:bg-muted transition-colors"

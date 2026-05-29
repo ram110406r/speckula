@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
-import { toast } from "@/store/useToastStore";
 import {
   Settings, Cpu, Puzzle, Users, Bell,
   Key, Shield, ChevronRight, Check, Copy, RefreshCw,
@@ -274,85 +273,23 @@ function AISection() {
 }
 
 function ExtensionSection() {
-  const { user } = useAuth();
-  const [copied, setCopied] = useState(false);
-  const [copying, setCopying] = useState(false);
-  const [autoCapture, setAutoCapture] = useState(false);
-  const [allowedDomains, setAllowedDomains] = useState("*.competitor.com\n*.producthunt.com\nreddit.com");
-  const [saved, setSaved] = useState(false);
-
-  // The extension authenticates with a Firebase ID token. Fetch it on demand
-  // rather than rendering the raw JWT in the DOM.
-  const copyToken = useCallback(async () => {
-    if (!user) { toast.error("Sign in first"); return; }
-    setCopying(true);
-    try {
-      const token = await user.getIdToken();
-      await navigator.clipboard.writeText(token);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-      toast.success("Connection token copied", "Paste it into the extension's Settings");
-    } catch {
-      toast.error("Could not copy token");
-    } finally {
-      setCopying(false);
-    }
-  }, [user]);
-
   return (
     <div>
       <h2 className="text-base font-semibold text-foreground mb-1">Extension</h2>
       <p className="text-xs text-muted-foreground mb-6">Configure the SPECKULA browser extension integration.</p>
 
-      <SettingRow label="Connection Token" description="Copy this token and paste it into the extension's Settings to link your account. Valid ~1 hour.">
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-2">
-            <code className="px-2.5 py-1 rounded-md bg-muted text-[11px] font-mono text-muted-foreground/70 select-none">
-              •••• connection token ••••
-            </code>
-            <button
-              onClick={copyToken}
-              disabled={copying || !user}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
-            >
-              {copying ? <Loader2 className="h-3 w-3 animate-spin" /> : copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
-              {copied ? "Copied" : "Copy"}
-            </button>
-          </div>
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-card">
+          <Puzzle className="h-6 w-6 text-muted-foreground/50" />
         </div>
-      </SettingRow>
-
-      <SettingRow label="Auto-capture" description="Automatically capture and queue pages for analysis when browsing allowed domains.">
-        <Toggle checked={autoCapture} onChange={setAutoCapture} />
-      </SettingRow>
-
-      <SettingRow label="Allowed Domains" description="Domains where auto-capture is active (one per line). Leave blank for all domains.">
-        <div className="flex flex-col items-end gap-2">
-          <textarea
-            value={allowedDomains}
-            onChange={(e) => setAllowedDomains(e.target.value)}
-            onBlur={() => { setSaved(true); setTimeout(() => setSaved(false), 2000); }}
-            rows={3}
-            className="w-64 rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 resize-none font-mono"
-          />
-          <SavedBadge show={saved} />
-        </div>
-      </SettingRow>
-
-      <SettingRow label="Extension Status">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
-          <span className="text-xs text-muted-foreground">Not detected</span>
-          <a
-            href="https://speckula.eddgeportal.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-primary hover:underline"
-          >
-            Install →
-          </a>
-        </div>
-      </SettingRow>
+        <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+          Coming soon
+        </span>
+        <p className="max-w-xs text-sm text-muted-foreground">
+          Browser extension settings will appear here once the extension launches.
+        </p>
+      </div>
     </div>
   );
 }
