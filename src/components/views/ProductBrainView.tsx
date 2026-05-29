@@ -119,28 +119,6 @@ function confidenceColor(n: number) {
   return              { bar: "bg-red-500",      text: "text-red-400"     };
 }
 
-// ─── Sparkline SVG ───────────────────────────────────────────────────────────
-
-function Sparkline() {
-  const points = [10, 18, 14, 22, 19, 28, 24, 34, 30, 40];
-  const w = 120; const h = 40; const minVal = 10; const maxVal = 40; const range = maxVal - minVal;
-  const step = w / (points.length - 1);
-  const coords = points.map((v, i) => `${i * step},${h - ((v - minVal) / range) * (h - 4) - 2}`);
-  const pathD = `M ${coords.join(" L ")}`;
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} fill="none" className="overflow-visible">
-      <defs>
-        <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`${pathD} L ${w},${h} L 0,${h} Z`} fill="url(#sparkGrad)" />
-      <path d={pathD} stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={(points.length - 1) * step} cy={h - ((points[points.length - 1] - minVal) / range) * (h - 4) - 2} r="3" fill="#10b981" />
-    </svg>
-  );
-}
 
 // ─── Memory Card ─────────────────────────────────────────────────────────────
 
@@ -545,11 +523,10 @@ export function ProductBrainView() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="h-4 w-4 text-emerald-400" />
-              <h2 className="text-xs font-semibold text-foreground uppercase tracking-widest">Intelligence Growth</h2>
+              <h2 className="text-xs font-semibold text-foreground uppercase tracking-widest">Intelligence</h2>
             </div>
             <div className="rounded-xl border border-border/60 bg-card/80 p-4">
-              <Sparkline />
-              <div className="mt-3 flex items-center justify-between">
+              <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xl font-bold text-foreground">{total}</p>
                   <p className="text-xs text-muted-foreground">total memories</p>
