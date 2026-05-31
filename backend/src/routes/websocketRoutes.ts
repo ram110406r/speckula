@@ -46,6 +46,14 @@ export default async function websocketRoutes(fastify: FastifyInstance) {
         return;
       }
 
+      // Limit concurrent connections per user to prevent resource exhaustion.
+      const MAX_CONNECTIONS_PER_USER = 10;
+      if (wsManager.activeCountByUser(userId) >= MAX_CONNECTIONS_PER_USER) {
+        socket.send(JSON.stringify({ type: 'error', code: 'too_many_connections', message: 'Connection limit reached' }));
+        socket.close(1008, 'Too many connections');
+        return;
+      }
+
       const connectionId = crypto.randomUUID();
       const workspaceId = url.searchParams.get('workspaceId') ?? null;
 
@@ -132,14 +140,17 @@ export default async function websocketRoutes(fastify: FastifyInstance) {
   );
 
   // GET /ws/connections — admin endpoint: active connection count.
+  // Requires METRICS_TOKEN header in all environments. Fails closed if token is not configured.
   fastify.get('/ws/connections', async (request, reply) => {
     const metricsToken = process.env.METRICS_TOKEN;
-    if (metricsToken) {
-      const provided = (request.headers['x-metrics-token'] as string | undefined) ?? '';
-      if (provided !== metricsToken) {
-        reply.code(403).send({ ok: false, error: 'Forbidden' });
-        return;
-      }
+    if (!metricsToken) {
+      reply.code(403).send({ ok: false, error: 'Forbidden' });
+      return;
+    }
+    const provided = (request.headers['x-metrics-token'] as string | undefined) ?? '';
+    if (provided !== metricsToken) {
+      reply.code(403).send({ ok: false, error: 'Forbidden' });
+      return;
     }
     reply.code(200).send({
       ok: true,

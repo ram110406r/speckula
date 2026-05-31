@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { createHash } from 'crypto';
 import { z } from 'zod';
 import { db } from '../lib/db.js';
 import { enqueueAnalysis } from '../lib/queue.js';
@@ -6,6 +7,10 @@ import { publishEvent } from '../services/eventBus.js';
 import { requireWorkspaceRole } from '../lib/workspaceAuth.js';
 import { workspaceActivityService } from '../services/workspaceActivityService.js';
 import { workspaceBootstrapService } from '../services/workspaceBootstrapService.js';
+
+// One-way hash of an IP for activity logs — preserves correlation without storing raw PII.
+const hashIp = (ip: string): string =>
+  createHash('sha256').update(`ip:${ip}`).digest('hex').slice(0, 16);
 
 const requireUserId = (request: FastifyRequest, reply: FastifyReply): string | null => {
   const uid = request.userId;
@@ -159,7 +164,7 @@ export default async function extensionRoutes(fastify: FastifyInstance) {
         resourceType: 'AnalysisJob',
         resourceId:   job.id,
         metadata:     JSON.stringify({ pageType, sourceUrl }),
-        ipAddress:    request.ip,
+        ipAddress:    hashIp(request.ip),
         userAgent:    request.headers['user-agent'] ?? null,
       },
     }).catch(() => undefined);

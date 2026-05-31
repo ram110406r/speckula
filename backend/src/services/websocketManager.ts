@@ -156,6 +156,14 @@ export const wsManager = {
     return connections.size;
   },
 
+  activeCountByUser(userId: string): number {
+    let count = 0;
+    for (const [, entry] of connections) {
+      if (entry.userId === userId) count += 1;
+    }
+    return count;
+  },
+
   // Sweep stale DB rows (connections that died without a clean unregister).
   async sweepStale(): Promise<void> {
     const staleThreshold = new Date(Date.now() - 2 * 60 * 1000);

@@ -71,8 +71,8 @@ const envSchema = z.object({
     z.string().min(32, 'SLACK_TOKEN_ENCRYPTION_KEY must be at least 32 characters').optional()
   ),
 
-  // How many days to keep PromptLog / DecisionReasoning rows (default 60).
-  RETENTION_DAYS: z.coerce.number().int().min(1).default(60),
+  // How many days to keep PromptLog / DecisionReasoning rows (default 30).
+  RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
 
   // Resend — transactional email (weekly digest). Get key at resend.com.
   RESEND_API_KEY: z.preprocess(
@@ -146,6 +146,15 @@ export const validateEnv = (): AppEnv => {
 
   // Additional validations for production safety
   if (env.NODE_ENV === 'production') {
+    // METRICS_TOKEN must be set in production — the /ws/connections endpoint fails closed without it.
+    if (!env.METRICS_TOKEN) {
+      throw new Error(
+        '\n[env] Invalid environment configuration — fix these before starting:\n' +
+        '  • METRICS_TOKEN: required in production (min 16 chars). ' +
+        'Generate: node -e "process.stdout.write(require(\'crypto\').randomBytes(24).toString(\'hex\'))"\n'
+      );
+    }
+
     // Slack integration must be fully configured in production
     const hasSlackIntegration =
       process.env.SLACK_CLIENT_ID ||
