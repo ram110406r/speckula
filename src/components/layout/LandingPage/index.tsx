@@ -771,14 +771,6 @@ export function LandingPage() {
             <AnimateIn delay={350} className="mt-10 sm:mt-12 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-center">
               <span className="inline-flex items-center gap-2 text-sm" style={{ color: COLOR.mute }}>
                 <Check className="h-3.5 w-3.5" style={{ color: COLOR.ink }} />
-                No credit card required to start
-              </span>
-              <span className="inline-flex items-center gap-2 text-sm" style={{ color: COLOR.mute }}>
-                <Check className="h-3.5 w-3.5" style={{ color: COLOR.ink }} />
-                7-day free trial on Pro · cancel anytime
-              </span>
-              <span className="inline-flex items-center gap-2 text-sm" style={{ color: COLOR.mute }}>
-                <Check className="h-3.5 w-3.5" style={{ color: COLOR.ink }} />
                 Free plan stays free
               </span>
             </AnimateIn>
@@ -828,8 +820,6 @@ export function LandingPage() {
                   Book a 15-min demo
                 </Button>
               </div>
-              <p className="text-sm text-white/50">No credit card required. 7-day free trial on Pro.</p>
-
               {/* Repeat trust badges at the conversion moment */}
               <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pt-2">
                 <div className="flex items-center gap-2 text-xs text-white/50">
