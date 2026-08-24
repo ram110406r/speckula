@@ -1,180 +1,130 @@
-# Speckula — Deployment Guide
+# Speckula - Deployment Guide
 
 ## 1. Prerequisites
 
-- **Docker** 24+ and **Docker Compose** v2 (`docker compose version`)
-- **Git** — repository cloned to the target server
-- A **Dokploy** account and project (for managed VPS deployment), or any Linux host with Docker
-- **Firebase project** with a service account (for auth)
-- **Groq** API key (AI analysis)
+- Docker 24+ and Docker Compose v2
+- Git, with this repository cloned on the target host
+- A Dokploy account and project, or any Linux host with Docker
+- Firebase project with a service account, if you want the live auth and data stack
+- Groq API key, if you want AI features
 
----
+## 2. Environment Setup
 
-## 2. Environment Variables Setup
+The repo is split into two deployment modes:
 
-Two `.env.example` files document every available variable:
+- Frontend showcase only
+- Full stack with backend, Postgres, Redis, and nginx
 
-| File | Used by |
-|------|---------|
-| `e:\SPECKULA\.env.example` | Next.js frontend (build-time + runtime) |
-| `e:\SPECKULA\backend\.env.example` | Fastify backend + worker |
-
-Create the actual env files:
+For local development or a full deployment, create the usual env files:
 
 ```bash
-cp .env.example .env.local          # frontend (Next.js reads .env.local)
+cp .env.example .env.local
 cp backend/.env.example backend/.env
 ```
 
-For Docker Compose / Dokploy, all variables are passed as a single flat `.env` at the repo root — see docker-compose.yml for the mapping.
+For Docker Compose and Dokploy full-stack deploys, the root `.env` file maps all services.
 
-### Required Variables (minimum to start)
+### Required variables for the full stack
 
-**Backend:**
-- `DATABASE_URL`, `DIRECT_DATABASE_URL` — PostgreSQL connection strings
-- `REDIS_URL` — BullMQ job queue
-- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY_B64`
+Backend:
+
+- `DATABASE_URL`
+- `DIRECT_DATABASE_URL`
+- `REDIS_URL`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_CLIENT_EMAIL`
+- `FIREBASE_PRIVATE_KEY_B64`
 - `GROQ_API_KEY`
-- `FRONTEND_URL` — for CORS allow-list
+- `FRONTEND_URL`
 
-**Frontend (build-time `ARG`):**
-- All `NEXT_PUBLIC_FIREBASE_*` variables
+Frontend build-time args:
 
----
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
 
-## 3. Firebase Private Key (Base64)
-
-Docker environments mangle `\n` in private keys. Use the base64 form instead:
-
-```bash
-# Extract private_key from your service account JSON and base64-encode it
-cat firebase-service-account.json | python3 -c \
-  "import sys, json, base64; k=json.load(sys.stdin)['private_key']; print(base64.b64encode(k.encode()).decode())"
-
-# Or on Linux:
-jq -r .private_key firebase-service-account.json | base64 -w 0
-```
-
-Paste the output as `FIREBASE_PRIVATE_KEY_B64`.
-
----
-
-## 4. Local Development with Docker Compose
+## 3. Local Docker Compose
 
 ```bash
-# 1. Create your .env file at the repo root
-cp .env.example .env          # edit with real values
-
-# 2. Start all services (db, redis, backend, worker, frontend, nginx)
 docker compose up --build
-
-# 3. The app is available at http://localhost:80
-#    Backend API direct: http://localhost:3001
 ```
 
-Services: `db` (PostgreSQL + pgvector), `redis`, `backend` (Fastify), `worker` (BullMQ), `frontend` (Next.js), `nginx` (reverse proxy).
+The app is available at `http://localhost:80`.
 
----
+If you want a one-command local starter with built-in defaults, use:
 
-## 5. Deploying to Dokploy
+```bash
+npm run dev:local
+```
 
-1. **Create a new Application** in Dokploy → point it at your Git repository
-2. **Build type:** Docker Compose
-3. **Compose file:** `docker-compose.yml` (repo root)
-4. **Add environment variables** — paste the contents of your `.env` file into Dokploy's environment editor
-5. **Deploy** — Dokploy pulls the repo, builds images, and starts the stack
-6. **Attach a domain** in Dokploy → the nginx service listens on port 80; Dokploy handles SSL termination
+That brings up local Postgres, Redis, the backend, the worker, and the frontend on `http://localhost:3000`.
 
-> The `dokploy-network` external network (declared in `docker-compose.yml`) is created automatically by Dokploy. Do not remove it.
+Services:
 
----
+- `db` - PostgreSQL + pgvector
+- `redis` - BullMQ queue
+- `migrate` - one-off Prisma migration job
+- `backend` - Fastify API
+- `worker` - background analysis worker
+- `frontend` - Next.js app
+- `nginx` - reverse proxy
 
-## 6. Database Migrations
+## 4. Dokploy Setup
 
-In Docker Compose / Dokploy, migrations run via a dedicated one-off `migrate` service
-that completes before `backend` and `worker` start.
+### A. Showcase-only deployment
 
-To run migrations manually:
+Use this if you just want the project visible online with the UI shell and landing page.
+
+1. Create a new Application in Dokploy and connect your Git repository.
+2. Choose Docker Compose as the build type.
+3. Set the compose file to `dokploy-compose.yml`.
+4. Deploy without adding secrets first.
+5. Attach your domain. Dokploy will proxy traffic to the frontend on port `3000`.
+
+This mode is intended for demos and portfolio hosting. It shows the full product shell, but backend actions are not wired up.
+
+### B. Full stack deployment
+
+Use this if you want the real backend stack running too.
+
+1. Create a new Application in Dokploy and connect your Git repository.
+2. Choose Docker Compose as the build type.
+3. Set the compose file to `docker-compose.yml`.
+4. Paste the production env values into Dokploy.
+5. Deploy.
+6. Attach your domain. Dokploy will terminate SSL, and nginx will serve the stack.
+
+The `dokploy-network` external network in `docker-compose.yml` is created automatically by Dokploy.
+
+## 5. Migrations
+
+Run migrations manually with:
 
 ```bash
 docker compose run --rm migrate
-# or:
+```
+
+Or inside the backend container:
+
+```bash
 docker compose exec backend ./node_modules/.bin/prisma migrate deploy
 ```
 
-To reset the database in development:
+## 6. Health Checks
 
-```bash
-docker compose exec backend npx prisma migrate reset --force
-```
+Useful endpoints:
 
----
+- `GET /live` - liveness
+- `GET /health` - readiness
+- `GET /health/metrics` - metrics snapshot
 
-## 7. Scaling Workers
+## 7. Common Issues
 
-Analysis workers are a separate service and can be scaled independently:
-
-```bash
-# Run 3 worker replicas (for high job throughput)
-docker compose up --scale worker=3
-
-# In Dokploy: set the "Replicas" field on the worker service
-```
-
-Each worker reads `ANALYSIS_WORKER_CONCURRENCY` (default `5`) for BullMQ concurrency.
-
----
-
-## 8. Health Check Endpoints
-
-| Endpoint | Auth | Purpose |
-|----------|------|---------|
-| `GET /live` | None | Liveness — always returns `200 { status: 'ok' }` |
-| `GET /health` | None | Readiness — checks DB + Firebase; returns 200 or 503 |
-| `GET /health/metrics` | `x-metrics-token: $METRICS_TOKEN` (optional) | Operational metrics snapshot |
-
-```bash
-# From inside the Docker network (recommended):
-docker compose exec backend node -e "fetch('http://127.0.0.1:3001/live').then(r=>r.text()).then(console.log)"
-
-# Metrics (only enforced if METRICS_TOKEN is set)
-docker compose exec backend node -e "fetch('http://127.0.0.1:3001/health/metrics',{headers:{'x-metrics-token':process.env.METRICS_TOKEN||''}}).then(r=>r.text()).then(console.log)"
-```
-
----
-
-## 9. Monitoring — What to Watch
-
-```bash
-# Tail all service logs
-docker compose logs -f
-
-# Backend only
-docker compose logs -f backend
-
-# Worker job processing
-docker compose logs -f worker
-
-# Check for OOM kills or crash loops
-docker compose ps
-```
-
-Key log signals:
-- `prisma migrate deploy — success` — migrations ran cleanly on startup
-- `Fastify listening on 0.0.0.0:3001` — backend is up
-- `BullMQ worker ready` — analysis worker connected to Redis
-- `ERROR` lines in backend logs — check for Firebase auth failures or DB connection errors
-
----
-
-## 10. Common Issues
-
-| Problem | Likely Cause | Fix |
-|---------|-------------|-----|
-| Backend exits with `P1001` | DB not ready yet | Wait for `db` healthcheck; `depends_on` handles this automatically |
-| `FirebaseAuthError: invalid credential` | Malformed private key | Re-encode `FIREBASE_PRIVATE_KEY_B64` (step 3) |
-| Jobs stuck in `queued` state | Worker not running or Redis unreachable | Check `docker compose ps worker` and `REDIS_URL` |
-| CORS errors from browser | `FRONTEND_URL` / `FRONTEND_URLS` mismatch | Set to the exact origin (no trailing slash) |
-| Next.js build fails | Missing `NEXT_PUBLIC_FIREBASE_*` build args | All `NEXT_PUBLIC_*` vars must be set as Docker build `ARG`s — check docker-compose.yml |
-| `METRICS_TOKEN` 401 | Token not set or wrong header | Set `METRICS_TOKEN` env var; pass as `Authorization: Bearer <token>` |
-| DB volume data lost after redeploy | Wrong volume name | Volume is `pg_data_v2` — do not rename it between deploys |
+- Backend exits with `P1001` - the database is not ready yet
+- Firebase auth errors - the private key is malformed or not base64 encoded
+- Jobs stay queued - the worker or Redis is not running
+- CORS issues - check `FRONTEND_URL` and `FRONTEND_URLS`
+- Next.js build fails - the `NEXT_PUBLIC_FIREBASE_*` build args are missing for the full stack

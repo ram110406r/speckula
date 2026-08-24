@@ -1,0 +1,33 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Demo-only placeholder values. They let the public UI boot cleanly in
+        # Dokploy without requiring a real Firebase project.
+        NEXT_PUBLIC_FIREBASE_API_KEY: demo-api-key
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: demo.firebaseapp.com
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-project
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: demo.appspot.com
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: demo-sender
+        NEXT_PUBLIC_FIREBASE_APP_ID: demo-app-id
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # The app shell is fully visible without the backend. Any backend routes
+      # simply won't be used in this showcase deployment.
+      BACKEND_URL: http://127.0.0.1:3001
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "--input-type=module",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

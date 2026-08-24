@@ -6,6 +6,8 @@
     "dev": "concurrently -n web,api -c cyan,magenta \"next dev --webpack\" \"npm --prefix backend run dev\"",
     "dev:web": "next dev --webpack",
     "dev:api": "npm --prefix backend run dev",
+    "dev:local": "docker compose -f docker-compose.local.yml up --build",
+    "dev:local:down": "docker compose -f docker-compose.local.yml down",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
